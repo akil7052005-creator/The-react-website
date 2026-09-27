@@ -1,0 +1,248 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.page{
+    min-height: 100vh;
+    height: auto;
+    
+    display: grid ;
+    grid-template-columns: 20% 80%;
+    grid-template-rows: 10% 90%;
+}
+
+.Header{ 
+    background-color:white; 
+    
+}
+.logo-text {
+    height: 90px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 80px;
+} 
+.Features{
+    background-color: white;
+    display: flex;
+    align-items: center;    
+}
+.head{
+    padding: 20px;
+    margin: 30px;
+}
+.search{
+    width: 150px;
+    height: 45px;
+    border-radius: 25px;
+    
+}
+.bell{
+    margin-left: 180px;
+}
+.wallet{
+    margin-left: 40px;
+}
+.chat{
+    margin-left: 40px;
+}
+.question{
+    margin-left: 40px;
+}
+.whatsapp{
+    margin-left: 40px;
+}
+.person{
+    margin-left: 230px;
+}
+.arrow{
+    margin-left: 20px;
+    margin-top: 10px;
+}
+
+
+.Sidebar{
+    padding-left: 20px;
+    background-color: white;
+    overflow-y: auto;
+    height: 100vh;
+}
+
+.a0,
+.a1,
+.a2,
+.a3,
+.a4,
+.a5,
+.a6,
+.a7,
+.a8,
+.a9,
+.b0,
+.b1,
+.b2,
+.b3,
+.b4,
+.b5,
+.b6{
+    width: 220px;
+    height: 40px;
+    text-align: center;
+    background-color: white;
+    border-radius: 8px;
+
+}
+
+.a0:hover,
+.a1:hover,
+.a2:hover,
+.a3:hover,
+.a4:hover,
+.a5:hover,
+.a6:hover,
+.a7:hover,
+.a8:hover,
+.a9:hover,
+.b0:hover,
+.b1:hover,
+.b2:hover,
+.b3:hover,
+.b4:hover,
+.b5:hover,
+.b6:hover{
+    background-color: red;
+    color: black;
+}
+
+.zero{
+    margin-top: 40px;
+
+}
+.one{
+    margin-top: 50px;
+}
+.two{
+    margin-top: 50px;
+}
+.three{
+    margin-top: 50px;
+}
+.bi{
+    margin-right: 10px;
+}
+
+.Dashboard{
+    background-color: silver;
+    height: 100vh;
+    overflow-y: auto;
+    padding-bottom: 400px;
+}
+.buttons{
+    margin-top: 30px;
+}
+.newSelection{
+    margin-left: 40%;
+    width: 140px;
+    border-radius: 20px;
+}
+.digitalAlbum{
+    width: 140px;
+    border-radius: 20px;
+}
+.aiFace{
+    width: 140px;
+    border-radius: 20px;
+}
+.allAccess{
+    width: 140px;
+    border-radius: 20px;
+}
+.wedimg{
+    width: 1070px;
+    height: 320px;
+    padding: 20px;
+    margin-left: 7px;
+    border-radius: 25px;
+}
+.four{
+    margin-left: 10%;
+    width: 240px;
+    height: 90px;
+    text-align: center;
+}
+.five{
+    margin-left: 10%;
+    height: 90px; 
+    width: 240px;
+    text-align: center;   
+}
+.six{
+    margin-left: 10%;
+    height: 90px; 
+    width: 240px;
+    text-align: center;
+}
+.seven{
+    margin-left: 10%;
+    height: 90px; 
+    width: 240px;
+    text-align: center;
+}
+.B{
+    margin-left: 7%;
+    height: 90px; 
+    width: 330px;
+    text-align: center;
+    margin-top: 20px;
+}
+.I{
+    margin-left: 7%;
+    height: 90px; 
+    width: 330px;
+    text-align: center;
+    margin-top: 20px;
+}
+.L{
+    margin-left: 7%;
+    height: 90px; 
+    width: 330px;
+    text-align: center;
+    margin-top: 20px;
+}
+.Analytics{
+    margin-left: 25px;
+    height: 250px; 
+    width: 670px;
+    text-align: center;
+    margin-top: 20px;
+}
+.Albums{
+    margin-left: 10px;
+    height: 250px; 
+    width: 330px;
+    text-align: center;
+    margin-top: 20px;
+}
+.DOA{
+    margin-left: 7%;
+    height: 350px; 
+    width: 330px;
+    text-align: center;
+    margin-top: 20px;
+}
+.PP{
+    margin-left: 7%;
+    height: 350px; 
+    width: 330px;
+    text-align: center;
+    margin-top: 20px;
+}
+.CA{
+    margin-left: 7%;
+    height: 350px; 
+    width: 330px;
+    text-align: center;
+    margin-top: 20px;
+}
