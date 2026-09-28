@@ -9,7 +9,7 @@ function Sidebar({ onNavigate }) {
       <Link to="/" className="brand" onClick={onNavigate}>
         <span className="brand-mark">W</span>
         <div className="brand-info">
-          <span className="brand-name">Wedzone</span>
+          <span className="brand-name">Weddyzone</span>
           <span className="brand-sub">Studio OS</span>
         </div>
         <span className="brand-pro-tag">PRO</span>
