@@ -313,22 +313,7 @@ function Dashboard() {
             tip: 'Collect client spread sign-offs before placing physical print lab orders.'
           }}
         />
-        <StatCard
-          icon="person-bounding-box"
-          label="Face Matches"
-          value={formatNumber(stats.faceMatches.value)}
-          trend={stats.faceMatches.trend}
-          tone="green"
-          tooltip={{
-            title: 'AI Neural Face Scans Delivered',
-            badge: '12,480 Delivered',
-            icon: 'person-bounding-box',
-            summary: 'Number of individual wedding photos identified and downloaded by guests using selfie scans.',
-            highlights: ['< 1.5s neural matching speed', '99.8% precision with no app download', 'Custom studio watermark overlay'],
-            metric: '21% increase in guest discovery this month',
-            tip: 'Place QR table tents at reception dinners for maximum guest engagement.'
-          }}
-        />
+        
       </div>
 
       {/* Hero Showcase + Quick Actions */}
