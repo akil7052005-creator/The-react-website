@@ -25,3 +25,15 @@ dist-ssr
 
 .env
 .env.*
+# Monorepo
+!.env.example
+coverage
+uploads
+apps/api/uploads
+apps/api/test-uploads
+playwright-report
+test-results
+*.tsbuildinfo
+packages/shared/dist
+apps/api/dist-e2e
+apps/api/e2e-uploads

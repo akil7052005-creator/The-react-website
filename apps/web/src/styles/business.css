@@ -1,0 +1,333 @@
+/* =========================================================
+   My Website (sections, design, public site), banners, help, support.
+   ========================================================= */
+.section-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-row + .section-row {
+  border-top: 1px solid var(--border);
+}
+.section-row .toggle {
+  flex: 1;
+}
+.section-row .toggle + .toggle {
+  border-top: 0;
+}
+.section-order {
+  display: flex;
+}
+.section-order .icon-btn {
+  width: 30px;
+  height: 30px;
+  font-size: 13px;
+}
+.color-field {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.color-field input[type='color'] {
+  width: 48px;
+  height: 44px;
+  padding: 4px;
+  border-radius: 12px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+}
+
+/* Live preview: the real site, scaled down inside the browser frame */
+.site-frame {
+  position: relative;
+  height: 360px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.site-frame > .site {
+  width: 200%;
+  transform: scale(0.5);
+  transform-origin: top left;
+  pointer-events: none;
+}
+
+/* Public site (also used by the preview) */
+.site {
+  min-height: 100%;
+  background: var(--site-bg);
+  color: var(--site-text);
+  font-family: var(--font-body);
+}
+.site h1,
+.site h2 {
+  font-family: var(--site-font);
+  font-weight: 500;
+}
+.site-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px clamp(16px, 4vw, 48px);
+}
+.site-nav strong {
+  font-family: var(--site-font);
+  font-size: 20px;
+  font-weight: 500;
+}
+.site-nav nav {
+  display: flex;
+  gap: 18px;
+  font-size: 14px;
+}
+.site-nav a:hover {
+  color: var(--site-accent);
+}
+.site-hero {
+  position: relative;
+  height: min(70vh, 560px);
+  overflow: hidden;
+}
+.site-preview .site-hero {
+  height: 420px;
+}
+.site-hero img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.site-hero-text {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 48px clamp(16px, 4vw, 48px);
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.6));
+  color: #fff;
+}
+.site-hero-text h1 {
+  font-size: clamp(32px, 5vw, 56px);
+  line-height: 1.1;
+}
+.site-hero-text p {
+  margin-top: 8px;
+  font-size: 17px;
+  opacity: 0.9;
+}
+.site-cta {
+  display: inline-block;
+  margin-top: 16px;
+  padding: 10px 20px;
+  border-radius: 99px;
+  background: var(--site-accent);
+  color: #fff;
+  font-weight: 700;
+}
+.site-section {
+  padding: 48px clamp(16px, 4vw, 48px);
+  max-width: 1100px;
+  margin: 0 auto;
+}
+.site-section h2 {
+  font-size: 30px;
+  margin-bottom: 18px;
+  color: var(--site-text);
+}
+.site-section h2::after {
+  content: '';
+  display: block;
+  width: 48px;
+  height: 3px;
+  margin-top: 10px;
+  background: var(--site-accent);
+}
+.site-muted {
+  color: var(--site-muted);
+}
+.site-albums {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+.site-album {
+  display: grid;
+  gap: 4px;
+  background: var(--site-surface);
+  border-radius: 12px;
+  overflow: hidden;
+  padding-bottom: 12px;
+}
+.site-album img,
+.site-album-ph {
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+  background: var(--site-accent);
+  opacity: 0.95;
+}
+.site-album strong,
+.site-album small {
+  padding: 0 12px;
+}
+.site-album small {
+  color: var(--site-muted);
+}
+.site-video {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #000;
+}
+.site-video iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+.site-video-ph {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  color: #fff;
+  font-size: 56px;
+}
+.site .site-lead-form {
+  background: var(--site-surface);
+  border-radius: 16px;
+  padding: 20px;
+}
+.site .site-lead-form .field label {
+  color: var(--site-muted);
+}
+.site .site-lead-form .btn-primary {
+  background: var(--site-accent);
+}
+.site-hp {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+.site-foot {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 24px clamp(16px, 4vw, 48px);
+  border-top: 1px solid rgba(128, 128, 128, 0.2);
+  color: var(--site-muted);
+  font-size: 13px;
+}
+
+/* Banners */
+.banner-preview {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: 280px;
+  border-radius: 12px;
+  border: 1px dashed var(--border-strong);
+  background: var(--surface-2);
+  overflow: hidden;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.banner-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.banner-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 16px 12px;
+}
+.banner-actions .toggle {
+  padding: 0;
+  gap: 8px;
+}
+.banner-actions .icon-btn {
+  width: 34px;
+  height: 34px;
+  font-size: 15px;
+}
+
+/* Help center */
+.topic.is-active {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-50);
+}
+.faq-category {
+  margin: 18px 0 4px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+.faq-group:first-child .faq-category {
+  margin-top: 0;
+}
+.faq-vote {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 14px;
+}
+.faq-vote .chip {
+  height: 30px;
+  padding: 0 12px;
+}
+
+/* Support */
+.attach-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.thread {
+  list-style: none;
+  display: grid;
+  gap: 10px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+.thread-msg {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  max-width: 92%;
+}
+.thread-msg.from-support {
+  margin-left: auto;
+  background: var(--wine-50);
+  border-color: rgba(86, 18, 41, 0.15);
+}
+.thread-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+  font-size: 12.5px;
+}
+.thread-meta time {
+  color: var(--text-muted);
+}
+.thread-msg p {
+  white-space: pre-line;
+}
+
+@media (max-width: 640px) {
+  .site-frame {
+    height: 260px;
+  }
+  .banner-actions {
+    flex-wrap: wrap;
+  }
+}

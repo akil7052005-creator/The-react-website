@@ -1,0 +1,871 @@
+// Weddyzone Studio data model.
+// - Every studio-owned table has studio_id and every query is scoped by it.
+// - Money is integer paise.
+// - User content is soft-deleted with deleted_at.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  OWNER
+  STAFF
+  SUPER_ADMIN
+}
+
+enum EventType {
+  WEDDING
+  PRE_WEDDING
+  RECEPTION
+  ENGAGEMENT
+  OTHER
+}
+
+enum EventStatus {
+  UPCOMING
+  IN_PROGRESS
+  AWAITING_SELECTION
+  DELIVERED
+  CANCELLED
+}
+
+enum SelectionStatus {
+  DRAFT
+  SENT
+  IN_PROGRESS
+  SUBMITTED
+}
+
+enum AlbumStatus {
+  DRAFT
+  IN_REVIEW
+  PUBLISHED
+}
+
+enum FeedbackKind {
+  COMMENT
+  APPROVAL
+}
+
+enum PlanCode {
+  STARTER
+  PRO
+  STUDIO
+  ALL_ACCESS
+}
+
+enum BillingCycle {
+  MONTHLY
+  YEARLY
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+}
+
+enum PaymentPurpose {
+  SUBSCRIPTION
+  CREDIT_PACK
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum CreditReason {
+  PURCHASE
+  MESSAGE
+  PLAN_GRANT
+  SIGNUP_BONUS
+  ADJUSTMENT
+}
+
+enum MessageStatus {
+  SENT
+  FAILED
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+  CANCELLED
+}
+
+enum PaymentMethod {
+  UPI
+  CASH
+  BANK_TRANSFER
+  CARD
+  CHEQUE
+}
+
+enum ReferralStatus {
+  PENDING
+  REWARDED
+}
+
+enum WalletReason {
+  REFERRAL_REWARD
+  REFERRAL_WELCOME
+  REDEMPTION
+  ADJUSTMENT
+}
+
+enum BannerPlacement {
+  GALLERY_HERO
+  WEBSITE_HERO
+  WEBSITE_POPUP
+}
+
+enum TicketCategory {
+  GENERAL
+  BILLING
+  TECHNICAL
+  ACCOUNT
+  FEATURE_REQUEST
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum FileKind {
+  PHOTO
+  LOGO
+  BANNER
+  ATTACHMENT
+}
+
+model Studio {
+  id             String    @id @default(uuid()) @db.Uuid
+  name           String
+  slug           String    @unique
+  email          String?
+  phone          String?
+  gstin          String?
+  pan            String?
+  addressLine1   String?   @map("address_line1")
+  addressLine2   String?   @map("address_line2")
+  city           String?
+  stateCode      String?   @map("state_code")
+  pincode        String?
+  website        String?
+  bio            String?
+  logoFileId     String?   @unique @map("logo_file_id") @db.Uuid
+  referralCode   String    @unique @map("referral_code")
+  walletBalance  Int       @default(0) @map("wallet_balance")
+  creditBalance  Int       @default(0) @map("credit_balance")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  logo             StoredFile?        @relation("StudioLogo", fields: [logoFileId], references: [id])
+  users            User[]
+  clients          Client[]
+  events           Event[]
+  files            StoredFile[]       @relation("StudioFiles")
+  selections       Selection[]
+  albums           Album[]
+  subscription     Subscription?
+  payments         Payment[]
+  creditLedger     CreditLedger[]
+  messages         WhatsAppMessage[]
+  invoices         Invoice[]
+  referralsMade    Referral[]         @relation("Referrer")
+  referredBy       Referral?          @relation("Referred")
+  walletTxns       WalletTxn[]
+  websiteSettings  WebsiteSettings?
+  leads            Lead[]
+  banners          Banner[]
+  tickets          Ticket[]
+  notifications    Notification[]
+  counters         Counter[]
+
+  @@map("studios")
+}
+
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  studioId     String?   @map("studio_id") @db.Uuid
+  name         String
+  email        String    @unique
+  phone        String?
+  passwordHash String    @map("password_hash")
+  role         UserRole  @default(OWNER)
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  studio         Studio?         @relation(fields: [studioId], references: [id])
+  refreshTokens  RefreshToken[]
+  passwordResets PasswordReset[]
+  faqVotes       FaqFeedback[]
+  ticketMessages TicketMessage[]
+
+  @@index([studioId])
+  @@map("users")
+}
+
+model RefreshToken {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  tokenHash  String    @unique @map("token_hash")
+  expiresAt  DateTime  @map("expires_at")
+  revokedAt  DateTime? @map("revoked_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model PasswordReset {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_resets")
+}
+
+// Per-studio sequences for human-readable codes (EVT-1048, ALB-87, INV-2026-0012 …).
+model Counter {
+  studioId String @map("studio_id") @db.Uuid
+  key      String
+  value    Int    @default(0)
+
+  studio Studio @relation(fields: [studioId], references: [id], onDelete: Cascade)
+
+  @@id([studioId, key])
+  @@map("counters")
+}
+
+model StoredFile {
+  id           String    @id @default(uuid()) @db.Uuid
+  studioId     String    @map("studio_id") @db.Uuid
+  kind         FileKind
+  storageKey   String    @unique @map("storage_key")
+  originalName String    @map("original_name")
+  mimeType     String    @map("mime_type")
+  size         Int
+  checksum     String
+  createdAt    DateTime  @default(now()) @map("created_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  studio        Studio          @relation("StudioFiles", fields: [studioId], references: [id])
+  studioLogo    Studio?         @relation("StudioLogo")
+  photo         Photo?
+  banner        Banner?
+  ticket        Ticket?
+  ticketMessage TicketMessage?
+
+  @@index([studioId, kind])
+  @@index([studioId, checksum])
+  @@map("files")
+}
+
+model Client {
+  id        String    @id @default(uuid()) @db.Uuid
+  studioId  String    @map("studio_id") @db.Uuid
+  name      String
+  phone     String
+  email     String?
+  city      String?
+  stateCode String?   @map("state_code")
+  gstin     String?
+  notes     String?
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  studio   Studio    @relation(fields: [studioId], references: [id])
+  events   Event[]
+  invoices Invoice[]
+
+  @@index([studioId, phone])
+  @@index([studioId, name])
+  @@map("clients")
+}
+
+model Event {
+  id        String      @id @default(uuid()) @db.Uuid
+  studioId  String      @map("studio_id") @db.Uuid
+  code      String
+  clientId  String      @map("client_id") @db.Uuid
+  title     String
+  type      EventType
+  date      DateTime    @db.Date
+  venue     String
+  city      String
+  guests    Int?
+  status    EventStatus @default(UPCOMING)
+  notes     String?
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+  deletedAt DateTime?   @map("deleted_at")
+
+  studio     Studio      @relation(fields: [studioId], references: [id])
+  client     Client      @relation(fields: [clientId], references: [id])
+  photos     Photo[]
+  selections Selection[]
+  albums     Album[]
+  invoices   Invoice[]
+
+  @@unique([studioId, code])
+  @@index([studioId, createdAt])
+  @@index([studioId, date])
+  @@map("events")
+}
+
+model Photo {
+  id          String    @id @default(uuid()) @db.Uuid
+  studioId    String    @map("studio_id") @db.Uuid
+  eventId     String    @map("event_id") @db.Uuid
+  selectionId String?   @map("selection_id") @db.Uuid
+  fileId      String    @unique @map("file_id") @db.Uuid
+  position    Int       @default(0)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  deletedAt   DateTime? @map("deleted_at")
+
+  event      Event          @relation(fields: [eventId], references: [id])
+  selection  Selection?     @relation(fields: [selectionId], references: [id])
+  file       StoredFile     @relation(fields: [fileId], references: [id])
+  picks      PhotoPick[]
+  comments   PhotoComment[]
+  albumPages AlbumPage[]
+
+  @@index([selectionId, position])
+  @@index([eventId])
+  @@map("photos")
+}
+
+model Selection {
+  id             String          @id @default(uuid()) @db.Uuid
+  studioId       String          @map("studio_id") @db.Uuid
+  code           String
+  eventId        String          @map("event_id") @db.Uuid
+  quota          Int
+  deadline       DateTime        @db.Date
+  status         SelectionStatus @default(DRAFT)
+  publicToken    String          @unique @map("public_token")
+  submittedAt    DateTime?       @map("submitted_at")
+  lastRemindedAt DateTime?       @map("last_reminded_at")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+  deletedAt      DateTime?       @map("deleted_at")
+
+  studio   Studio            @relation(fields: [studioId], references: [id])
+  event    Event             @relation(fields: [eventId], references: [id])
+  photos   Photo[]
+  members  SelectionMember[]
+  picks    PhotoPick[]
+  comments PhotoComment[]
+
+  @@unique([studioId, code])
+  @@index([studioId, deadline])
+  @@index([studioId, status])
+  @@map("selections")
+}
+
+model SelectionMember {
+  id          String   @id @default(uuid()) @db.Uuid
+  selectionId String   @map("selection_id") @db.Uuid
+  name        String
+  phone       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  selection Selection      @relation(fields: [selectionId], references: [id], onDelete: Cascade)
+  picks     PhotoPick[]
+  comments  PhotoComment[]
+
+  @@index([selectionId])
+  @@map("selection_members")
+}
+
+model PhotoPick {
+  id          String   @id @default(uuid()) @db.Uuid
+  selectionId String   @map("selection_id") @db.Uuid
+  photoId     String   @map("photo_id") @db.Uuid
+  memberId    String   @map("member_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  selection Selection       @relation(fields: [selectionId], references: [id], onDelete: Cascade)
+  photo     Photo           @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  member    SelectionMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([photoId, memberId])
+  @@index([selectionId])
+  @@map("photo_picks")
+}
+
+model PhotoComment {
+  id          String   @id @default(uuid()) @db.Uuid
+  selectionId String   @map("selection_id") @db.Uuid
+  photoId     String   @map("photo_id") @db.Uuid
+  memberId    String   @map("member_id") @db.Uuid
+  text        String
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  selection Selection       @relation(fields: [selectionId], references: [id], onDelete: Cascade)
+  photo     Photo           @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  member    SelectionMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([selectionId])
+  @@map("photo_comments")
+}
+
+model Album {
+  id           String      @id @default(uuid()) @db.Uuid
+  studioId     String      @map("studio_id") @db.Uuid
+  code         String
+  eventId      String      @map("event_id") @db.Uuid
+  title        String
+  subtitle     String?
+  location     String?
+  status       AlbumStatus @default(DRAFT)
+  hue          Int         @default(345)
+  publicToken  String      @unique @map("public_token")
+  coverPhotoId String?     @map("cover_photo_id") @db.Uuid
+  publishedAt  DateTime?   @map("published_at")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+  deletedAt    DateTime?   @map("deleted_at")
+
+  studio   Studio          @relation(fields: [studioId], references: [id])
+  event    Event           @relation(fields: [eventId], references: [id])
+  pages    AlbumPage[]
+  feedback AlbumFeedback[]
+
+  @@unique([studioId, code])
+  @@index([studioId, updatedAt])
+  @@index([studioId, status])
+  @@map("albums")
+}
+
+model AlbumPage {
+  id       String  @id @default(uuid()) @db.Uuid
+  albumId  String  @map("album_id") @db.Uuid
+  photoId  String  @map("photo_id") @db.Uuid
+  position Int
+  caption  String?
+
+  album Album @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  photo Photo @relation(fields: [photoId], references: [id])
+
+  @@index([albumId, position])
+  @@map("album_pages")
+}
+
+model AlbumFeedback {
+  id          String       @id @default(uuid()) @db.Uuid
+  albumId     String       @map("album_id") @db.Uuid
+  spreadIndex Int          @map("spread_index")
+  kind        FeedbackKind @default(COMMENT)
+  authorName  String       @map("author_name")
+  message     String?
+  resolvedAt  DateTime?    @map("resolved_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  album Album @relation(fields: [albumId], references: [id], onDelete: Cascade)
+
+  @@index([albumId, spreadIndex])
+  @@map("album_feedback")
+}
+
+model Plan {
+  id           String   @id @default(uuid()) @db.Uuid
+  code         PlanCode @unique
+  name         String
+  tagline      String
+  monthlyPrice Int?     @map("monthly_price")
+  yearlyPrice  Int      @map("yearly_price")
+  limits       Json
+  features     Json
+  popular      Boolean  @default(false)
+  sortOrder    Int      @default(0) @map("sort_order")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  subscriptions Subscription[]
+
+  @@map("plans")
+}
+
+model Subscription {
+  id                 String             @id @default(uuid()) @db.Uuid
+  studioId           String             @unique @map("studio_id") @db.Uuid
+  planId             String             @map("plan_id") @db.Uuid
+  cycle              BillingCycle       @default(MONTHLY)
+  status             SubscriptionStatus @default(ACTIVE)
+  isTrial            Boolean            @default(false) @map("is_trial")
+  currentPeriodStart DateTime           @map("current_period_start")
+  currentPeriodEnd   DateTime           @map("current_period_end")
+  cancelAtPeriodEnd  Boolean            @default(false) @map("cancel_at_period_end")
+  cancelledAt        DateTime?          @map("cancelled_at")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+
+  studio Studio @relation(fields: [studioId], references: [id])
+  plan   Plan   @relation(fields: [planId], references: [id])
+
+  @@map("subscriptions")
+}
+
+model Payment {
+  id          String         @id @default(uuid()) @db.Uuid
+  studioId    String         @map("studio_id") @db.Uuid
+  purpose     PaymentPurpose
+  description String
+  amount      Int
+  status      PaymentStatus
+  provider    String
+  providerRef String?        @map("provider_ref")
+  meta        Json?
+  createdAt   DateTime       @default(now()) @map("created_at")
+
+  studio Studio @relation(fields: [studioId], references: [id])
+
+  @@index([studioId, purpose])
+  @@index([studioId, createdAt])
+  @@map("payments")
+}
+
+model CreditLedger {
+  id           String       @id @default(uuid()) @db.Uuid
+  studioId     String       @map("studio_id") @db.Uuid
+  delta        Int
+  reason       CreditReason
+  balanceAfter Int          @map("balance_after")
+  refType      String?      @map("ref_type")
+  refId        String?      @map("ref_id")
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  studio Studio @relation(fields: [studioId], references: [id])
+
+  @@index([studioId, createdAt])
+  @@map("credit_ledger")
+}
+
+model WhatsAppTemplate {
+  id         String   @id @default(uuid()) @db.Uuid
+  key        String   @unique
+  name       String
+  body       String
+  creditCost Int      @default(1) @map("credit_cost")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@map("whatsapp_templates")
+}
+
+model WhatsAppMessage {
+  id          String        @id @default(uuid()) @db.Uuid
+  studioId    String        @map("studio_id") @db.Uuid
+  templateKey String        @map("template_key")
+  toName      String        @map("to_name")
+  toPhone     String        @map("to_phone")
+  body        String
+  link        String
+  credits     Int
+  status      MessageStatus
+  refType     String?       @map("ref_type")
+  refId       String?       @map("ref_id")
+  createdAt   DateTime      @default(now()) @map("created_at")
+
+  studio Studio @relation(fields: [studioId], references: [id])
+
+  @@index([studioId, templateKey, createdAt])
+  @@index([studioId, createdAt])
+  @@map("whatsapp_messages")
+}
+
+model Invoice {
+  id            String        @id @default(uuid()) @db.Uuid
+  studioId      String        @map("studio_id") @db.Uuid
+  number        String
+  clientId      String        @map("client_id") @db.Uuid
+  eventId       String?       @map("event_id") @db.Uuid
+  issueDate     DateTime      @map("issue_date") @db.Date
+  dueDate       DateTime      @map("due_date") @db.Date
+  placeOfSupply String        @map("place_of_supply")
+  supplierState String?       @map("supplier_state")
+  subtotal      Int
+  cgst          Int
+  sgst          Int
+  igst          Int
+  total         Int
+  amountPaid    Int           @default(0) @map("amount_paid")
+  status        InvoiceStatus @default(PENDING)
+  notes         String?
+  paidAt        DateTime?     @map("paid_at")
+  cancelledAt   DateTime?     @map("cancelled_at")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  deletedAt     DateTime?     @map("deleted_at")
+
+  studio     Studio           @relation(fields: [studioId], references: [id])
+  client     Client           @relation(fields: [clientId], references: [id])
+  event      Event?           @relation(fields: [eventId], references: [id])
+  items      InvoiceItem[]
+  milestones Milestone[]
+  payments   InvoicePayment[]
+
+  @@unique([studioId, number])
+  @@index([studioId, issueDate])
+  @@index([studioId, status, dueDate])
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id          String @id @default(uuid()) @db.Uuid
+  invoiceId   String @map("invoice_id") @db.Uuid
+  position    Int
+  description String
+  sac         String
+  qty         Int
+  rate        Int
+  gstRate     Int    @map("gst_rate")
+  taxable     Int
+  tax         Int
+  total       Int
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("invoice_items")
+}
+
+model Milestone {
+  id        String    @id @default(uuid()) @db.Uuid
+  invoiceId String    @map("invoice_id") @db.Uuid
+  position  Int
+  label     String
+  amount    Int
+  dueDate   DateTime  @map("due_date") @db.Date
+  paidAt    DateTime? @map("paid_at")
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("milestones")
+}
+
+model InvoicePayment {
+  id        String        @id @default(uuid()) @db.Uuid
+  invoiceId String        @map("invoice_id") @db.Uuid
+  amount    Int
+  method    PaymentMethod
+  paidOn    DateTime      @map("paid_on") @db.Date
+  reference String?
+  createdAt DateTime      @default(now()) @map("created_at")
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("invoice_payments")
+}
+
+model Referral {
+  id               String         @id @default(uuid()) @db.Uuid
+  referrerStudioId String         @map("referrer_studio_id") @db.Uuid
+  referredStudioId String         @unique @map("referred_studio_id") @db.Uuid
+  status           ReferralStatus @default(PENDING)
+  rewardAmount     Int            @map("reward_amount")
+  rewardedAt       DateTime?      @map("rewarded_at")
+  createdAt        DateTime       @default(now()) @map("created_at")
+
+  referrer Studio @relation("Referrer", fields: [referrerStudioId], references: [id])
+  referred Studio @relation("Referred", fields: [referredStudioId], references: [id])
+
+  @@index([referrerStudioId])
+  @@map("referrals")
+}
+
+model WalletTxn {
+  id           String       @id @default(uuid()) @db.Uuid
+  studioId     String       @map("studio_id") @db.Uuid
+  delta        Int
+  reason       WalletReason
+  balanceAfter Int          @map("balance_after")
+  refId        String?      @map("ref_id")
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  studio Studio @relation(fields: [studioId], references: [id])
+
+  // One reward per referral per studio: makes the referral payout idempotent.
+  @@unique([studioId, reason, refId])
+  @@index([studioId, createdAt])
+  @@map("wallet_txns")
+}
+
+model WebsiteSettings {
+  id             String   @id @default(uuid()) @db.Uuid
+  studioId       String   @unique @map("studio_id") @db.Uuid
+  sections       Json
+  theme          String   @default("Ivory Classic")
+  primaryColor   String   @default("#8B1E3F") @map("primary_color")
+  font           String   @default("Playfair Display")
+  tagline        String?
+  customDomain   String?  @map("custom_domain")
+  seoTitle       String?  @map("seo_title")
+  seoDescription String?  @map("seo_description")
+  videoUrl       String?  @map("video_url")
+  visits         Int      @default(0)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  studio Studio @relation(fields: [studioId], references: [id])
+
+  @@map("website_settings")
+}
+
+model Lead {
+  id        String    @id @default(uuid()) @db.Uuid
+  studioId  String    @map("studio_id") @db.Uuid
+  name      String
+  phone     String
+  email     String?
+  eventDate DateTime? @map("event_date") @db.Date
+  city      String?
+  message   String?
+  createdAt DateTime  @default(now()) @map("created_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  studio Studio @relation(fields: [studioId], references: [id])
+
+  @@index([studioId, createdAt])
+  @@map("leads")
+}
+
+model Banner {
+  id          String          @id @default(uuid()) @db.Uuid
+  studioId    String          @map("studio_id") @db.Uuid
+  title       String
+  placement   BannerPlacement
+  ctaText     String?         @map("cta_text")
+  ctaUrl      String?         @map("cta_url")
+  imageFileId String          @unique @map("image_file_id") @db.Uuid
+  startDate   DateTime?       @map("start_date") @db.Date
+  endDate     DateTime?       @map("end_date") @db.Date
+  active      Boolean         @default(true)
+  position    Int             @default(0)
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+  deletedAt   DateTime?       @map("deleted_at")
+
+  studio Studio     @relation(fields: [studioId], references: [id])
+  image  StoredFile @relation(fields: [imageFileId], references: [id])
+
+  @@index([studioId, position])
+  @@map("banners")
+}
+
+model Faq {
+  id          String   @id @default(uuid()) @db.Uuid
+  category    String
+  question    String
+  answer      String
+  position    Int      @default(0)
+  isPublished Boolean  @default(true) @map("is_published")
+  helpfulYes  Int      @default(0) @map("helpful_yes")
+  helpfulNo   Int      @default(0) @map("helpful_no")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  votes FaqFeedback[]
+
+  @@map("faqs")
+}
+
+model FaqFeedback {
+  id        String   @id @default(uuid()) @db.Uuid
+  faqId     String   @map("faq_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  helpful   Boolean
+  createdAt DateTime @default(now()) @map("created_at")
+
+  faq  Faq  @relation(fields: [faqId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([faqId, userId])
+  @@map("faq_feedback")
+}
+
+model Ticket {
+  id               String         @id @default(uuid()) @db.Uuid
+  studioId         String         @map("studio_id") @db.Uuid
+  code             String
+  subject          String
+  category         TicketCategory
+  priority         TicketPriority
+  status           TicketStatus   @default(OPEN)
+  attachmentFileId String?        @unique @map("attachment_file_id") @db.Uuid
+  lastActivityAt   DateTime       @default(now()) @map("last_activity_at")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+
+  studio     Studio          @relation(fields: [studioId], references: [id])
+  attachment StoredFile?     @relation(fields: [attachmentFileId], references: [id])
+  messages   TicketMessage[]
+
+  @@unique([studioId, code])
+  @@index([studioId, lastActivityAt])
+  @@index([studioId, status])
+  @@map("tickets")
+}
+
+model TicketMessage {
+  id               String   @id @default(uuid()) @db.Uuid
+  ticketId         String   @map("ticket_id") @db.Uuid
+  authorUserId     String   @map("author_user_id") @db.Uuid
+  fromSupport      Boolean  @default(false) @map("from_support")
+  body             String
+  attachmentFileId String?  @unique @map("attachment_file_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  ticket     Ticket      @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author     User        @relation(fields: [authorUserId], references: [id])
+  attachment StoredFile? @relation(fields: [attachmentFileId], references: [id])
+
+  @@index([ticketId, createdAt])
+  @@map("ticket_messages")
+}
+
+model Notification {
+  id        String    @id @default(uuid()) @db.Uuid
+  studioId  String    @map("studio_id") @db.Uuid
+  type      String
+  title     String
+  body      String
+  link      String?
+  icon      String    @default("bell")
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  studio Studio @relation(fields: [studioId], references: [id])
+
+  @@index([studioId, readAt, createdAt])
+  @@map("notifications")
+}

@@ -1,0 +1,105 @@
+import { expect, test } from '@playwright/test'
+import { gradientPng } from '../../apps/api/src/common/png'
+import { login } from './helpers'
+
+test.describe.configure({ mode: 'serial' })
+
+test('a couple sends an enquiry from the public website and it reaches the studio', async ({ page, context }) => {
+  const visitor = await context.newPage()
+  await visitor.goto('/w/golden-hour')
+  await expect(visitor.getByRole('heading', { name: 'Golden Hour Studios', level: 1 })).toBeVisible()
+  await visitor.getByRole('button', { name: 'Send enquiry' }).click()
+  await expect(visitor.getByText('Your name is required')).toBeVisible()
+  await visitor.getByLabel(/^Your name/).fill('Lavanya Krishnan')
+  await visitor.getByLabel(/^Mobile number/).fill('98401 55667')
+  await visitor.getByLabel(/^City/).fill('Madurai')
+  await visitor.getByRole('button', { name: 'Send enquiry' }).click()
+  await expect(visitor.getByText(/Golden Hour Studios will get back to you soon/).first()).toBeVisible()
+
+  await login(page)
+  await page.goto('/my-website')
+  await expect(page.getByRole('cell', { name: 'Lavanya Krishnan' })).toBeVisible()
+  await page.getByRole('button', { name: /Notifications/ }).click()
+  await expect(page.locator('.notif-menu')).toContainText('Lavanya Krishnan')
+})
+
+test('toggle a website section and save the design', async ({ page }) => {
+  await login(page)
+  await page.goto('/my-website')
+  const film = page.locator('.section-row', { hasText: 'Highlight film' })
+  await film.locator('.toggle').click()
+  await expect(page.getByText('Website sections saved')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Edit Design' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Edit Design' })
+  await dialog.getByLabel(/^Highlight film/).fill('https://example.com/video')
+  await dialog.getByRole('button', { name: 'Save design' }).click()
+  await expect(dialog.getByText('Enter a YouTube or Vimeo link (https://…)')).toBeVisible()
+  await dialog.getByLabel(/^Highlight film/).fill('https://youtu.be/dQw4w9WgXcQ')
+  await dialog.getByLabel(/^Tagline/).fill('Stories of light and love')
+  await expect(page.locator('.site-frame')).toContainText('Stories of light and love')
+  await dialog.getByRole('button', { name: 'Save design' }).click()
+  await expect(page.getByText('Website design saved')).toBeVisible()
+})
+
+test('upload, reorder and delete a gallery banner', async ({ page }) => {
+  await login(page)
+  await page.goto('/gallery-banner')
+  await page.getByLabel('Upload a new banner').setInputFiles({ name: 'winter.png', mimeType: 'image/png', buffer: gradientPng(320, 180, 20, 7) })
+  const dialog = page.getByRole('dialog', { name: 'New banner' })
+  await dialog.getByLabel(/^Title/).fill('Winter Weddings')
+  await dialog.getByLabel(/^Button text/).fill('Enquire')
+  await dialog.getByRole('button', { name: 'Add banner' }).click()
+  await expect(dialog.getByText('Add a link for the button')).toBeVisible()
+  await dialog.getByLabel(/^Button link/).fill('https://goldenhour.studio/enquire')
+  await dialog.getByRole('button', { name: 'Add banner' }).click()
+  await expect(page.getByText('Banner “Winter Weddings” added')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Move Winter Weddings earlier' }).click()
+  await expect(page.getByText('Banner order saved')).toBeVisible()
+  // Centre the card first: at 390 px the sticky top bar can cover a card scrolled just into view.
+  const del = page.getByRole('button', { name: 'Delete Winter Weddings' })
+  await del.evaluate((el) => el.scrollIntoView({ block: 'center' }))
+  await del.click()
+  await page.getByTestId('confirm-ok').click()
+  await expect(page.getByText('Banner “Winter Weddings” deleted')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Winter Weddings' })).toHaveCount(0)
+})
+
+test('help search and feedback, then raise and follow up a support ticket', async ({ page }) => {
+  await login(page)
+  await page.goto('/help')
+  await page.getByLabel('Search help articles').fill('CGST')
+  await expect(page).toHaveURL(/q=CGST/)
+  const faq = page.locator('details', { hasText: 'How is GST calculated on invoices?' })
+  await faq.locator('summary').click()
+  await faq.getByRole('button', { name: 'Yes' }).click()
+  await expect(page.getByText('Thanks — glad it helped!')).toBeVisible()
+
+  await page.goto('/support')
+  await page.getByRole('button', { name: 'New Ticket' }).click()
+  const form = page.getByTestId('ticket-form')
+  await form.getByRole('button', { name: 'Submit Ticket' }).click()
+  await expect(form.getByText('Subject is required')).toBeVisible()
+  await form.getByLabel(/^Subject/).fill('Need help with invoice numbering')
+  await form.getByLabel(/^Details & Steps/).fill('Can I restart numbering for a new branch?')
+  await form.getByRole('button', { name: 'Submit Ticket' }).click()
+  await expect(page.getByText(/Ticket TKT-\d+ created/)).toBeVisible()
+
+  const thread = page.getByRole('dialog', { name: /TKT-\d+ · Need help with invoice numbering/ })
+  await thread.getByLabel(/^Reply/).fill('Adding: we have two GSTINs.')
+  await thread.getByRole('button', { name: 'Send reply' }).click()
+  await expect(page.getByText('Reply sent')).toBeVisible()
+  await expect(thread.locator('.thread-msg')).toHaveCount(2)
+})
+
+test('refer & earn shows the code and copies the invite link', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  await login(page)
+  await page.goto('/refer-and-earn')
+  await expect(page.getByTestId('referral-code')).toHaveText('GOLDEN25')
+  await page.getByRole('button', { name: 'Copy invite link' }).click()
+  await expect(page.getByText('Referral link copied')).toBeVisible()
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/\/signup\?ref=GOLDEN25$/)
+  await expect(page.getByRole('cell', { name: 'Lens & Light Studio' })).toBeVisible()
+})

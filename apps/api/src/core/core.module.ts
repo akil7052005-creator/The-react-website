@@ -1,0 +1,29 @@
+import { Global, Module } from '@nestjs/common'
+import { MailService } from '../infra/mail.service'
+import { LocalStorageService, StorageService } from '../infra/storage.service'
+import { FilesService } from './files.service'
+import { LedgerService } from './ledger.service'
+import { MessagingService, WaMeMessagingService } from './messaging.service'
+import { NotificationsService } from './notifications.service'
+import { MockPaymentService, PaymentService } from './payment.service'
+import { PlansService } from './plans.service'
+import { StudioMapper } from './studio.mapper'
+import { UsageService } from './usage.service'
+
+@Global()
+@Module({
+  providers: [
+    MailService,
+    { provide: StorageService, useClass: LocalStorageService },
+    FilesService,
+    NotificationsService,
+    PlansService,
+    UsageService,
+    StudioMapper,
+    LedgerService,
+    { provide: MessagingService, useClass: WaMeMessagingService },
+    { provide: PaymentService, useClass: MockPaymentService },
+  ],
+  exports: [MailService, StorageService, FilesService, NotificationsService, PlansService, UsageService, StudioMapper, LedgerService, MessagingService, PaymentService],
+})
+export class CoreModule {}
