@@ -16,9 +16,9 @@ export function normalizePhoneDigits(input: string): string {
 
 /** Indian mobile number. Output is stored as +91XXXXXXXXXX. */
 export const phoneSchema = z
-  .string({ error: 'Phone number is required' })
+  .string({ error: 'Mobile number is required' })
   .trim()
-  .min(1, 'Phone number is required')
+  .min(1, 'Mobile number is required')
   .transform(normalizePhoneDigits)
   .refine((d) => PHONE_REGEX.test(d), 'Enter a valid 10-digit Indian mobile number')
   .transform((d) => `+91${d}`)
@@ -33,6 +33,7 @@ export const emailSchema = z
 
 export const passwordSchema = z
   .string({ error: 'Password is required' })
+  .min(1, 'Password is required')
   .min(8, 'Password must be at least 8 characters')
   .max(128, 'Password must be at most 128 characters')
   .refine((p) => /[A-Za-z]/.test(p) && /\d/.test(p), 'Password must contain a letter and a number')

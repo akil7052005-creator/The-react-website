@@ -13,7 +13,7 @@ import {
 } from '@weddyzone/shared'
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { PageHeader, Card, StatusPill, FeatureTooltip, FeatureBar, EmptyState, ErrorState, TableSkeleton, Pagination, CardSkeleton, type FeatureBarItem } from '../components/ui'
+import { PageHeader, Card, StatusPill, FeatureTooltip, EmptyState, ErrorState, TableSkeleton, Pagination, CardSkeleton } from '../components/ui'
 import { applyApiErrors, FieldShell, SelectField, SubmitButton, TextAreaField, TextField, useUnsavedChangesWarning, useZodForm } from '../components/form/form'
 import { Modal, useConfirm } from '../components/Modal'
 import { formatDate, formatDateTime, formatBytes } from '../utils/format'
@@ -22,41 +22,6 @@ import { useDebouncedUrlSearch, useUrlState } from '../hooks/useUrlState'
 import { api, upload } from '../lib/api'
 import { fileUrl } from '../lib/env'
 import { toastError } from '../lib/query'
-
-const ticketFeatures: FeatureBarItem[] = [
-  {
-    title: 'Guaranteed 4h SLA',
-    badge: 'Fast Turnaround',
-    icon: 'clock-history',
-    summary: 'Our engineering and photography support desk responds to all studio inquiries in under 4 hours.',
-    highlights: ['Weekend emergency support queue active', 'Assigned directly to dedicated engineer', 'Email & SMS notification on reply'],
-    tip: 'Pro and All-Access members receive prioritized queue placement.',
-  },
-  {
-    title: 'Screen-Share Assistance',
-    badge: 'Live Support',
-    icon: 'display',
-    summary: 'Request a 1-on-1 Google Meet screen share for complex custom domain DNS or large RAW library uploads.',
-    highlights: ['Live DNS verification with Cloudflare/GoDaddy', 'Lightroom catalog troubleshooting', 'Zero extra charge for studio members'],
-    tip: 'Schedule screen shares during weekday mornings for fastest slots.',
-  },
-  {
-    title: 'Album Recovery Vault',
-    badge: 'Data Safety',
-    icon: 'shield-check',
-    summary: 'Accidentally deleted a gallery? Our recovery vault preserves backups of client selections for 90 days.',
-    highlights: ['1-click historical restore', 'Preserves bride & groom heart selections', 'Audit trail of client actions'],
-    tip: 'Open a ticket immediately if an accidental deletion occurs.',
-  },
-  {
-    title: 'Dedicated WhatsApp Desk',
-    badge: 'Pro & VIP',
-    icon: 'whatsapp',
-    summary: 'All-Access studio owners receive a direct private WhatsApp support line for instantaneous answers.',
-    highlights: ['Direct line to engineering lead', 'Voice note queries accepted', 'Real-time shoot status checks'],
-    tip: 'Upgrade to All-Access to unlock direct WhatsApp concierge.',
-  },
-]
 
 const ATTACH_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
 const categoryOptions = TICKET_CATEGORIES.map((c) => ({ value: c, label: TICKET_CATEGORY_LABELS[c] }))
@@ -129,7 +94,7 @@ function NewTicketForm({ onDone }: { onDone: (t: TicketDto) => void }) {
     onError: (e) => applyApiErrors(form, e),
   })
   return (
-    <Card title="Raise a Support Ticket" subtitle="Fill in details to connect with a senior technical specialist">
+    <Card title="Raise a Support Ticket" subtitle="Fill in the details and our support team will reply here">
       <form onSubmit={form.handleSubmit((v) => create.mutate(v as Record<string, string>))} noValidate data-testid="ticket-form">
         <div className="form-grid">
           <TextField form={form} name="subject" label="Subject" required maxLength={120} showCounter placeholder="What do you need help with?" />
@@ -280,9 +245,9 @@ function SupportTickets() {
     <div className="stack">
       <PageHeader
         eyebrow="Account & Support"
-        featureBadge="Priority Helpdesk · 4h SLA"
-        title="Support Tickets & Concierge"
-        subtitle="Our dedicated technical support team replies within 4 working hours. Pro and All-Access studio plans receive front-of-line priority."
+        featureBadge="Studio Helpdesk"
+        title="Support Tickets"
+        subtitle="Raise a ticket and follow the conversation here. You'll get a notification when the team replies."
         actions={
           <button className="btn btn-primary" onClick={() => setUrl({ new: showForm ? '' : '1' })}>
             <i className={`bi bi-${showForm ? 'x-lg' : 'plus-lg'}`} />
@@ -292,13 +257,12 @@ function SupportTickets() {
       />
 
       {/* Feature Capabilities Ribbon */}
-      <FeatureBar items={ticketFeatures} />
 
       {showForm && <NewTicketForm onDone={(t) => setUrl({ new: '', ticket: t.id })} />}
 
       <Card
         title="Your Support Tickets"
-        subtitle="Point cursor at ticket ID or priority for status SLA"
+        subtitle="Point cursor at ticket ID or priority for status details"
         feature={featureInfo.support}
         flush
         action={
@@ -358,7 +322,7 @@ function SupportTickets() {
                     <td>
                       <FeatureTooltip
                         title={`${TICKET_PRIORITY_LABELS[t.priority]} Priority Ticket`}
-                        summary={t.priority === 'HIGH' ? 'Guaranteed response within 60 minutes.' : 'Guaranteed response within 4 working hours.'}
+                        summary={t.priority === 'HIGH' ? 'High priority tickets are handled first.' : 'Handled in the order tickets are received.'}
                         position="top"
                         width={220}
                       >

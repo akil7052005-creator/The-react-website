@@ -8,19 +8,19 @@ function AlbumCard({ album, onOpen }: { album: AlbumDto; onOpen: (album: AlbumDt
 
   return (
     <FeatureTooltip
-      title={`${album.title} — 3D Flipbook`}
+      title={`${album.title} — Flipbook`}
       badge={`${spreads} Spreads`}
       icon="journal-album"
       summary={`Wedding collection with ${album.pageCount} photos across ${spreads} spreads. Status is currently ${status}.${
         album.openFeedbackCount ? ` ${album.openFeedbackCount} open client note(s).` : ''
-      } Click to open 3D preview!`}
+      } Click to open the flipbook.`}
       highlights={[
         'Interactive page turning with spread-by-spread navigation',
         'Bridal zoom mode for intricate jewelry & textile details',
         'Client sign-off per spread before print',
       ]}
       metric={`Last updated: ${formatDate(album.updatedAt)}`}
-      tip="Click anywhere on this album to launch the interactive 3D virtual flipbook!"
+      tip="Click anywhere on this album to open the flipbook."
       position="top"
       width={300}
       delay={120}
@@ -30,7 +30,7 @@ function AlbumCard({ album, onOpen }: { album: AlbumDto; onOpen: (album: AlbumDt
         onClick={() => onOpen(album)}
         tabIndex={0}
         role="button"
-        aria-label={`Open 3D Flipbook for ${album.title}`}
+        aria-label={`Open Flipbook for ${album.title}`}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault()
@@ -43,7 +43,7 @@ function AlbumCard({ album, onOpen }: { album: AlbumDto; onOpen: (album: AlbumDt
           <StatusPill status={status} />
           <div className="cover-overlay-glow" />
           <span className="cover-hover-prompt">
-            <i className="bi bi-eye" /> Click to Open 3D Album
+            <i className="bi bi-eye" /> Click to Open Album
           </span>
         </div>
         <div className="album-body">

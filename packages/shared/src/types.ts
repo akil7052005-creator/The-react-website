@@ -405,7 +405,8 @@ export interface WebsiteSettingsDto {
   visits: number
   leadCount: number
   publicUrl: string
-  status: 'Live'
+  /** Draft until the portfolio (published albums) has at least one item. */
+  status: 'Live' | 'Draft'
 }
 
 export interface PublicWebsiteDto {

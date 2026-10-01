@@ -36,32 +36,16 @@ const billingFeatures: FeatureBarItem[] = [
     badge: 'SAC 9983',
     icon: 'file-earmark-check',
     summary: 'Automated 18% GST (9% CGST + 9% SGST or 18% IGST) calculations formatted for Indian tax compliance.',
-    highlights: ['Includes studio GSTIN & client details', 'Automated sequential invoice numbers', 'One-click tax report export for GSTR-1'],
-    tip: 'Saves your accountant hours during monthly GST filing.',
-  },
-  {
-    title: 'WhatsApp UPI Payment Links',
-    badge: 'Instant Pay',
-    icon: 'whatsapp',
-    summary: 'Send invoice links directly on WhatsApp with integrated UPI QR codes (GPay, PhonePe, Paytm).',
-    highlights: ['Zero transaction friction for clients', 'Instant WhatsApp payment receipts sent upon receipt', 'Over 70% of clients pay within 2 hours'],
-    tip: 'Include payment link when delivering digital album preview.',
+    highlights: ['Includes studio GSTIN & client details', 'Automated sequential invoice numbers', 'Print-ready invoice layout'],
+    tip: 'Add your studio state in My Profile so the right GST split is applied.',
   },
   {
     title: 'Milestone Tracking',
     badge: 'Cash Flow',
     icon: 'graph-up-arrow',
-    summary: 'Split contracts into Booking Advance (30%), Pre-Shoot (30%), and Final Delivery (40%).',
-    highlights: ['Automatic balance notifications before final handover', 'Reduces overdue receivables by 90%', 'Clear timeline for brides and families'],
+    summary: 'Split an invoice into milestones such as booking advance, pre-shoot and final delivery, each with its own due date.',
+    highlights: ['Record full or partial payments by UPI, cash, card, bank transfer or cheque', 'Milestones are marked paid in order as payments come in', 'Balance due shown on every invoice'],
     tip: 'Never release full-resolution unwatermarked photos before final payment.',
-  },
-  {
-    title: 'Automated Overdue Nudges',
-    badge: 'Gentle Reminders',
-    icon: 'bell',
-    summary: 'Polite, automated WhatsApp reminders sent 3 days before and on the invoice due date.',
-    highlights: ['Tone is polite and professional', 'Customizable message template', 'Option to pause reminders per client'],
-    tip: 'Reminders reduce awkward money conversations.',
   },
 ]
 
@@ -95,7 +79,7 @@ function Billing() {
             title="Create GST Invoice"
             badge="Quick Bill"
             icon="plus-circle"
-            summary="Generate a branded PDF invoice with automated GST breakdown and UPI payment link."
+            summary="Create a printable invoice with automated GST breakdown and milestone payments."
             position="bottom"
             width={280}
           >

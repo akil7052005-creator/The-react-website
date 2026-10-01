@@ -47,11 +47,24 @@ describe('Phase 4 — referrals, website, banners, help, support, admin', () => 
         .put('/api/v1/website')
         .send({ ...settings, customDomain: 'Gallery.GoldenHour.Studio', videoUrl: 'https://youtu.be/dQw4w9WgXcQ', seoTitle: 'Golden Hour' })
         .expect(200)
-      expect(ok.body).toMatchObject({ customDomain: 'gallery.goldenhour.studio', seoTitle: 'Golden Hour', status: 'Live' })
+      expect(ok.body).toMatchObject({ customDomain: 'gallery.goldenhour.studio', seoTitle: 'Golden Hour', status: 'Draft' })
       expect(ok.body.sections.find((s: { key: string }) => s.key === 'blog').on).toBe(false)
 
       const taken = await B.agent.put('/api/v1/website').send({ ...settings, customDomain: 'gallery.goldenhour.studio' }).expect(400)
       expect(taken.body.error.fields.customDomain).toMatch(/another studio/)
+    })
+
+    it('stays a draft until the portfolio has a published album', async () => {
+      expect((await B.agent.get('/api/v1/website').expect(200)).body.status).toBe('Draft')
+      const client = await prisma.client.create({ data: { studioId: B.studioId, name: 'Riya Sen', phone: '+919876500000' } })
+      const event = await prisma.event.create({
+        data: { studioId: B.studioId, code: 'EVT-WEB', clientId: client.id, title: 'Riya Wedding', type: 'WEDDING', date: new Date(), venue: 'Taj', city: 'Kolkata' },
+      })
+      const album = await prisma.album.create({ data: { studioId: B.studioId, code: 'ALB-WEB', eventId: event.id, title: 'Riya Album', publicToken: 'web-status-token' } })
+      expect((await B.agent.get('/api/v1/website').expect(200)).body.status).toBe('Draft')
+
+      await prisma.album.update({ where: { id: album.id }, data: { status: 'PUBLISHED', publishedAt: new Date() } })
+      expect((await B.agent.get('/api/v1/website').expect(200)).body.status).toBe('Live')
     })
 
     it('serves the public site, counts visits and captures leads', async () => {

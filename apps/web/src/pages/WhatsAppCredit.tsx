@@ -34,36 +34,20 @@ import { syncCredits } from '../lib/whatsapp'
 
 const waFeatures: FeatureBarItem[] = [
   {
-    title: 'Official Meta Cloud API',
-    badge: '100% Safe',
-    icon: 'shield-check',
-    summary: 'Direct integration with Meta WhatsApp Business Cloud API ensures zero risk of phone number bans or spam flags.',
-    highlights: ['99.9% message deliverability', 'Official Verified Business branding', 'Zero setup required from studio'],
-    tip: 'Clients trust verified business messages 4x more than random personal numbers.',
-  },
-  {
     title: 'Credits Never Expire',
     badge: 'No Lock-in',
     icon: 'infinity',
     summary: 'Any WhatsApp credits you top up carry over indefinitely and never expire across wedding seasons.',
-    highlights: ['1 credit = 1 delivered message', 'Use across photo selection, face AI, and invoices', 'Top up once for the whole year'],
-    tip: 'Stock up during festive seasonal discounts.',
-  },
-  {
-    title: 'Read & Delivery Receipts',
-    badge: 'Live Status',
-    icon: 'check2-all',
-    summary: 'Track in real-time whether your client has received, opened, and clicked the gallery link.',
-    highlights: ['Blue double-tick tracking', 'Click analytics on gallery links', 'Automatic fallback if phone is unreachable'],
-    tip: 'Check read receipts before making follow-up calls.',
+    highlights: ['1 credit = 1 message', 'Use across photo selection, albums, events and invoices', 'Top up once for the whole year'],
+    tip: 'Stock up before peak wedding season.',
   },
   {
     title: 'Personalized Templates',
     badge: 'Auto-Merged',
     icon: 'chat-left-quote',
-    summary: 'Messages automatically insert client names, venue names, countdown timers, and personalized URLs.',
-    highlights: ['Pre-approved WhatsApp business templates', 'Multilingual support (English, Hindi, Tamil, Telugu)', 'Branded with studio signature'],
-    tip: 'Personalized wedding messages achieve a 98% open rate.',
+    summary: 'Messages automatically insert client names, event details, deadlines and the right private link.',
+    highlights: ['Ready-made template for each message type', 'Preview every message before sending', 'Signed with your studio name'],
+    tip: 'Check the preview before sending to make sure the details are right.',
   },
 ]
 
@@ -123,9 +107,9 @@ function WhatsAppCredit() {
     <div className="stack">
       <PageHeader
         eyebrow="Wallet & Communications"
-        featureBadge="Meta WhatsApp Business API"
+        featureBadge="WhatsApp Messaging"
         title="WhatsApp Credit Management"
-        subtitle="Credits power automated client reminders, private proofing links, guest face search links, and GST invoices."
+        subtitle="Credits power client reminders, private proofing and album links, event confirmations and GST invoices."
       />
 
       {/* Feature Capabilities Ribbon */}
@@ -214,7 +198,7 @@ function WhatsAppCredit() {
 
       <Card
         title="Recent Message Log"
-        subtitle="Live delivery and read status for messages dispatched by your studio"
+        subtitle="Every message your studio has sent, with the credits it used"
         feature={{
           title: 'Automated Messaging Audit',
           badge: 'Real-time',

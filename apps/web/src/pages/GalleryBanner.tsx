@@ -13,35 +13,19 @@ import { formatBytes, formatDate } from '../utils/format'
 
 const bannerFeatures: FeatureBarItem[] = [
   {
-    title: 'Seasonal Auto-Rotation',
+    title: 'Scheduled Campaigns',
     badge: 'Marketing',
     icon: 'calendar-range',
-    summary: 'Schedule promotional banners to automatically swap for winter wedding season, Diwali offers, or monsoon shoots.',
-    highlights: ['Set start and end campaign dates', 'Zero manual banner swapping on weekends', 'A/B test different hero images'],
+    summary: 'Give promotional banners start and end dates for wedding season, Diwali offers, or monsoon shoots.',
+    highlights: ['Set start and end campaign dates', 'Switch banners on or off anytime', 'Choose where each banner appears'],
     tip: 'Promote your destination wedding package 6 months in advance.',
   },
   {
-    title: 'Mobile Safe-Zone Framing',
-    badge: 'Responsive',
-    icon: 'phone',
-    summary: 'Smart framing algorithm ensures couple portraits are never awkwardly cropped across smartphones and tablets.',
-    highlights: ['Automatic focal-point face detection', 'Text stays legible over any photo background', 'Dual aspect-ratio generation (16:9 and 9:16)'],
-    tip: 'Leave negative space on the left side of banner images for text overlay.',
-  },
-  {
-    title: 'WebP Cloud Compression',
-    badge: '5× Faster',
-    icon: 'lightning-charge',
-    summary: 'High-definition 1920×1080 banners are compressed into modern WebP format without losing crisp details.',
-    highlights: ['Reduces 8 MB files down to 450 KB', 'Loads in under 300ms on 4G/5G mobile connections', 'Retains rich deep shadow and highlight tones'],
-    tip: 'Fast-loading banners reduce client bounce rates.',
-  },
-  {
-    title: 'Interactive Action Overlays',
-    badge: 'High Conversion',
+    title: 'Call-to-Action Buttons',
+    badge: 'Conversion',
     icon: 'hand-index-thumb',
-    summary: 'Overlay custom CTA buttons like "Check Availability" or "Book Consultation" directly on top of banners.',
-    highlights: ['Direct WhatsApp or phone call triggers', 'Custom tracking parameters for marketing ROI', 'Adjustable glassmorphic backdrops'],
+    summary: 'Add a button like "Check Availability" or "Book Consultation" on top of a banner.',
+    highlights: ['Custom button text and link', 'Link to a wa.me WhatsApp chat or any web page'],
     tip: 'Add a seasonal discount code on your hero banner.',
   },
 ]

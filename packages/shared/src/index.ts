@@ -24,6 +24,7 @@ export const ERROR_CODES = {
   READ_ONLY: 'READ_ONLY',
   RATE_LIMITED: 'RATE_LIMITED',
   FILE_INVALID: 'FILE_INVALID',
+  EMAIL_FAILED: 'EMAIL_FAILED',
   INTERNAL: 'INTERNAL_ERROR',
 } as const
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES]

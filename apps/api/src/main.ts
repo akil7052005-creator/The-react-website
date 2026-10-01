@@ -9,10 +9,10 @@ async function bootstrap() {
   const c = config()
   const app = await NestFactory.create(AppModule, { bodyParser: true })
   // Behind Railway/Render/Vercel proxies the client IP (for rate limiting) is in X-Forwarded-For.
-  app.getHttpAdapter().getInstance().set('trust proxy', 1)
+  app.getHttpAdapter().getInstance().set('trust proxy', c.TRUST_PROXY_HOPS)
   configureApp(app)
   await app.listen(c.PORT)
-  Logger.log(`API on http://localhost:${c.PORT}/api/v1 · docs at /api/docs`, 'Bootstrap')
+  Logger.log(`API on http://localhost:${c.PORT}/api/v1${c.NODE_ENV === 'production' ? '' : ' · docs at /api/docs'}`, 'Bootstrap')
 }
 
 void bootstrap()

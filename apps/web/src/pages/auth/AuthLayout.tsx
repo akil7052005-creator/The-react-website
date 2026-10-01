@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import type { FieldPath, FieldValues, UseFormReturn } from 'react-hook-form'
 import { Link } from 'react-router-dom'
-import poster from '../../assets/wedding-poster-horizontal.png'
+import poster from '../../assets/wedding-photo.jpg'
 import { FieldShell } from '../../components/form/form'
 
 export function AuthLayout({ title, subtitle, children, footer }: { title: string; subtitle: ReactNode; children: ReactNode; footer?: ReactNode }) {
@@ -26,7 +26,7 @@ export function AuthLayout({ title, subtitle, children, footer }: { title: strin
               <i className="bi bi-check-circle-fill" /> Private selection links with quota lock
             </li>
             <li>
-              <i className="bi bi-check-circle-fill" /> 3D flipbook albums with client feedback
+              <i className="bi bi-check-circle-fill" /> Flipbook albums with client feedback
             </li>
             <li>
               <i className="bi bi-check-circle-fill" /> GST-ready invoices with CGST/SGST/IGST

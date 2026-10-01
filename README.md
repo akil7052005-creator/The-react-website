@@ -101,6 +101,9 @@ Everything that would need a third party sits behind an interface with a simple 
    - `NODE_ENV=production`, strong random `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` (`openssl rand -hex 32`)
    - `APP_URL=https://weddyzone.vercel.app`, `CORS_ORIGINS=https://weddyzone.vercel.app`
    - `COOKIE_SECURE=true`
+   - `RESEND_API_KEY` and `MAIL_FROM` (a sender on your Resend-verified domain) so password-reset emails are delivered
+   - `TRUST_PROXY_HOPS=2` when Vercel forwards `/api` to the API host (rate limits then see each user's real IP)
+   - The API refuses to start in production with development values (localhost URLs, example JWT secrets, no email provider)
    - `UPLOAD_DIR` on a **persistent volume** (Railway volume / Render disk) — local-disk storage is lost on redeploy otherwise
 4. Seed reference data once: `SEED_DEMO=false pnpm --filter @weddyzone/api db:seed`.
 

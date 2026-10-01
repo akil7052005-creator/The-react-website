@@ -1,5 +1,5 @@
 import type { MessagePreviewDto } from '@weddyzone/shared'
-import poster from '../assets/wedding-poster-horizontal.png'
+import poster from '../assets/wedding-photo.jpg'
 import { initials } from '../utils/format'
 import { Skeleton, Spinner } from './ui'
 
@@ -35,7 +35,7 @@ export function WhatsAppPreviewModal({ isOpen, onClose, preview, loading, error,
               <i className="bi bi-whatsapp" /> Live Client Preview
             </span>
             <h2>WhatsApp Notification Experience</h2>
-            <p className="muted">Here is exactly how automated reminders appear on your client's smartphone with 98% open rates.</p>
+            <p className="muted">Here is exactly how this message will appear on your client's smartphone.</p>
           </div>
           <button className="icon-btn" onClick={onClose} aria-label="Close WhatsApp preview">
             <i className="bi bi-x-lg" />
@@ -61,9 +61,8 @@ export function WhatsAppPreviewModal({ isOpen, onClose, preview, loading, error,
               <div className="wa-contact-info">
                 <h4>
                   {preview?.studioName ?? 'Your studio'}
-                  <i className="bi bi-patch-check-fill wa-verified-badge" />
                 </h4>
-                <span>Official Business Account</span>
+                <span>Business Account</span>
               </div>
               <div className="wa-app-icons">
                 <i className="bi bi-telephone" />
@@ -132,7 +131,7 @@ export function WhatsAppPreviewModal({ isOpen, onClose, preview, loading, error,
             <ul className="checklist" style={{ margin: '14px 0 20px' }}>
               <li>
                 <i className="bi bi-check-circle-fill" />
-                <strong>Official Verified Meta API:</strong> Zero risk of personal phone number suspensions.
+                <strong>Sent From Your WhatsApp:</strong> Opens WhatsApp on your device with the message ready to send.
               </li>
               <li>
                 <i className="bi bi-check-circle-fill" />
@@ -140,11 +139,11 @@ export function WhatsAppPreviewModal({ isOpen, onClose, preview, loading, error,
               </li>
               <li>
                 <i className="bi bi-check-circle-fill" />
-                <strong>98% Read Rate:</strong> Average turnaround drops from 21 days down to 3.2 days.
+                <strong>Personalized Message:</strong> Client name, event details and deadline filled in automatically.
               </li>
               <li>
                 <i className="bi bi-check-circle-fill" />
-                <strong>Instant Delivery & Read Receipts:</strong> Know the exact moment the bride opens the gallery.
+                <strong>Message Log:</strong> Every message sent is recorded with the credits it used.
               </li>
             </ul>
 

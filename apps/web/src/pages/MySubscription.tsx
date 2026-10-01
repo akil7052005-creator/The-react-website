@@ -1,8 +1,8 @@
 import type { UsageItem } from '@weddyzone/shared'
 import { Link } from 'react-router-dom'
-import { PageHeader, Card, Progress, StatusPill, FeatureTooltip, EmptyState, ErrorState, CardSkeleton, type FeatureInfo } from '../components/ui'
+import { PageHeader, Card, ComingSoonTag, Progress, StatusPill, FeatureTooltip, EmptyState, ErrorState, CardSkeleton, type FeatureInfo } from '../components/ui'
 import { formatDate, formatMoney, formatNumber } from '../utils/format'
-import { featureInfo } from '../data/featureInfo'
+import { COMING_SOON_FEATURES, featureInfo } from '../data/featureInfo'
 import { usePlanActions, useSubscription } from '../lib/billing'
 
 const usageTips: Record<UsageItem['key'], { title: string; tip: string }> = {
@@ -138,9 +138,10 @@ function MySubscription() {
             {plan.features.map((f) => {
               const feat = (featureInfo.features as Record<string, FeatureInfo>)?.[f]
               const li = (
-                <li key={f} className="plan-feature-item">
-                  <i className="bi bi-check-circle-fill" />
+                <li key={f} className={`plan-feature-item${COMING_SOON_FEATURES.has(f) ? ' is-coming-soon' : ''}`}>
+                  {COMING_SOON_FEATURES.has(f) ? <i className="bi bi-clock" /> : <i className="bi bi-check-circle-fill" />}
                   <span>{f}</span>
+                  {COMING_SOON_FEATURES.has(f) && <ComingSoonTag />}
                   <i className="bi bi-info-circle plan-feat-info" />
                 </li>
               )

@@ -27,7 +27,7 @@ export default function PublicSite() {
   if (q.isError || !q.data) {
     return (
       <div className="public-shell">
-        <div className="public-wrap" style={{ paddingTop: 40 }}>
+        <div className="public-wrap">
           <div className="card">
             {isApiError(q.error) && q.error.status === 404 ? (
               <EmptyState icon="globe2" title="Website not found" text="Check the link and try again." />

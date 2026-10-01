@@ -28,6 +28,19 @@ describe('Rate limiting', () => {
     expect(statuses.slice(3)).toEqual([429, 429])
   })
 
+  // Each auth route has its own counter; the guard runs before validation, so invalid bodies still count.
+  it.each([
+    ['signup', '/api/v1/auth/signup', {}],
+    ['forgot password', '/api/v1/auth/forgot-password', { email: 'not-an-email' }],
+    ['reset password', '/api/v1/auth/reset-password', { token: 'x', password: 'short', confirmPassword: 'short' }],
+  ])('limits %s attempts per minute', async (_name, path, body) => {
+    const server = app.getHttpServer()
+    const statuses: number[] = []
+    for (let i = 0; i < 5; i++) statuses.push((await request(server).post(path).send(body)).status)
+    expect(statuses.slice(0, 3).every((s) => s !== 429)).toBe(true)
+    expect(statuses.slice(3)).toEqual([429, 429])
+  })
+
   it('limits public pages', async () => {
     const server = app.getHttpServer()
     const statuses: number[] = []

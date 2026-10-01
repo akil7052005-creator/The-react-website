@@ -530,3 +530,29 @@
     max-width: none;
   }
 }
+
+/* "Coming soon" plan features: muted row with a tag instead of a check mark. */
+.coming-soon-tag {
+  margin-left: 8px;
+  font-size: 11px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+.coming-soon-tag::before {
+  display: none;
+}
+.is-coming-soon > span:not(.coming-soon-tag) {
+  opacity: 0.75;
+}
+.is-coming-soon > .bi-clock {
+  color: var(--warning);
+}
+
+/* Refer & Earn: makes clear the wallet can't be spent yet. */
+.wallet-note {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  font-size: 13px;
+  opacity: 0.85;
+}

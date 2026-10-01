@@ -33,36 +33,12 @@ interface Summary {
 
 const albumFeatures: FeatureBarItem[] = [
   {
-    title: '3D Photorealistic Physics',
-    badge: '3D Engine',
-    icon: 'book',
-    summary: 'Turn designed wedding spreads into virtual flipbooks with realistic page curling and paper sounds.',
-    highlights: ['Multi-touch gesture support on iPads & phones', 'Double-page panoramic spreads with zero distortion', 'Silk / Gloss / Matte paper texture simulation'],
-    tip: 'Clients view 3D flipbooks 4x longer than static PDF proofing links.'
-  },
-  {
     title: 'Client Spread Feedback',
-    badge: 'Live Annotations',
+    badge: 'Annotations',
     icon: 'chat-square-quote',
-    summary: 'Couples and parents can leave sticky comments directly on any photo or page spread.',
-    highlights: ['Pinpoint photo swaps without ambiguous email threads', 'Studio reply notifications in real-time', 'One-click client sign-off when approved'],
+    summary: 'Couples and parents can leave comments on any page spread of the album.',
+    highlights: ['Pinpoint photo swaps without ambiguous email threads', 'Studio is notified of new feedback', 'One-click client approval for each spread'],
     tip: 'Eliminates miscommunication before sending albums to expensive print labs.'
-  },
-  {
-    title: 'Lab Print-Ready Export',
-    badge: '300 DPI CMYK',
-    icon: 'printer',
-    summary: 'Export high-resolution PDF spreads formatted with bleed marks for top print labs across India.',
-    highlights: ['Supports Canvera, Photostop, and local lab dimensions', 'Automatic CMYK color profile conversion', 'Bleed & margin safe-zone verification'],
-    tip: 'Verifies resolution so images never print blurry.'
-  },
-  {
-    title: 'Family Cloud Access',
-    badge: 'Worldwide Sync',
-    icon: 'cloud-check',
-    summary: 'Share private albums with family and friends anywhere in the world via secure PIN protection.',
-    highlights: ['Password & PIN security locks', 'Streamed from CDN with zero buffering', 'Social share preview cards with studio branding'],
-    tip: 'Couples love sharing the link with overseas relatives.'
   }
 ]
 
@@ -85,15 +61,15 @@ function DigitalAlbum() {
     <div className="stack">
       <PageHeader
         eyebrow="Services"
-        featureBadge="3D Flipbook & Client Proofing"
+        featureBadge="Flipbook & Client Proofing"
         title="Digital Albums Studio"
-        subtitle="Stunning photorealistic flipbook albums your couples can preview and share with family worldwide before printing."
+        subtitle="Flipbook albums your couples can preview, comment on and share with family before printing."
         actions={
           <FeatureTooltip
-            title="Create 3D Digital Album"
+            title="Create Digital Album"
             badge="Layout Studio"
             icon="plus-circle"
-            summary="Upload designed panoramic spreads to generate an interactive 3D virtual flipbook in seconds."
+            summary="Pick an event's photos in page order to build a flipbook album in seconds."
             position="bottom"
             width={280}
           >
@@ -119,7 +95,7 @@ function DigitalAlbum() {
             title: 'Live Published Flipbooks',
             badge: `${counts?.PUBLISHED ?? 0} Live`,
             icon: 'check-circle',
-            summary: 'Albums that have completed client review and are accessible worldwide with interactive 3D controls.',
+            summary: 'Albums that have completed client review and can be opened by anyone with the link.',
             highlights: ['Active CDN streaming', 'Worldwide family access enabled'],
           }}
         />

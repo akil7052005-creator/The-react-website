@@ -2,6 +2,7 @@ import type { INestApplication } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
 import type { PrismaClient } from '@prisma/client'
 import request from 'supertest'
+import { emailFailed } from '../src/common/errors'
 import type { MailService } from '../src/infra/mail.service'
 import { createTestApp, expectError, pngBuffer, resetDb, signup } from './helpers'
 
@@ -154,6 +155,16 @@ describe('Auth & profile', () => {
       const res = await request(app.getHttpServer()).post('/api/v1/auth/forgot-password').send({ email: 'ghost@example.com' }).expect(200)
       expect(res.body.ok).toBe(true)
       expect(mail.lastMessage).toBeNull()
+    })
+
+    it('tells the user when the reset email could not be sent', async () => {
+      const { email } = await signup(app)
+      const failing = jest.spyOn(mail, 'send').mockRejectedValueOnce(emailFailed())
+      const res = await request(app.getHttpServer()).post('/api/v1/auth/forgot-password').send({ email }).expect(503)
+      expect(res.body).toEqual({
+        error: { code: 'EMAIL_FAILED', message: "We couldn't send the email right now. Please try again in a few minutes." },
+      })
+      failing.mockRestore()
     })
 
     it('changes the password only with the current one', async () => {

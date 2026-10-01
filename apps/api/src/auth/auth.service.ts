@@ -220,6 +220,8 @@ export class AuthService {
       data: { userId: user.id, tokenHash: sha256(token), expiresAt: new Date(Date.now() + 60 * 60_000) },
     })
     const link = `${config().APP_URL}/reset-password?token=${encodeURIComponent(token)}`
+    // If delivery fails this throws a 503 so the user is told to retry. That can only happen for an
+    // existing account, an accepted trade-off: silently "sending" nothing is worse for real users.
     await this.mail.send({
       to: user.email,
       subject: 'Reset your Weddyzone Studio password',

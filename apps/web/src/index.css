@@ -1,5 +1,5 @@
 /* =========================================================
-   Weddingz design system
+   Weddyzone design system
    Change a colour here and it updates across the whole app.
    ========================================================= */
 :root {
@@ -1780,7 +1780,8 @@ img {
     padding: 20px 16px 40px;
   }
 
-  .search {
+  /* Only the top bar's global search; page search boxes (Help, lists) must stay visible. */
+  .topbar .search {
     display: none;
   }
 

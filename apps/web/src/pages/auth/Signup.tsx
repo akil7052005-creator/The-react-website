@@ -27,7 +27,7 @@ export default function Signup() {
     onSuccess: (me) => {
       qc.setQueryData(ME_KEY, me)
       toast.success(`Welcome to Weddyzone, ${me.user.name.split(' ')[0]}! Your 30-day Starter trial has begun.`)
-      navigate('/profile', { replace: true })
+      navigate('/', { replace: true })
     },
     onError: (e) => applyApiErrors(form, e),
   })

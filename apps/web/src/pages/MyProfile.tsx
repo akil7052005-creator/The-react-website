@@ -73,7 +73,7 @@ function ProfileForm({ studio }: { studio: StudioDto }) {
         <TextField form={form} name="ownerName" label="Your name" required maxLength={80} />
         <TextField form={form} name="studioName" label="Studio name" required maxLength={80} />
         <TextField form={form} name="email" label="Email" type="email" required />
-        <TextField form={form} name="phone" label="Phone" type="tel" required hint="10-digit Indian mobile" />
+        <TextField form={form} name="phone" label="Mobile number" type="tel" required hint="10-digit Indian mobile" />
         <SelectField form={form} name="city" label="City" required kind="creatable" options={cityOptions} placeholder="Select or type a city" />
         <SelectField form={form} name="stateCode" label="State" required options={stateOptions} placeholder="Select state" hint="Decides CGST+SGST vs IGST on invoices" />
         <TextField form={form} name="gstin" label="GSTIN" placeholder="33ABCDE1234F1Z5" style={{ textTransform: 'uppercase' }} hint="Optional — must match your state" />
@@ -81,7 +81,7 @@ function ProfileForm({ studio }: { studio: StudioDto }) {
         <TextField form={form} name="addressLine1" label="Address line 1" maxLength={120} />
         <TextField form={form} name="addressLine2" label="Address line 2" maxLength={120} />
         <TextField form={form} name="pincode" label="PIN code" inputMode="numeric" placeholder="600006" />
-        <TextField form={form} name="website" label="Website" placeholder="goldenhour.weddingz.com" maxLength={120} />
+        <TextField form={form} name="website" label="Website" placeholder="goldenhour.weddyzone.com" maxLength={120} />
         <TextAreaField form={form} name="bio" label="About your studio" maxLength={500} />
       </div>
       <div className="form-foot">

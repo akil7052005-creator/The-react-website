@@ -170,4 +170,5 @@ export const CREDIT_PACKS = [
 export type CreditPackCode = (typeof CREDIT_PACKS)[number]['code']
 
 export const REFERRAL_REWARD_PAISE = 150_000 // ₹1,500
-export const LOW_CREDIT_THRESHOLD = 100
+// Below the 50-credit trial grant, so a new studio is not told to top up straight away.
+export const LOW_CREDIT_THRESHOLD = 20

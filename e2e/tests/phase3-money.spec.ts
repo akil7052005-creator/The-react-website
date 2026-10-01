@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { login } from './helpers'
+import { login, signupStudio } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -70,7 +70,8 @@ test('buy WhatsApp credits in test mode', async ({ page }) => {
 })
 
 test('upgrade to Studio yearly, then cancel and resume', async ({ page }) => {
-  await login(page)
+  // A fresh trial studio, so the run on the other viewport (same database) can't have upgraded it already.
+  await signupStudio(page)
   await page.goto('/subscriptions?cycle=yearly')
   await page.getByRole('button', { name: 'Choose Studio' }).click()
   await expect(page.getByText(/₹59,990/).last()).toBeVisible()

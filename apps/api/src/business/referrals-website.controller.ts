@@ -73,7 +73,7 @@ export class ReferralsController {
   }
 }
 
-export function websiteDto(w: WebsiteSettings, extra: { visits: number; leadCount: number; slug: string }): WebsiteSettingsDto {
+export function websiteDto(w: WebsiteSettings, extra: { visits: number; leadCount: number; slug: string; publishedAlbums: number }): WebsiteSettingsDto {
   const saved = w.sections as { key: WebsiteSectionKey; on: boolean }[]
   // Sections added in later releases appear (off) at the end.
   const keys = [...saved.map((s) => s.key), ...WEBSITE_SECTION_KEYS.filter((k) => !saved.some((s) => s.key === k))]
@@ -92,7 +92,8 @@ export function websiteDto(w: WebsiteSettings, extra: { visits: number; leadCoun
     visits: extra.visits,
     leadCount: extra.leadCount,
     publicUrl: `${config().APP_URL}/w/${extra.slug}`,
-    status: 'Live',
+    // The portfolio is the studio's published albums; until there is one the site stays a draft.
+    status: extra.publishedAlbums > 0 ? 'Live' : 'Draft',
   }
 }
 
@@ -102,7 +103,7 @@ export class WebsiteController {
   constructor(private readonly prisma: PrismaService) {}
 
   private async load(studioId: string) {
-    const [w, studio, leadCount] = await Promise.all([
+    const [w, studio, leadCount, publishedAlbums] = await Promise.all([
       this.prisma.websiteSettings.upsert({
         where: { studioId },
         create: { studioId, sections: WEBSITE_SECTION_KEYS.map((key) => ({ key, on: key !== 'blog' })) },
@@ -110,8 +111,9 @@ export class WebsiteController {
       }),
       this.prisma.studio.findUniqueOrThrow({ where: { id: studioId }, select: { slug: true } }),
       this.prisma.lead.count({ where: { studioId, deletedAt: null } }),
+      this.prisma.album.count({ where: { studioId, deletedAt: null, status: 'PUBLISHED' } }),
     ])
-    return websiteDto(w, { visits: w.visits, leadCount, slug: studio.slug })
+    return websiteDto(w, { visits: w.visits, leadCount, slug: studio.slug, publishedAlbums })
   }
 
   @Get()
@@ -209,7 +211,7 @@ export class PublicSitesController {
         orderBy: { position: 'asc' },
       }),
     ])
-    const settings = websiteDto(studio.websiteSettings!, { visits: 0, leadCount: 0, slug })
+    const settings = websiteDto(studio.websiteSettings!, { visits: 0, leadCount: 0, slug, publishedAlbums: albums.length })
     const { visits: _v, leadCount: _l, publicUrl: _p, status: _s, ...publicSettings } = settings
     return {
       studio: {
