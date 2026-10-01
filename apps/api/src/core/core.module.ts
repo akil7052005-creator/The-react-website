@@ -1,6 +1,6 @@
 import { Global, Module } from '@nestjs/common'
 import { MailService } from '../infra/mail.service'
-import { LocalStorageService, StorageService } from '../infra/storage.service'
+import { createStorage, StorageService } from '../infra/storage.service'
 import { FilesService } from './files.service'
 import { LedgerService } from './ledger.service'
 import { MessagingService, WaMeMessagingService } from './messaging.service'
@@ -14,7 +14,7 @@ import { UsageService } from './usage.service'
 @Module({
   providers: [
     MailService,
-    { provide: StorageService, useClass: LocalStorageService },
+    { provide: StorageService, useFactory: createStorage },
     FilesService,
     NotificationsService,
     PlansService,

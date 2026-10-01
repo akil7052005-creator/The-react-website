@@ -28,7 +28,7 @@ cp apps/web/.env.example apps/web/.env
 
 # Database: create tables and load plans, templates, FAQs + the demo studio
 corepack pnpm db:migrate         # prisma migrate dev
-corepack pnpm db:seed
+corepack pnpm db:seed            # development only: also creates demo login accounts
 ```
 
 ### Local PostgreSQL without a password (optional)
@@ -84,10 +84,10 @@ Everything that would need a third party sits behind an interface with a simple 
 
 | Interface | v1 implementation | Later |
 |---|---|---|
-| `StorageService` | `LocalStorageService` — files on disk under `UPLOAD_DIR` | S3 / R2 |
+| `StorageService` | `S3StorageService` (Cloudflare R2 / AWS S3) when `S3_BUCKET` is set; otherwise `LocalStorageService` — files on disk under `UPLOAD_DIR` (development) | — |
 | `PaymentService` | `MockPaymentService` — always succeeds, "Test mode, no real charge" | Razorpay |
 | `MessagingService` | `WaMeMessagingService` — builds the message and returns a `https://wa.me/…` link; credits are deducted and the message logged | WhatsApp Business API |
-| Mail | Console log, or SMTP via nodemailer when `SMTP_HOST` is set | Any SMTP provider |
+| Mail | Resend when `RESEND_API_KEY` is set, SMTP when `SMTP_HOST` is set, otherwise a console log (development) | — |
 
 ## Deploy
 
@@ -95,7 +95,7 @@ Everything that would need a third party sits behind an interface with a simple 
 
 1. Create a PostgreSQL database and copy its connection string.
 2. Create a service from this repo with root directory `/`:
-   - Build: `corepack enable && pnpm install --frozen-lockfile && pnpm --filter @weddyzone/shared build && pnpm --filter @weddyzone/api build`
+   - Build: `corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm --filter @weddyzone/shared build && pnpm --filter @weddyzone/api build` (`--prod=false` keeps the build tools — Prisma CLI, Nest CLI, TypeScript, tsx — which are dev dependencies and would otherwise be skipped when `NODE_ENV=production`)
    - Start: `pnpm --filter @weddyzone/api start:prod` (runs `prisma migrate deploy`, then the API)
 3. Environment: everything in `apps/api/.env.example`, with
    - `NODE_ENV=production`, strong random `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` (`openssl rand -hex 32`)
@@ -104,8 +104,8 @@ Everything that would need a third party sits behind an interface with a simple 
    - `RESEND_API_KEY` and `MAIL_FROM` (a sender on your Resend-verified domain) so password-reset emails are delivered
    - `TRUST_PROXY_HOPS=2` when Vercel forwards `/api` to the API host (rate limits then see each user's real IP)
    - The API refuses to start in production with development values (localhost URLs, example JWT secrets, no email provider)
-   - `UPLOAD_DIR` on a **persistent volume** (Railway volume / Render disk) — local-disk storage is lost on redeploy otherwise
-4. Seed reference data once: `SEED_DEMO=false pnpm --filter @weddyzone/api db:seed`.
+   - `S3_BUCKET`, `S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` for a **private** Cloudflare R2 or AWS S3 bucket. Required in production: the host's disk is wiped on redeploy.
+4. Seed reference data once: `pnpm --filter @weddyzone/api db:seed:prod` (plans, WhatsApp templates and FAQs only; it never creates accounts and is safe to re-run). Never run plain `db:seed` against production: it creates demo logins whose passwords are in this repo (it now refuses to when `NODE_ENV=production`).
 
 ### Web (Vercel)
 

@@ -19,6 +19,17 @@ const schema = z.object({
   COOKIE_SAMESITE: z.enum(['lax', 'strict', 'none']).default('lax'),
   COOKIE_SECURE: bool,
   UPLOAD_DIR: z.string().default('./uploads'),
+  // S3-compatible storage (Cloudflare R2, AWS S3, …) for uploads. When S3_BUCKET is set, files go to the
+  // bucket instead of UPLOAD_DIR. Keep the bucket private: the API checks access and streams each file.
+  S3_BUCKET: z.string().optional(),
+  // R2: https://<ACCOUNT_ID>.r2.cloudflarestorage.com. Leave empty for AWS S3.
+  S3_ENDPOINT: z.string().optional(),
+  // R2: auto. AWS: the bucket's region, e.g. ap-south-1.
+  S3_REGION: z.string().default('auto'),
+  S3_ACCESS_KEY_ID: z.string().optional(),
+  S3_SECRET_ACCESS_KEY: z.string().optional(),
+  // Some S3-compatible servers (e.g. MinIO) need path-style URLs; R2 and AWS do not.
+  S3_FORCE_PATH_STYLE: bool,
   MAX_PHOTO_MB: z.coerce.number().default(20),
   MAX_BANNER_MB: z.coerce.number().default(5),
   SMTP_HOST: z.string().optional(),
@@ -41,9 +52,17 @@ const schema = z.object({
   FEATURE_FACE_RECOGNITION: bool,
 })
   .superRefine((c, ctx) => {
+    const fail = (path: string, message: string) => ctx.addIssue({ code: 'custom', path: [path], message })
+    if (c.S3_BUCKET) {
+      for (const key of ['S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY'] as const) {
+        if (!c[key]) fail(key, 'is required when S3_BUCKET is set')
+      }
+      if (c.S3_ENDPOINT && !/^https?:\/\//.test(c.S3_ENDPOINT)) fail('S3_ENDPOINT', 'must be a full URL, e.g. https://<ACCOUNT_ID>.r2.cloudflarestorage.com')
+    }
     // Refuse to start in production with development defaults.
     if (c.NODE_ENV !== 'production') return
-    const fail = (path: string, message: string) => ctx.addIssue({ code: 'custom', path: [path], message })
+    // Hosts like Render wipe the local disk on every deploy, so uploads must go to a bucket.
+    if (!c.S3_BUCKET) fail('S3_BUCKET', 'is required in production so uploaded photos survive redeploys (set the S3_* variables)')
     const origins = c.CORS_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean)
     if (!origins.length || origins.some((o) => !o.startsWith('https://') || /localhost|127\.0\.0\.1/.test(o))) {
       fail('CORS_ORIGINS', 'must list only your live https:// site origin(s) in production')

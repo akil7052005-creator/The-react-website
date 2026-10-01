@@ -11,6 +11,9 @@ describe('production config guard', () => {
     JWT_REFRESH_SECRET: 'b'.repeat(64),
     RESEND_API_KEY: 're_test_key',
     MAIL_FROM: 'Weddyzone Studio <no-reply@mail.weddyzone.app>',
+    S3_BUCKET: 'weddyzone-uploads',
+    S3_ACCESS_KEY_ID: 'key',
+    S3_SECRET_ACCESS_KEY: 'secret',
     SMTP_HOST: '',
   }
 
@@ -37,8 +40,13 @@ describe('production config guard', () => {
     ['JWT_ACCESS_SECRET', 'change-me-access-secret-at-least-32-chars'],
     ['RESEND_API_KEY', ''],
     ['MAIL_FROM', ''],
+    ['S3_BUCKET', ''],
   ])('refuses %s=%s', (key, value) => {
     expect(load({ [key]: value })).toThrow(new RegExp(key))
+  })
+
+  it('needs the S3 keys whenever a bucket is set', () => {
+    expect(load({ NODE_ENV: 'development', S3_ACCESS_KEY_ID: '' })).toThrow(/S3_ACCESS_KEY_ID/)
   })
 
   it('keeps development defaults working outside production', () => {

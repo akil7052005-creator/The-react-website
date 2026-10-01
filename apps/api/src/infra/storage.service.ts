@@ -1,20 +1,26 @@
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { Injectable } from '@nestjs/common'
 import { randomUUID } from 'crypto'
-import { createReadStream, existsSync } from 'fs'
-import { mkdir, rm, writeFile } from 'fs/promises'
+import { createReadStream } from 'fs'
+import { access, mkdir, rm, writeFile } from 'fs/promises'
 import { dirname, join, resolve } from 'path'
 import type { Readable } from 'stream'
 import { config } from '../config'
 
+/** Opaque key for new uploads: year/month folders + a random UUID, e.g. 2026/10/<uuid>.jpg. */
+export function newStorageKey(ext: string, now = new Date()) {
+  return `${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, '0')}/${randomUUID()}.${ext}`
+}
+
 /**
- * Where uploaded bytes live. v1 uses LocalStorageService (disk); an S3/R2
- * implementation can replace it later without touching callers.
+ * Where uploaded bytes live: S3StorageService (R2 / S3) when S3_BUCKET is set, otherwise
+ * LocalStorageService (UPLOAD_DIR on disk, for development). Callers only see storage keys.
  */
 export abstract class StorageService {
   /** Stores the bytes and returns an opaque storage key. */
-  abstract save(data: Buffer, ext: string): Promise<string>
-  abstract open(key: string): Readable
-  abstract exists(key: string): boolean
+  abstract save(data: Buffer, ext: string, contentType: string): Promise<string>
+  /** A stream of the stored bytes, or null if nothing is stored under the key. */
+  abstract open(key: string): Promise<Readable | null>
   abstract remove(key: string): Promise<void>
 }
 
@@ -31,24 +37,76 @@ export class LocalStorageService extends StorageService {
     return full
   }
 
-  async save(data: Buffer, ext: string): Promise<string> {
-    const now = new Date()
-    const key = `${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, '0')}/${randomUUID()}.${ext}`
+  async save(data: Buffer, ext: string, _contentType?: string): Promise<string> {
+    const key = newStorageKey(ext)
     const full = this.pathFor(key)
     await mkdir(dirname(full), { recursive: true })
     await writeFile(full, data)
     return key
   }
 
-  open(key: string): Readable {
-    return createReadStream(this.pathFor(key))
-  }
-
-  exists(key: string): boolean {
-    return existsSync(this.pathFor(key))
+  async open(key: string): Promise<Readable | null> {
+    const full = this.pathFor(key)
+    try {
+      await access(full)
+    } catch {
+      return null
+    }
+    return createReadStream(full)
   }
 
   async remove(key: string): Promise<void> {
     await rm(this.pathFor(key), { force: true })
   }
+}
+
+/** Files in a private S3-compatible bucket (Cloudflare R2, AWS S3, MinIO, …). */
+@Injectable()
+export class S3StorageService extends StorageService {
+  private readonly bucket: string
+  private readonly client: S3Client
+
+  constructor(client?: S3Client) {
+    super()
+    const c = config()
+    this.bucket = c.S3_BUCKET!
+    this.client =
+      client ??
+      new S3Client({
+        region: c.S3_REGION,
+        endpoint: c.S3_ENDPOINT || undefined,
+        forcePathStyle: c.S3_FORCE_PATH_STYLE,
+        credentials: { accessKeyId: c.S3_ACCESS_KEY_ID!, secretAccessKey: c.S3_SECRET_ACCESS_KEY! },
+      })
+  }
+
+  async save(data: Buffer, ext: string, contentType: string): Promise<string> {
+    const key = newStorageKey(ext)
+    await this.client.send(new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: data, ContentType: contentType, ContentLength: data.length }))
+    return key
+  }
+
+  async open(key: string): Promise<Readable | null> {
+    try {
+      const out = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }))
+      return (out.Body as Readable | undefined) ?? null
+    } catch (e) {
+      if (isMissing(e)) return null
+      throw e
+    }
+  }
+
+  async remove(key: string): Promise<void> {
+    await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }))
+  }
+}
+
+function isMissing(e: unknown) {
+  const err = e as { name?: string; $metadata?: { httpStatusCode?: number } }
+  return err?.name === 'NoSuchKey' || err?.name === 'NotFound' || err?.$metadata?.httpStatusCode === 404
+}
+
+/** Picks the storage backend from the environment (used by CoreModule). */
+export function createStorage(): StorageService {
+  return config().S3_BUCKET ? new S3StorageService() : new LocalStorageService()
 }

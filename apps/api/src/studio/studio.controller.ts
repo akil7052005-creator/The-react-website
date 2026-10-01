@@ -93,7 +93,7 @@ export class FilesController {
   async studioFile(@StudioId() studioId: string, @Param('id', ParseUUIDPipe) id: string, @Res() res: Response) {
     const file = await this.prisma.storedFile.findFirst({ where: { id, studioId, deletedAt: null } })
     if (!file) throw notFound('File')
-    this.files.send(res, file)
+    await this.files.send(res, file)
   }
 
   /** Logos and banners are public by nature (shown on galleries and the studio website). */
@@ -105,6 +105,6 @@ export class FilesController {
       where: { id, deletedAt: null, kind: { in: ['LOGO', 'BANNER'] } },
     })
     if (!file) throw notFound('File')
-    this.files.send(res, file, { cache: 'public' })
+    await this.files.send(res, file, { cache: 'public' })
   }
 }

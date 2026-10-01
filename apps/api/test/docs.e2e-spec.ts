@@ -29,6 +29,9 @@ describe('API docs (/api/docs)', () => {
       JWT_REFRESH_SECRET: 'b'.repeat(64),
       RESEND_API_KEY: 're_test_key',
       MAIL_FROM: 'Weddyzone Studio <no-reply@mail.weddyzone.app>',
+      S3_BUCKET: 'weddyzone-uploads',
+      S3_ACCESS_KEY_ID: 'key',
+      S3_SECRET_ACCESS_KEY: 'secret',
     })
     resetConfigCache()
     ;({ app } = await createTestApp())

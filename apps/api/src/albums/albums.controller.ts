@@ -117,7 +117,7 @@ export class PublicAlbumsController {
 
   @Get(':token/photos/:photoId')
   async photo(@Param('token') token: string, @Param('photoId', ParseUUIDPipe) photoId: string, @Res() res: Response) {
-    this.files.send(res, await this.albums.publicPhotoFile(token, photoId))
+    await this.files.send(res, await this.albums.publicPhotoFile(token, photoId))
   }
 
   @Post(':token/feedback')
