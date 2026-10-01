@@ -131,7 +131,7 @@ img {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: #8b0000; /* Dark Red */
+  background: #4a0000; /* Oxblood Red */
   color: #eadfe3;
   padding: 22px 14px 16px;
   overflow-y: auto;
@@ -183,7 +183,7 @@ img {
   font-weight: 700;
   letter-spacing: 1.4px;
   text-transform: uppercase;
-  color: var(--gold-light); /* solid: 70% gold fails WCAG AA on the dark red sidebar */
+  color: var(--gold-light); /* solid gold keeps the small labels readable on the sidebar */
   padding: 0 12px 6px;
 }
 
