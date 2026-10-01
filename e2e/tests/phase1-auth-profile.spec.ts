@@ -120,3 +120,21 @@ test('reset a forgotten password with the emailed link', async ({ page, context 
   await login(page, email, 'After2026x')
   await expect(page).toHaveURL(/\/$/)
 })
+
+test('visiting /login while logged in offers the dashboard or a different account', async ({ page }) => {
+  await login(page)
+  await page.goto('/login')
+  await expect(page).toHaveURL(/\/login$/)
+  await expect(page.getByTestId('signed-in-notice')).toHaveText("You're logged in as Arjun Mehta (hello@goldenhour.studio)")
+
+  await page.getByRole('link', { name: 'Go to dashboard' }).click()
+  await expect(page).toHaveURL(/\/$/)
+
+  await page.goto('/login')
+  await page.getByRole('button', { name: 'Log in with a different account' }).click()
+  await expect(page.getByRole('textbox', { name: 'Email' })).toBeVisible()
+  await expect(page.getByTestId('signed-in-notice')).toHaveCount(0)
+  // The old session is really gone.
+  await page.goto('/')
+  await expect(page).toHaveURL(/\/login/)
+})

@@ -83,7 +83,8 @@ const router = createBrowserRouter([
     // Friendly crash screen; React Router's default one shows the stack trace even in production.
     errorElement: <RouteError />,
     children: [
-      { path: '/login', element: <RedirectIfAuthed><Login /></RedirectIfAuthed> },
+      // Login handles an existing session itself (shows who is logged in, offers to switch account).
+      { path: '/login', element: <Login /> },
       { path: '/signup', element: <RedirectIfAuthed><Signup /></RedirectIfAuthed> },
       { path: '/forgot-password', element: <ForgotPassword /> },
       { path: '/reset-password', element: <ResetPassword /> },
