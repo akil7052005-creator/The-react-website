@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from 'react'
 import type { FieldPath, FieldValues, UseFormReturn } from 'react-hook-form'
 import { Link } from 'react-router-dom'
+import heroJpg from '../../assets/login-hero.jpg'
+import heroWebp from '../../assets/login-hero.webp'
 import { FieldShell } from '../../components/form/form'
 
 export function AuthLayout({ title, subtitle, children, footer }: { title: string; subtitle: ReactNode; children: ReactNode; footer?: ReactNode }) {
@@ -9,9 +11,9 @@ export function AuthLayout({ title, subtitle, children, footer }: { title: strin
       {/* Photo panel on the left; on phones the same panel becomes a 180px banner above the form. */}
       <aside className="auth-panel">
         <picture className="auth-photo">
-          <source srcSet="/images/login-hero.webp" type="image/webp" />
+          <source srcSet={heroWebp} type="image/webp" />
           <img
-            src="/images/login-hero.jpg"
+            src={heroJpg}
             alt="Bride and groom holding hands with a rose garland"
             width={504}
             height={504}
