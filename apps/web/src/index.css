@@ -131,7 +131,7 @@ img {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: #9b111e; /* Ruby Red */
+  background: #6b0f2a; /* Wine red: lets the bright red buttons stand out and matches the login maroon */
   color: #eadfe3;
   padding: 22px 14px 16px;
   overflow-y: auto;
