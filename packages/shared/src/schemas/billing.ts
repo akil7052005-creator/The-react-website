@@ -108,6 +108,13 @@ export const updatePlanSchema = z.object({
   yearlyPrice: amountSchema,
   limits: planLimitsSchema,
   features: z.array(z.string().trim().min(1).max(80)).min(1).max(20),
+  // Must be features of this plan; shown with a "Coming soon" tag instead of a check mark.
+  comingSoon: z.array(z.string().trim().min(1).max(80)).max(20).default([]),
   popular: z.boolean(),
   isActive: z.boolean(),
+}).superRefine((v, ctx) => {
+  const unknown = v.comingSoon.filter((f) => !v.features.includes(f))
+  if (unknown.length) {
+    ctx.addIssue({ code: 'custom', path: ['comingSoon'], message: `Not a feature of this plan: ${unknown.join(', ')}` })
+  }
 })

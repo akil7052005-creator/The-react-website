@@ -7,6 +7,7 @@ export default function globalSetup() {
   const api = resolve(__dirname, '../apps/api')
   const url = process.env.E2E_DATABASE_URL ?? 'postgresql://weddyzone@localhost:5433/weddyzone_e2e?schema=public'
   rmSync(resolve(api, 'e2e-uploads'), { recursive: true, force: true })
+  rmSync(resolve(api, 'e2e-mail'), { recursive: true, force: true })
   execSync('npx prisma migrate reset --force --skip-generate', {
     cwd: api,
     stdio: 'inherit',

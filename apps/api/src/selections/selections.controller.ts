@@ -159,7 +159,7 @@ export class PublicSelectionsController {
   @Get(':token/photos/:photoId')
   async photo(@Param('token') token: string, @Param('photoId', ParseUUIDPipe) photoId: string, @Res() res: Response) {
     const file = await this.selections.publicPhotoFile(token, photoId)
-    this.files.send(res, file)
+    await this.files.send(res, file)
   }
 
   @Post(':token/picks')

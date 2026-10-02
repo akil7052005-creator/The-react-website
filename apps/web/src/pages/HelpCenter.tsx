@@ -2,61 +2,26 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { FaqDto } from '@weddyzone/shared'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
-import { PageHeader, Card, EmptyState, ErrorState, FeatureTooltip, FeatureBar, Skeleton, type FeatureBarItem } from '../components/ui'
+import { PageHeader, Card, EmptyState, ErrorState, FeatureTooltip, Skeleton } from '../components/ui'
 import { featureInfo } from '../data/featureInfo'
 import { useDebouncedUrlSearch, useUrlState } from '../hooks/useUrlState'
 import { api } from '../lib/api'
 import { features } from '../lib/env'
 import { toastError } from '../lib/query'
 
-const helpFeatures: FeatureBarItem[] = [
-  {
-    title: 'Video Masterclasses',
-    badge: 'HD Tutorials',
-    icon: 'play-circle',
-    summary: 'Watch step-by-step 5-minute video tutorials covering the complete workflow from photoshoot upload to album delivery.',
-    highlights: ['Lightroom export setup', 'QR stand printing guides', 'Client selection psychology tips'],
-    tip: 'Watch the "Fast Client Proofing" video to double your speed.',
-  },
-  {
-    title: 'Print Lab Specs',
-    badge: 'Lab Guides',
-    icon: 'printer',
-    summary: 'Exact page bleed dimensions, color ICC profiles, and binding guides for top print labs across India.',
-    highlights: ['Canvera, Photostop, and Mazda presets', 'CMYK fogra39 calibration notes', 'Silk vs velvet paper recommendations'],
-    tip: 'Download our export presets directly into InDesign.',
-  },
-  {
-    title: 'Legal Contract Templates',
-    badge: 'Free Downloads',
-    icon: 'file-text',
-    summary: 'Lawyer-verified wedding photography contract templates covering deposits, cancellations, and copyright.',
-    highlights: ['Includes model release clauses', 'Drone flight disclaimer wording', 'Milestone payment schedules'],
-    tip: 'Always get client signature before reserving wedding dates.',
-  },
-  {
-    title: '24/7 Studio Concierge',
-    badge: '< 15m Reply',
-    icon: 'headset',
-    summary: 'Our engineering and photography support specialists are available on live chat and WhatsApp.',
-    highlights: ['Weekend priority queue for live shoots', 'Screen-share DNS setup assistance', 'Instant album recovery'],
-    tip: 'Tag urgent shoot issues as High Priority for rapid escalations.',
-  },
-]
-
 const allTopics = [
   {
     icon: 'rocket-takeoff',
     title: 'Getting started',
     text: 'Set up your studio in 10 minutes',
-    summary: 'Configure your studio brand mark, color palette, custom domain, and upload your first wedding event.',
+    summary: 'Set up your studio profile, website design, and upload your first wedding event.',
     category: 'Getting started',
   },
   {
     icon: 'images',
     title: 'Selections & albums',
     text: 'Share, select and deliver',
-    summary: 'Master the client selection proofing workflow, 3D flipbook creation, and Lightroom XML catalog exports.',
+    summary: 'Master the client selection proofing workflow, flipbook albums, and Lightroom filename exports.',
     category: 'Selections & albums',
   },
   {
@@ -71,7 +36,7 @@ const allTopics = [
     icon: 'receipt',
     title: 'Billing & GST',
     text: 'Invoices, payments, refunds',
-    summary: 'Generate GST-compliant tax invoices (SAC 9983), track advance deposits, and accept client payments via UPI.',
+    summary: 'Generate GST-compliant tax invoices (SAC 9983), track advance deposits, and record UPI, cash and bank payments.',
     category: 'Billing & GST',
   },
 ]
@@ -119,13 +84,12 @@ function HelpCenter() {
     <div className="stack">
       <PageHeader
         eyebrow="Account & Support"
-        featureBadge="24/7 Knowledge Base"
+        featureBadge="Knowledge Base"
         title="Studio Help Center"
-        subtitle="Answers, tutorials, and masterclass guides for scaling your wedding photography studio on Weddingz."
+        subtitle="Answers and guides for running your wedding photography studio on Weddyzone."
       />
 
       {/* Feature Capabilities Ribbon */}
-      <FeatureBar items={helpFeatures} />
 
       <label className="search" style={{ maxWidth: 560, height: 50 }}>
         <i className="bi bi-search" />

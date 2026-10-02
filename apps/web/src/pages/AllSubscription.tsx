@@ -1,6 +1,6 @@
 import type { BillingCycle } from '@weddyzone/shared'
 import { Link } from 'react-router-dom'
-import { PageHeader, FeatureTooltip, ErrorState, Skeleton, type FeatureInfo } from '../components/ui'
+import { PageHeader, ComingSoonTag, FeatureTooltip, ErrorState, Skeleton, type FeatureInfo } from '../components/ui'
 import { formatMoney } from '../utils/format'
 import { featureInfo } from '../data/featureInfo'
 import { useUrlState } from '../hooks/useUrlState'
@@ -79,9 +79,10 @@ function AllSubscription() {
                       {p.features.map((f) => {
                         const feat = (featureInfo.features as Record<string, FeatureInfo>)?.[f]
                         const item = (
-                          <li key={f} className="plan-feature-item">
-                            <i className="bi bi-check-circle-fill" />
+                          <li key={f} className={`plan-feature-item${p.comingSoon.includes(f) ? ' is-coming-soon' : ''}`}>
+                            {p.comingSoon.includes(f) ? <i className="bi bi-clock" /> : <i className="bi bi-check-circle-fill" />}
                             <span>{f}</span>
+                            {p.comingSoon.includes(f) && <ComingSoonTag />}
                             <i className="bi bi-info-circle plan-feat-info" />
                           </li>
                         )
@@ -114,7 +115,7 @@ function AllSubscription() {
             <span className="pill pill-warning">
               <i className="bi bi-stars" /> Highest Value
             </span>
-            <h3>Looking for zero limits on events, storage and scans?</h3>
+            <h3>Looking for unlimited events and albums?</h3>
             <p>Our VIP All-Access tier gives your studio complete freedom all wedding season.</p>
           </div>
           <Link to="/all-access" className="btn btn-gold">
@@ -124,9 +125,9 @@ function AllSubscription() {
       </div>
 
       <p className="muted" style={{ textAlign: 'center' }}>
-        All prices exclude 18% GST. Need custom enterprise seats for multiple studio branches?{' '}
+        All prices exclude 18% GST. Questions about plans?{' '}
         <Link to="/support" className="link">
-          Talk to our concierge
+          Contact support
         </Link>
       </p>
     </div>

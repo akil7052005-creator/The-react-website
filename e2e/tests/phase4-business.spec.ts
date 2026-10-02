@@ -1,16 +1,22 @@
 import { expect, test } from '@playwright/test'
 import { gradientPng } from '../../apps/api/src/common/png'
-import { login } from './helpers'
+import { login, uniqueTag } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
 test('a couple sends an enquiry from the public website and it reaches the studio', async ({ page, context }) => {
+  // Unique name: the other viewport's run (same database) sends an enquiry too.
+  const couple = `Lavanya ${uniqueTag()}`
   const visitor = await context.newPage()
   await visitor.goto('/w/golden-hour')
   await expect(visitor.getByRole('heading', { name: 'Golden Hour Studios', level: 1 })).toBeVisible()
+  // The "Company" anti-spam honeypot is rendered off-screen, out of the tab order.
+  const honeypot = await visitor.locator('#f-company').boundingBox()
+  expect(honeypot!.x + honeypot!.width).toBeLessThanOrEqual(0)
+  await expect(visitor.locator('#f-company')).toHaveAttribute('tabindex', '-1')
   await visitor.getByRole('button', { name: 'Send enquiry' }).click()
   await expect(visitor.getByText('Your name is required')).toBeVisible()
-  await visitor.getByLabel(/^Your name/).fill('Lavanya Krishnan')
+  await visitor.getByLabel(/^Your name/).fill(couple)
   await visitor.getByLabel(/^Mobile number/).fill('98401 55667')
   await visitor.getByLabel(/^City/).fill('Madurai')
   await visitor.getByRole('button', { name: 'Send enquiry' }).click()
@@ -18,9 +24,9 @@ test('a couple sends an enquiry from the public website and it reaches the studi
 
   await login(page)
   await page.goto('/my-website')
-  await expect(page.getByRole('cell', { name: 'Lavanya Krishnan' })).toBeVisible()
+  await expect(page.getByRole('cell', { name: couple })).toBeVisible()
   await page.getByRole('button', { name: /Notifications/ }).click()
-  await expect(page.locator('.notif-menu')).toContainText('Lavanya Krishnan')
+  await expect(page.locator('.notif-menu')).toContainText(couple)
 })
 
 test('toggle a website section and save the design', async ({ page }) => {
@@ -36,8 +42,10 @@ test('toggle a website section and save the design', async ({ page }) => {
   await dialog.getByRole('button', { name: 'Save design' }).click()
   await expect(dialog.getByText('Enter a YouTube or Vimeo link (https://…)')).toBeVisible()
   await dialog.getByLabel(/^Highlight film/).fill('https://youtu.be/dQw4w9WgXcQ')
-  await dialog.getByLabel(/^Tagline/).fill('Stories of light and love')
-  await expect(page.locator('.site-frame')).toContainText('Stories of light and love')
+  // Unique tagline: the other viewport's run (same database) saves a design too, and an unchanged form can't be saved.
+  const tagline = `Stories of light and love ${uniqueTag()}`
+  await dialog.getByLabel(/^Tagline/).fill(tagline)
+  await expect(page.locator('.site-frame')).toContainText(tagline)
   await dialog.getByRole('button', { name: 'Save design' }).click()
   await expect(page.getByText('Website design saved')).toBeVisible()
 })

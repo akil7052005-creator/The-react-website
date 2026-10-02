@@ -1,5 +1,5 @@
 /* =========================================================
-   Weddingz design system
+   Weddyzone design system
    Change a colour here and it updates across the whole app.
    ========================================================= */
 :root {
@@ -131,9 +131,7 @@ img {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background:
-    radial-gradient(120% 60% at 0% 0%, rgba(226, 196, 124, 0.12), transparent 60%),
-    linear-gradient(180deg, #3d0e22 0%, var(--wine-900) 100%);
+  background: #6b0f2a; /* Wine red: lets the bright red buttons stand out and matches the login maroon */
   color: #eadfe3;
   padding: 22px 14px 16px;
   overflow-y: auto;
@@ -185,7 +183,7 @@ img {
   font-weight: 700;
   letter-spacing: 1.4px;
   text-transform: uppercase;
-  color: rgba(226, 196, 124, 0.7);
+  color: var(--gold-light); /* solid gold keeps the small labels readable on the sidebar */
   padding: 0 12px 6px;
 }
 
@@ -1780,7 +1778,8 @@ img {
     padding: 20px 16px 40px;
   }
 
-  .search {
+  /* Only the top bar's global search; page search boxes (Help, lists) must stay visible. */
+  .topbar .search {
     display: none;
   }
 
@@ -2303,7 +2302,7 @@ button.feature-tooltip-wrapper {
   font-size: 10px;
   letter-spacing: 1.5px;
   text-transform: uppercase;
-  color: rgba(226, 196, 124, 0.7);
+  color: var(--gold-light);
   line-height: 1;
 }
 

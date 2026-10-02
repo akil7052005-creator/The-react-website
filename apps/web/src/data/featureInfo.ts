@@ -1,4 +1,4 @@
-// Comprehensive feature descriptions and cursor-hover information across Weddingz studio platform.
+// Comprehensive feature descriptions and cursor-hover information across Weddyzone studio platform.
 
 export const featureInfo = {
   // Navigation & Core Services
@@ -8,11 +8,10 @@ export const featureInfo = {
     icon: 'grid-1x2',
     summary: 'The central nerve center for your entire photography studio operations and client pipeline.',
     highlights: [
-      'Live tracking of 48+ seasonal wedding shoots and proofing progress',
-      'Instant access to recent bookings, selection statuses, and guest face searches',
-      'Automated revenue insights, monthly shoot volume, and quick action shortcuts'
+      'Upcoming events, selections and albums at a glance',
+      'Recent bookings with their live client progress',
+      'Monthly booking volume and quick action shortcuts'
     ],
-    metric: '99.9% uptime · Real-time live sync',
     tip: 'Review your upcoming delivery deadlines here every morning.'
   },
   photoSelection: {
@@ -23,23 +22,21 @@ export const featureInfo = {
     highlights: [
       'Clients select on any phone or laptop with zero login friction',
       'Real-time quota lock prevents over-selection beyond package limits',
-      '1-click export of selected filenames to Lightroom and Photoshop'
+      'Export picked filenames as TXT or CSV for a Lightroom filter'
     ],
-    metric: 'Saves ~4.5 hours per event in back-and-forth emails',
-    tip: 'Send automated WhatsApp reminders with one click to keep deadlines on track.'
+    tip: 'Send a WhatsApp reminder with one click to keep deadlines on track.'
   },
   digitalAlbum: {
-    title: '3D Interactive Digital Album',
-    badge: '3D Interactive',
+    title: 'Digital Flipbook Album',
+    badge: 'Interactive',
     icon: 'journal-album',
-    summary: 'Turn designed wedding spreads into stunning 3D virtual flipbooks that couples can share worldwide.',
+    summary: 'Turn designed wedding spreads into an online flipbook that couples can share with family.',
     highlights: [
-      'Realistic page-curl animations and tactile sound effects on touch',
-      'Zero-loss high resolution zoom on intricate bridal jewelry and attire',
+      'Browse the album spread by spread on any device',
+      '2× zoom for checking jewelry and attire details',
       'Client spread approval mode with direct revision notes on pages'
     ],
-    metric: 'Over 85% of couples share their flipbook with 20+ family members',
-    tip: 'Enable client revision mode before sending albums to print labs.'
+    tip: 'Ask the couple to approve every spread before sending albums to print labs.'
   },
   faceRecognition: {
     title: 'AI Neural Face Recognition',
@@ -62,34 +59,33 @@ export const featureInfo = {
     icon: 'box-seam',
     summary: 'Transparent studio tiers designed to scale as your booking calendar fills up.',
     highlights: [
-      'Upgrade, downgrade, or cancel anytime with zero lock-in contracts',
-      'Choose between Monthly and Yearly billing with 2 months free',
-      'Includes cloud storage, selection galleries, and AI face recognition quotas'
+      'Upgrade or downgrade anytime with zero lock-in contracts',
+      'Choose between Monthly and Yearly billing',
+      'Each tier sets your event, album and storage limits'
     ],
-    metric: 'Save 17% on annual studio commitments',
     tip: 'Studios shooting 3+ weddings a month save the most on Pro & All-Access tiers.'
   },
   mySubscription: {
     title: 'Subscription & Quota Manager',
-    badge: 'Active: Pro',
+    badge: 'Your Plan',
     icon: 'patch-check',
     summary: 'Monitor your active studio tier, monthly usage quotas, and upcoming renewals.',
     highlights: [
-      'Live storage utilization tracker (212 GB / 500 GB used)',
-      'Event and face scan quotas with clear monthly reset countdowns',
-      'Download GST tax invoices and payment receipts in one click'
+      'Live storage usage against your plan limit',
+      'Events used this month and your renewal date',
+      'Change plan or billing cycle in a few clicks'
     ],
-    tip: 'Track your face scan counter before big multi-day destination weddings.'
+    tip: 'Check your event quota before a busy wedding month.'
   },
   allAccess: {
-    title: 'Weddingz All-Access Pass',
+    title: 'Weddyzone All-Access Pass',
     badge: 'VIP Unlimited',
     icon: 'stars',
-    summary: 'The ultimate studio power tier: unmetered weddings, storage, face scans, and VIP concierge.',
+    summary: 'The top studio tier: unlimited events and albums with the most storage and WhatsApp credits.',
     highlights: [
-      'Unlimited events, selections, and AI face scans for all year',
-      'Massive 5 TB cloud storage with original RAW / high-res download links',
-      '10,000 free WhatsApp credits included every year plus dedicated manager'
+      'Unlimited events and albums all year',
+      '5 TB cloud storage',
+      '10,000 free WhatsApp credits included every year'
     ],
     metric: 'Best value for multi-crew wedding production houses',
     tip: 'Eliminates all per-event stress during peak wedding months (Oct - Feb).'
@@ -98,25 +94,25 @@ export const featureInfo = {
     title: 'Partner Referral Network',
     badge: '₹1,500 Reward',
     icon: 'wallet2',
-    summary: 'Earn ₹1,500 cash in your studio wallet for every photographer who joins Weddingz with your link.',
+    summary: 'Earn ₹1,500 in your studio wallet for every studio that joins Weddyzone with your link and upgrades to a paid plan.',
     highlights: [
-      'Both you and your referred studio receive ₹1,500 instant wallet credits',
-      'Wallet credits can be redeemed directly toward renewals and WhatsApp packs',
-      'Real-time tracking of referred studios, onboarding status, and payouts'
+      'Both you and your referred studio receive ₹1,500 in wallet credit',
+      'Credited when the referred studio makes its first paid upgrade',
+      'Real-time tracking of referred studios and their status'
     ],
     tip: 'Share your code in your regional wedding photographer WhatsApp groups.'
   },
   whatsappCredit: {
-    title: 'WhatsApp Business Automation',
-    badge: 'Meta Certified',
+    title: 'WhatsApp Client Messaging',
+    badge: 'Credits',
     icon: 'whatsapp',
-    summary: 'Send official WhatsApp proofing links, selection nudges, and invoices directly to clients.',
+    summary: 'Send proofing links, selection nudges, album shares and invoices to clients on WhatsApp.',
     highlights: [
-      '98% message open rate compared to under 18% for traditional email',
-      'Automated personalized client templates with wedding names and gallery links',
-      'Credits never expire and work across selection, face AI, and billing'
+      'Personalized templates with client names and gallery links',
+      'Opens WhatsApp on your device with the message ready to send',
+      'Credits never expire and work across selections, albums, events and billing'
     ],
-    tip: 'WhatsApp notifications cut client selection turnaround time by 60%.'
+    tip: 'A reminder a few days before the deadline keeps selections on track.'
   },
 
   // Business Suite
@@ -127,20 +123,20 @@ export const featureInfo = {
     summary: 'Create professional, GST-compliant photography invoices and track milestone payments.',
     highlights: [
       'Automated CGST, SGST, and IGST rate breakdown with your studio GSTIN',
-      'Direct WhatsApp invoice delivery with UPI and payment gateway links',
-      'Automated tracking of advance deposits, mid-payments, and overdue balances'
+      'Send invoices to clients on WhatsApp and print them',
+      'Track advance deposits, part-payments, and overdue balances'
     ],
-    tip: 'Schedule balance payment reminders 48 hours before delivering final albums.'
+    tip: 'Record each payment as it arrives so balances stay accurate.'
   },
   myWebsite: {
     title: 'Portfolio Website Builder',
-    badge: 'Custom Domain',
+    badge: 'Your Website',
     icon: 'globe2',
-    summary: 'Launch a lightning-fast, high-converting photography website with your custom domain.',
+    summary: 'Publish a photography portfolio website with your work, films and an enquiry form.',
     highlights: [
-      'Showcase your best cinematic wedding stories, films, and client reviews',
-      'Built-in lead capture forms sending new booking alerts directly to WhatsApp',
-      'Optimized for mobile viewing and local Google SEO ranking'
+      'Showcase your best wedding stories and highlight films',
+      'Built-in enquiry form with in-app alerts for new leads',
+      'Optimized for mobile viewing, with your own SEO title and description'
     ],
     tip: 'Keep your hero banner updated with your latest destination shoot.'
   },
@@ -150,11 +146,10 @@ export const featureInfo = {
     icon: 'image',
     summary: 'Elevate your proofing galleries and portfolio website with immersive full-width hero imagery.',
     highlights: [
-      'Custom banner placement across client selection portals and public pages',
-      'Automatic mobile-first responsive scaling and WebP high-compression delivery',
-      'Schedule seasonal booking promos and award-winning showcase spreads'
+      'Banner placements for your gallery hero, website hero and website popup',
+      'Optional call-to-action button on each banner',
+      'Schedule seasonal booking promos with start and end dates'
     ],
-    metric: 'High-res 1920×1080 display with zero buffering',
     tip: 'Use imagery with negative space on the left to keep client names legible.'
   },
 
@@ -163,39 +158,37 @@ export const featureInfo = {
     title: 'Studio Profile & Branding',
     badge: 'Branding Hub',
     icon: 'person-circle',
-    summary: 'Customize your studio brand mark, contact details, social links, and GST configuration.',
+    summary: 'Keep your studio name, contact details, address and GST configuration up to date.',
     highlights: [
-      'Set primary and accent brand colors shown on all client galleries',
-      'Configure studio watermarks, copyright notices, and studio email handles',
-      'Manage team shooter profiles and client communications credentials'
+      'Studio and owner details shown to clients',
+      'GSTIN, PAN and state used on your invoices',
+      'Change your account password'
     ],
-    tip: 'Add your studio Instagram handle so guests can tag you on social media.'
+    tip: 'Add your state and GSTIN before creating your first invoice.'
   },
   help: {
     title: 'Knowledge Base & Guides',
-    badge: '24/7 Guides',
+    badge: 'FAQs',
     icon: 'question-circle',
-    summary: 'Step-by-step masterclasses, video tutorials, and technical guides for every tool in Weddingz.',
+    summary: 'Searchable answers to common questions about every tool in Weddyzone.',
     highlights: [
-      'Comprehensive walkthroughs for AI face indexing and print lab formatting',
-      'Best practice tips for speeding up client photo selection by 3x',
-      'Downloadable print size cheat sheets and Lightroom export presets'
+      'Search FAQs by keyword or browse by category',
+      'Tell us whether each answer was helpful',
+      'Raise a support ticket if you cannot find an answer'
     ],
-    metric: '40+ guides and video tutorials available',
-    tip: 'Check out the "Viral Venue QR Code" guide to double your guest bookings.'
+    tip: 'Search for a feature name to jump straight to its FAQs.'
   },
   support: {
-    title: 'Dedicated Studio Support',
-    badge: '< 15m Response',
+    title: 'Studio Support',
+    badge: 'Tickets',
     icon: 'headset',
-    summary: 'Connect directly with our photography technical specialists for priority assistance.',
+    summary: 'Raise a support ticket with our team and follow the conversation in one place.',
     highlights: [
-      'Priority ticket resolution with average 12-minute response time',
-      'Dedicated WhatsApp support group for Pro and All-Access members',
-      'Live screen-share assistance for custom domain DNS setups'
+      'Set a category and priority for each ticket',
+      'Attach screenshots to explain the issue',
+      'In-app notification when the team replies'
     ],
-    metric: '99.4% customer satisfaction rating',
-    tip: 'Urgent weekend wedding issues get bumped to our priority emergency queue.'
+    tip: 'Mark urgent shoot-day issues as High priority.'
   },
 
   // Granular Feature Breakdown (for Checklists & Badges)
@@ -214,27 +207,27 @@ export const featureInfo = {
     },
     '100 GB storage': {
       title: '100 GB High-Speed Cloud',
-      description: 'Encrypted AWS cloud storage optimized for rapid thumbnail rendering and fast client browsing.'
+      description: 'Space for your uploaded event photos (JPG, PNG or WebP), shared across selections and albums.'
     },
     '500 GB storage': {
       title: '500 GB High-Speed Cloud',
-      description: 'Ample capacity to host multiple full-resolution high-bitrate wedding collections concurrently.'
+      description: 'Room for several full wedding collections at once.'
     },
     '2 TB storage': {
       title: '2 TB Ultra Cloud Storage',
-      description: 'Enterprise-grade capacity capable of storing tens of thousands of original uncompressed image files.'
+      description: 'Capacity for tens of thousands of high-resolution photos.'
     },
     '5 TB storage': {
       title: '5 TB Studio Vault',
-      description: 'Massive dedicated cloud repository preserving original high-definition RAW and TIFF archives.'
+      description: 'The largest storage tier for high-resolution JPG, PNG and WebP photos.'
     },
     'Photo selection': {
       title: 'Online Client Selection Portal',
-      description: 'Branded portal where couples select album candidates with hearting, category filters, and live sync.'
+      description: 'Private link where couples heart their favourite photos, limited to their package quota.'
     },
     'Digital albums': {
       title: 'Virtual 3D Flipbook Albums',
-      description: 'Realistic book-turn simulations allowing brides and families to preview wedding albums before printing.'
+      description: 'Online flipbooks that let couples and families preview, comment on and approve albums before printing.'
     },
     'AI face recognition (10k scans)': {
       title: '10,000 AI Face Scans / mo',
@@ -246,7 +239,7 @@ export const featureInfo = {
     },
     'Custom domain': {
       title: 'Custom Domain White-labeling',
-      description: 'Host your client portal and portfolio directly on your own domain (e.g., gallery.yourstudio.com).'
+      description: 'Coming soon: host your portfolio on your own domain (e.g. gallery.yourstudio.com).'
     },
     'Basic website': {
       title: 'Responsive Studio Website',
@@ -254,19 +247,19 @@ export const featureInfo = {
     },
     '5 team seats': {
       title: 'Multi-User Studio Access',
-      description: 'Grant separate logins for your retouchers, assistant photographers, and studio managers with role permissions.'
+      description: 'Coming soon: separate logins for your retouchers, assistant photographers and studio managers.'
     },
     'Priority support': {
       title: 'Priority Helpdesk SLA',
-      description: 'Front-of-the-line ticketing and live phone assistance to resolve issues quickly on busy shoot weekends.'
+      description: 'Coming soon: priority handling for your support tickets.'
     },
     '10,000 WhatsApp credits every year': {
       title: 'Annual WhatsApp Credit Grant',
-      description: 'Free automated messaging credits to power client reminders, album delivery links, and booking confirmations.'
+      description: 'WhatsApp credits for client reminders, album links and booking confirmations, added every year.'
     },
     'Dedicated account manager': {
       title: 'Dedicated Studio Concierge',
-      description: 'Direct phone & WhatsApp contact with a dedicated Weddingz account manager for workflow optimization.'
+      description: 'Coming soon: a dedicated Weddyzone account manager for your studio.'
     },
     'Total Events': {
       title: 'Total Active & Delivered Events',
@@ -278,7 +271,7 @@ export const featureInfo = {
     },
     'Digital Albums': {
       title: 'Published & Draft Flipbooks',
-      description: 'All 3D interactive albums created in the studio, including client reviews and finalized layouts.'
+      description: 'All flipbook albums created in the studio, including ones in client review.'
     },
     'Face Matches': {
       title: 'AI Facial Matches Delivered',

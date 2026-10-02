@@ -63,7 +63,7 @@ export function CreateAlbumModal({ open, onClose, onCreated }: { open: boolean; 
       open={open}
       onClose={close}
       title="Create Album"
-      subtitle="Choose an event, pick the photos in page order, and preview it as a 3D flipbook"
+      subtitle="Choose an event, pick the photos in page order, and preview it as a flipbook"
       icon="journal-album"
       size="xl"
       busy={create.isPending}

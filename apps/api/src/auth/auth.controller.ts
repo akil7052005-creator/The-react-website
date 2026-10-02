@@ -11,6 +11,7 @@ import type { Request, Response } from 'express'
 import type { z } from 'zod'
 import { AuthThrottle } from '../common/throttle'
 import { ApiZodBody, zod } from '../common/zod'
+import { AuditService } from '../core/audit.service'
 import { AuthService } from './auth.service'
 import { AuthUser, CurrentUser, Public } from './auth.decorators'
 import { clearAuthCookies, REFRESH_COOKIE, setAuthCookies } from './cookies'
@@ -18,7 +19,10 @@ import { clearAuthCookies, REFRESH_COOKIE, setAuthCookies } from './cookies'
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly audit: AuditService,
+  ) {}
 
   @Public()
   @AuthThrottle()
@@ -26,7 +30,7 @@ export class AuthController {
   @ApiZodBody(signupSchema)
   async signup(@Body(zod(signupSchema)) body: z.output<typeof signupSchema>, @Res({ passthrough: true }) res: Response) {
     const { user, tokens } = await this.auth.signup(body)
-    setAuthCookies(res, tokens.access, tokens.refresh)
+    setAuthCookies(res, tokens)
     return this.auth.me(user.id)
   }
 
@@ -35,9 +39,10 @@ export class AuthController {
   @Post('login')
   @HttpCode(200)
   @ApiZodBody(loginSchema)
-  async login(@Body(zod(loginSchema)) body: z.output<typeof loginSchema>, @Res({ passthrough: true }) res: Response) {
+  async login(@Body(zod(loginSchema)) body: z.output<typeof loginSchema>, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const { user, tokens } = await this.auth.login(body)
-    setAuthCookies(res, tokens.access, tokens.refresh)
+    setAuthCookies(res, tokens)
+    if (user.role === 'SUPER_ADMIN') await this.audit.record(user.id, req, { action: 'auth.login', summary: `Admin signed in (${user.email})` })
     return this.auth.me(user.id)
   }
 
@@ -47,7 +52,7 @@ export class AuthController {
   async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     try {
       const tokens = await this.auth.refresh(req.cookies?.[REFRESH_COOKIE])
-      setAuthCookies(res, tokens.access, tokens.refresh)
+      setAuthCookies(res, tokens)
       return { ok: true }
     } catch (e) {
       clearAuthCookies(res)

@@ -39,6 +39,8 @@ export function configureApp(app: INestApplication) {
     next()
   })
 
+  // Interactive API docs are for development only; production doesn't publish the API's map.
+  if (c.NODE_ENV === 'production') return
   const doc = new DocumentBuilder()
     .setTitle('Weddyzone Studio API')
     .setDescription(

@@ -382,31 +382,86 @@
 }
 .auth-panel {
   position: relative;
+  isolation: isolate;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 40px 48px;
+  gap: 32px;
+  padding: 40px 48px 32px;
   color: #fff;
-  background: radial-gradient(120% 90% at 10% 10%, var(--wine-700), var(--wine-900));
+  background: var(--wine-900);
 }
-.auth-panel img {
+/* The photo fills the panel. It is 504×504, so on large screens it is upscaled: the vignette and
+   the soft blur at the edges below hide that softness instead of sharpening it. */
+.auth-photo,
+.auth-photo img {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
+}
+.auth-photo {
+  z-index: -2;
+  overflow: hidden;
+}
+.auth-photo img {
   object-fit: cover;
-  opacity: 0.28;
-  mix-blend-mode: screen;
+  object-position: center 40%;
+  transform-origin: center 40%;
+  animation: auth-photo-zoom 20s ease-in-out infinite alternate;
 }
-.auth-panel > * {
-  position: relative;
+.auth-photo::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  -webkit-mask-image: radial-gradient(ellipse 75% 70% at 50% 40%, transparent 55%, #000 100%);
+  mask-image: radial-gradient(ellipse 75% 70% at 50% 40%, transparent 55%, #000 100%);
 }
+@keyframes auth-photo-zoom {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.06);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-photo img {
+    animation: none;
+  }
+}
+/* Readability: a light shade behind the logo, a vignette, and the brand maroon rising from the
+   bottom-left behind the headline, features and footer. */
+.auth-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(to bottom, rgba(46, 10, 25, 0.45) 0%, rgba(46, 10, 25, 0) 22%),
+    linear-gradient(200deg, rgba(74, 14, 34, 0) 30%, rgba(74, 14, 34, 0.55) 52%, rgba(74, 14, 34, 0.85) 72%),
+    radial-gradient(ellipse 80% 75% at 50% 40%, transparent 55%, rgba(30, 6, 16, 0.55) 100%);
+}
+/* The logo sits on the light top of the photo, so it gets its own frosted maroon pill (WCAG AA). */
 .auth-panel .brand {
+  align-self: flex-start;
+  padding: 8px 16px 8px 8px;
+  border: 1px solid rgba(226, 196, 124, 0.45);
+  border-radius: 16px;
   color: #fff;
+  background: rgba(46, 10, 25, 0.78);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 .auth-panel .brand-sub {
   color: var(--gold-light);
+}
+.auth-panel-copy {
+  max-width: 500px;
+  text-shadow: 0 1px 10px rgba(30, 6, 16, 0.55);
 }
 .auth-panel h2 {
   font-family: var(--font-display);
@@ -421,10 +476,29 @@
 .auth-panel p {
   margin-top: 12px;
   max-width: 440px;
-  color: rgba(255, 255, 255, 0.82);
+  color: rgba(255, 255, 255, 0.92);
 }
-.auth-panel .checklist li {
-  color: rgba(255, 255, 255, 0.88);
+/* Feature points in a frosted-glass card. */
+.auth-features {
+  margin-top: 20px;
+  padding: 16px 18px;
+  border: 1px solid rgba(226, 196, 124, 0.55);
+  border-radius: 16px;
+  background: rgba(46, 10, 25, 0.38);
+  backdrop-filter: blur(12px) saturate(1.15);
+  -webkit-backdrop-filter: blur(12px) saturate(1.15);
+  text-shadow: none;
+}
+.auth-panel .auth-features li {
+  color: #fff;
+}
+.auth-panel .auth-features li .bi {
+  color: var(--gold-light);
+}
+.auth-panel .auth-panel-foot {
+  margin-top: 22px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.85);
 }
 .auth-main {
   display: grid;
@@ -500,16 +574,28 @@
   color: var(--danger);
 }
 
-@media (max-width: 900px) {
+/* Phones: the photo panel becomes a 180px banner (photo, gradient and logo) above the form. */
+@media (max-width: 767px) {
   .auth-shell {
     grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
   }
   .auth-panel {
-    padding: 28px 22px;
-    min-height: 220px;
+    height: 180px;
+    padding: 18px 20px;
+    justify-content: flex-start;
   }
-  .auth-panel .checklist {
+  .auth-panel::before {
+    background:
+      linear-gradient(to bottom, rgba(46, 10, 25, 0.5) 0%, rgba(46, 10, 25, 0) 45%),
+      linear-gradient(200deg, rgba(74, 14, 34, 0) 35%, rgba(74, 14, 34, 0.85) 100%);
+  }
+  .auth-panel-copy {
     display: none;
+  }
+  .auth-main {
+    padding: 20px 16px 32px;
+    place-items: start center;
   }
 }
 
@@ -528,5 +614,129 @@
   }
   .list-toolbar .search {
     max-width: none;
+  }
+}
+
+/* "Coming soon" plan features: muted row with a tag instead of a check mark. */
+.coming-soon-tag {
+  margin-left: 8px;
+  font-size: 11px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+.coming-soon-tag::before {
+  display: none;
+}
+.is-coming-soon > span:not(.coming-soon-tag) {
+  opacity: 0.75;
+}
+.is-coming-soon > .bi-clock {
+  color: var(--warning);
+}
+
+/* Refer & Earn: makes clear the wallet can't be spent yet. */
+.wallet-note {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  font-size: 13px;
+  opacity: 0.85;
+}
+
+/* ---------- Platform admin area (/admin) ---------- */
+.admin-topbar {
+  gap: 12px;
+}
+.admin-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+}
+.admin-badge::before {
+  display: none;
+}
+.admin-session-note {
+  font-size: 13px;
+}
+.admin-who p {
+  display: grid;
+  gap: 2px;
+  padding: 0 12px 8px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.85);
+}
+.admin-who p span {
+  color: rgba(255, 255, 255, 0.72);
+  overflow-wrap: anywhere;
+}
+.admin-inline-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+}
+.admin-inline-field select {
+  width: auto;
+}
+.row-clickable {
+  cursor: pointer;
+}
+.row-clickable:hover td {
+  background: var(--surface-2);
+}
+.row-danger {
+  color: var(--danger) !important;
+}
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.check-row input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--wine-700);
+}
+.check-row.full,
+.admin-coming-soon {
+  grid-column: 1 / -1;
+}
+.admin-coming-soon {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.admin-coming-soon legend {
+  padding: 0 6px;
+  font-weight: 700;
+}
+.admin-plan-title {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.admin-plan-price {
+  margin-bottom: 12px;
+  font-size: 15px;
+}
+.admin-plan-limits {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 16px;
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+  font-size: 13.5px;
+  color: var(--text-2);
+}
+@media (max-width: 767px) {
+  .admin-session-note {
+    display: none;
   }
 }

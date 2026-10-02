@@ -63,7 +63,7 @@ describe('Profile form', () => {
   it('validates phone and PIN code', async () => {
     mockFetch({ body: studio })
     renderPage(<MyProfile />, '/profile')
-    const phone = form().getByLabelText(/^Phone/)
+    const phone = form().getByLabelText(/^Mobile number/)
     await userEvent.clear(phone)
     await userEvent.type(phone, '12345')
     await userEvent.tab()

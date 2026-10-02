@@ -12,33 +12,25 @@ const referralFeatures: FeatureBarItem[] = [
     title: 'Dual ₹1,500 Benefit',
     badge: 'Win-Win',
     icon: 'gift',
-    summary: 'Both you and your referred photography studio receive ₹1,500 instantly in your respective wallets.',
-    highlights: ['Friends get ₹1,500 off at checkout', 'You receive ₹1,500 cash in wallet upon activation', 'Works with all monthly & yearly tiers'],
+    summary: 'When a studio you refer upgrades to its first paid plan, you each receive ₹1,500 in your wallets.',
+    highlights: ['Your friend signs up with your referral code or link', 'Both wallets are credited on their first paid upgrade', 'Works with all monthly & yearly tiers'],
     tip: 'Share your code with fellow second shooters and studio owners.',
   },
   {
     title: 'Zero Referral Limits',
     badge: 'Unlimited',
     icon: 'infinity',
-    summary: 'There is no upper ceiling on how much you can earn through the Weddingz partner program.',
-    highlights: ['Earn ₹15,000 by inviting 10 studios', 'Covers your entire annual All-Access subscription', 'Real-time referral progress tracking'],
-    tip: 'Many studios run Weddingz 100% free purely through referral credits.',
-  },
-  {
-    title: 'Direct Wallet Redemption',
-    badge: 'Real Money',
-    icon: 'wallet2',
-    summary: 'Wallet funds can be used immediately to pay for renewals, buy WhatsApp credits, or add team seats.',
-    highlights: ['1 wallet credit = ₹1 Indian Rupee', 'Applies automatically at renewal checkout', 'Zero expiry date on earned rewards'],
-    tip: 'Use your wallet balance to buy WhatsApp credit packs.',
+    summary: 'There is no upper ceiling on how much you can earn through the Weddyzone partner program.',
+    highlights: ['Earn ₹15,000 in wallet credit when 10 referred studios upgrade', 'Real-time referral status tracking'],
+    tip: 'Post your referral link alongside your latest wedding gallery on Instagram.',
   },
   {
     title: 'One-Click WhatsApp Sharing',
     badge: 'Easy Share',
     icon: 'whatsapp',
     summary: 'Pre-formatted invitation message ready to send into your city photographer WhatsApp groups.',
-    highlights: ['Includes your unique referral link', 'Explains the ₹1,500 discount for your friend', 'Automatic tracking when friends sign up'],
-    tip: 'Post your referral link alongside your latest wedding gallery on Instagram.',
+    highlights: ['Includes your unique referral link', 'Free: no WhatsApp credits used', 'Automatic tracking when friends sign up'],
+    tip: 'Share it in your regional wedding photographer groups.',
   },
 ]
 
@@ -69,9 +61,9 @@ function ReferAndEarn() {
     <div className="stack">
       <PageHeader
         eyebrow="Wallet & Partner Program"
-        featureBadge="₹1,500 Cash Reward per Studio"
-        title="Refer Studios & Earn Cash"
-        subtitle="Invite fellow wedding photographers. You both get ₹1,500 in wallet credit when they activate their studio account."
+        featureBadge="₹1,500 Wallet Reward per Studio"
+        title="Refer Studios & Earn Wallet Credit"
+        subtitle="Invite fellow wedding photographers. You both get ₹1,500 in wallet credit when they upgrade to their first paid plan."
       />
 
       {/* Feature Capabilities Ribbon */}
@@ -89,9 +81,12 @@ function ReferAndEarn() {
                 <i className="bi bi-gift-fill" /> Partner Referral Code
               </p>
               <h2>
-                Share the love, <em>earn ₹1,500</em> per studio.
+                Share the love, <em>earn ₹1,500 credit</em> per studio.
               </h2>
-              <p>Give your photographer friends ₹1,500 discount on their plan, and get ₹1,500 credited to your studio wallet.</p>
+              <p>When a photographer friend joins with your code and upgrades to a paid plan, you each get ₹1,500 credited to your studio wallets.</p>
+              <p className="wallet-note">
+                <i className="bi bi-info-circle" /> Wallet credit can't be spent yet. Using it for plan renewals and WhatsApp packs is coming soon.
+              </p>
               <div className="code-box code-box-catchy">
                 <code data-testid="referral-code">{d ? d.code : '········'}</code>
                 <FeatureTooltip title="Copy Referral Code" summary="Click to copy your unique referral promo code to clipboard." position="top" width={200}>
@@ -119,10 +114,10 @@ function ReferAndEarn() {
                 tone="gold"
                 tooltip={{
                   title: 'Current Wallet Balance',
-                  badge: d ? `${formatMoney(d.walletBalancePaise)} Available` : undefined,
+                  badge: d ? `${formatMoney(d.walletBalancePaise)} in wallet` : undefined,
                   icon: 'wallet2',
-                  summary: 'Funds available to be applied towards your next subscription renewal or WhatsApp packs.',
-                  highlights: ['Redeemable on all plans', 'Never expires'],
+                  summary: 'Referral rewards credited to your studio wallet. Spending wallet credit on renewals and WhatsApp packs is coming soon.',
+                  highlights: ['Spending wallet credit is coming soon', 'Credit never expires'],
                 }}
               />
               <StatCard
@@ -134,14 +129,14 @@ function ReferAndEarn() {
                   title: 'Lifetime Referral Earnings',
                   badge: d ? `${formatMoney(d.totalEarnedPaise)} Earned` : undefined,
                   icon: 'gift',
-                  summary: `Total cash rewards earned by your studio${d ? ` from ${d.referrals.filter((r) => r.status === 'REWARDED').length} activated referral(s)` : ''}.`,
-                  highlights: ['₹1,500 per successful studio onboarding', 'No cap on total earnings'],
+                  summary: `Total wallet credit earned by your studio${d ? ` from ${d.referrals.filter((r) => r.status === 'REWARDED').length} upgraded referral(s)` : ''}.`,
+                  highlights: ['₹1,500 for each referred studio that upgrades', 'No cap on total credit earned'],
                 }}
               />
             </div>
           </div>
 
-          <Card title="Your Referred Studios" subtitle="Point cursor at reward or status to view payout milestones" feature={featureInfo.referAndEarn} flush>
+          <Card title="Your Referred Studios" subtitle="Point cursor at reward or status to see when credit is added" feature={featureInfo.referAndEarn} flush>
             {q.isPending ? (
               <TableSkeleton rows={4} cols={4} />
             ) : d!.referrals.length === 0 ? (
@@ -163,7 +158,7 @@ function ReferAndEarn() {
                       <th>Referred Studio Name</th>
                       <th>Joined Date</th>
                       <th className="num">Reward Amount</th>
-                      <th>Payout Status</th>
+                      <th>Reward Status</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -176,11 +171,11 @@ function ReferAndEarn() {
                         </td>
                         <td>
                           <FeatureTooltip
-                            title={r.status === 'REWARDED' ? 'Reward paid' : 'Waiting for their first upgrade'}
+                            title={r.status === 'REWARDED' ? 'Reward credited' : 'Waiting for their first upgrade'}
                             summary={
                               r.status === 'REWARDED'
-                                ? `₹1,500 was added to your wallet on ${formatDate(r.rewardedAt)}.`
-                                : 'You both get ₹1,500 as soon as this studio pays for its first plan.'
+                                ? `₹1,500 credit was added to your wallet on ${formatDate(r.rewardedAt)}.`
+                                : 'You both get ₹1,500 wallet credit as soon as this studio pays for its first plan.'
                             }
                             position="top"
                             width={240}

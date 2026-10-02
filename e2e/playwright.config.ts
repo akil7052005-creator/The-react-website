@@ -34,6 +34,7 @@ export default defineConfig({
         PORT: '4100',
         DATABASE_URL: E2E_DB,
         UPLOAD_DIR: './e2e-uploads',
+        MAIL_OUTBOX_DIR: './e2e-mail',
         APP_URL: 'http://localhost:5174',
         CORS_ORIGINS: 'http://localhost:5174',
         RATE_LIMIT_AUTH_PER_MIN: '1000',

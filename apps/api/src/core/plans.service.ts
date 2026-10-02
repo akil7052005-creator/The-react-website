@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common'
 import type { Plan, Subscription } from '@prisma/client'
-import type { PlanDto, PlanLimits, SubscriptionDto } from '@weddyzone/shared'
+import type { AdminPlanDto, PlanDto, PlanLimits, SubscriptionDto } from '@weddyzone/shared'
 import { notFound } from '../common/errors'
 import { PrismaService, type Tx } from '../prisma/prisma.service'
 
@@ -29,8 +29,18 @@ export class PlansService {
       yearlyPricePaise: plan.yearlyPrice,
       limits: this.limits(plan),
       features: plan.features as string[],
+      comingSoon: plan.comingSoon as string[],
       popular: plan.popular,
     }
+  }
+
+  toAdminDto(plan: Plan): AdminPlanDto {
+    return { ...this.toDto(plan), isActive: plan.isActive }
+  }
+
+  /** Every plan, hidden ones included (platform admins). */
+  async listAll(): Promise<Plan[]> {
+    return this.prisma.plan.findMany({ orderBy: { sortOrder: 'asc' } })
   }
 
   async list(): Promise<Plan[]> {

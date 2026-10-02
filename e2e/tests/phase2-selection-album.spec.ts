@@ -154,7 +154,7 @@ test('album: create from picks, share for review, client feedback and approval',
   await page.reload()
   await expect(page.getByRole('dialog', { name: /flipbook/ })).toBeVisible()
   await page.getByRole('button', { name: 'Close flipbook' }).click()
-  const card = page.getByRole('button', { name: new RegExp(`Open 3D Flipbook for ${couple}`) }).first()
+  const card = page.getByRole('button', { name: new RegExp(`Open Flipbook for ${couple}`) }).first()
   await expect(card).toContainText('1 note')
   await card.click()
   await page.getByRole('button', { name: 'Mark resolved' }).click()

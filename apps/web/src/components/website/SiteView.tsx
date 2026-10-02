@@ -2,7 +2,7 @@ import { leadSchema, type PublicWebsiteDto, type WebsiteSectionDto } from '@wedd
 import { useMutation } from '@tanstack/react-query'
 import { useState, type CSSProperties } from 'react'
 import { toast } from 'sonner'
-import poster from '../../assets/wedding-poster-horizontal.png'
+import poster from '../../assets/wedding-photo.jpg'
 import { api } from '../../lib/api'
 import { fileUrl } from '../../lib/env'
 import { applyApiErrors, SubmitButton, TextAreaField, TextField, useZodForm } from '../form/form'

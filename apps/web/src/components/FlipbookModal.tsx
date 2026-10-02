@@ -95,7 +95,7 @@ export function FlipbookModal({
       {/* Top bar controls */}
       <header className="flipbook-header">
         <div className="flipbook-title-group">
-          <span className="flipbook-badge">3D Virtual Flipbook</span>
+          <span className="flipbook-badge">Virtual Flipbook</span>
           <h2>
             {title}
             {total > 0 && ` — Spread ${idx + 1}`}
@@ -148,7 +148,7 @@ export function FlipbookModal({
         </div>
       </header>
 
-      {/* 3D Realistic Open Album Surface */}
+      {/* Open album surface */}
       <div className={`flipbook-stage ${isZoomed ? 'zoomed' : ''}`}>
         <div className="album-spine-shadow" />
         {loading ? (

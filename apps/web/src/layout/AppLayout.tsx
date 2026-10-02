@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import Topbar from '../components/Topbar'
 import { GlobalDialogs } from '../components/GlobalDialogs'
+import { PageSkeleton } from '../components/ui'
 
 function AppLayout() {
   // Controls the slide-in sidebar on phones/tablets.
@@ -15,7 +16,9 @@ function AppLayout() {
       <div className="main">
         <Topbar onMenu={() => setNavOpen(true)} />
         <main className="content">
-          <Outlet />
+          <Suspense fallback={<PageSkeleton />}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
       <GlobalDialogs />

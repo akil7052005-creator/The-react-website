@@ -4,16 +4,22 @@ import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { applyApiErrors, SubmitButton, TextField, useZodForm } from '../../components/form/form'
-import { api } from '../../lib/api'
+import { api, isApiError } from '../../lib/api'
 import { AuthLayout, PasswordField } from './AuthLayout'
 
 export function ForgotPassword() {
   const [sentTo, setSentTo] = useState<string | null>(null)
+  // Shown on the page (not just a toast) so a failed send is impossible to miss.
+  const [failure, setFailure] = useState<string | null>(null)
   const form = useZodForm(forgotPasswordSchema, { defaultValues: { email: '' } })
   const send = useMutation({
     mutationFn: (body: { email: string }) => api.post('/auth/forgot-password', body),
+    onMutate: () => setFailure(null),
     onSuccess: (_d, v) => setSentTo(v.email),
-    onError: (e) => applyApiErrors(form, e),
+    onError: (e) => {
+      if (applyApiErrors(form, e, { toast: false })) return
+      setFailure(isApiError(e) ? e.message : 'Something went wrong. Please try again.')
+    },
   })
 
   return (
@@ -35,6 +41,12 @@ export function ForgotPassword() {
         </div>
       ) : (
         <form method="post" onSubmit={form.handleSubmit((v) => send.mutate(v))} noValidate>
+          {failure && (
+            <div className="notice danger" role="alert" style={{ marginBottom: 16 }}>
+              <i className="bi bi-exclamation-triangle" />
+              <span>{failure}</span>
+            </div>
+          )}
           <TextField form={form} name="email" label="Email" type="email" required autoComplete="email" />
           <SubmitButton busy={send.isPending} className="btn btn-primary btn-block btn-lg" icon="send">
             Send reset link

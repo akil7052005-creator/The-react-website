@@ -39,32 +39,32 @@ const selectionFeatures: FeatureBarItem[] = [
     title: 'Smart Quota Lock',
     badge: 'Auto Limits',
     icon: 'lock',
-    summary: 'Prevents couples from picking more photos than their package includes without an upgrade.',
-    highlights: ['Automatic counter shows remaining picks', 'Option for clients to purchase additional picks', 'Zero studio manual counting needed'],
-    tip: 'Couples choose an average of 42 additional paid photos when quota warnings appear.'
+    summary: 'Prevents couples from picking more photos than their package includes.',
+    highlights: ['Counter shows remaining picks', 'Picks beyond the quota are blocked', 'Zero studio manual counting needed'],
+    tip: "Set the quota to match the number of photos in the couple's package."
   },
   {
-    title: 'Lightroom XML Sync',
-    badge: 'Instant Culling',
+    title: 'Lightroom Filename Export',
+    badge: 'Faster Culling',
     icon: 'file-earmark-code',
-    summary: 'Export selected filenames directly as a filter list or XML file into Adobe Lightroom Classic or Photoshop.',
-    highlights: ['Zero manual file searching in Finder/Explorer', 'Compatible with Capture One and Photo Mechanic', 'Instant rating star synchronization'],
-    tip: 'Save up to 4 hours per wedding by auto-filtering your 5,000 RAW shots in Lightroom.'
+    summary: 'Download picked filenames as a TXT list for a Lightroom "Filename contains" filter, or as a CSV with who picked each photo and their comments.',
+    highlights: ['Zero manual file searching in Finder/Explorer', 'Works with any tool that filters by filename', 'CSV includes picks and comments per photo'],
+    tip: 'Paste the TXT list into a Lightroom Library filter to find every picked RAW at once.'
   },
   {
     title: 'WhatsApp Nudges',
     badge: '1-Click Remind',
     icon: 'whatsapp',
     summary: 'Send a personalized WhatsApp message with the private gallery link to nudge couples before their deadline.',
-    highlights: ['Personalized with bride & groom names', 'Includes selection count progress', 'Direct access without passwords'],
-    tip: 'Reminders sent on Sunday evenings yield 3x faster turnaround.'
+    highlights: ["Personalized with the client's name", 'Includes selection count progress', 'Direct access without passwords'],
+    tip: 'Send a reminder a few days before the selection deadline.'
   },
   {
     title: 'Family Multi-Hearting',
     badge: 'Collaborative',
     icon: 'heart-half',
-    summary: 'Allow both bride and groom to create independent favorite lists before consolidating.',
-    highlights: ['Filter by Bride picks vs Groom picks', 'Color-coded tags for ceremony, portraits, haldi', 'Shared summary view for final approval'],
+    summary: 'Several family members can pick photos under their own name from the same link.',
+    highlights: ['See who picked each photo', 'One shared quota for the whole family', 'Comments on individual photos'],
     tip: 'Reduces wedding family disagreements over album selections.'
   }
 ]
@@ -154,7 +154,7 @@ function PhotoSelection() {
         eyebrow="Services"
         featureBadge="AI Culling & Proofing"
         title="Photo Selection Portal"
-        subtitle="Share private branded galleries where couples heart and select their favorite shots. Selections sync live with your editing catalog."
+        subtitle="Share private branded galleries where couples heart and select their favorite shots. Export the picks as a filename list for your editing catalog."
         actions={
           <>
             <FeatureTooltip
@@ -214,7 +214,7 @@ function PhotoSelection() {
             icon: 'check2-circle',
             summary: 'Couples have locked their selections and submitted them for album design.',
             highlights: ['Ready for 1-click Lightroom XML export', 'Client receives confirmation notification'],
-            tip: 'Move completed selections straight into 3D Digital Album layout.',
+            tip: 'Move completed selections straight into a Digital Album.',
           }}
         />
         <StatCard

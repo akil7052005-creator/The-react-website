@@ -70,7 +70,7 @@ export class FilesService {
     db: Tx | PrismaService = this.prisma,
   ): Promise<StoredFile> {
     const { type, checksum } = await this.validate(studioId, kind, file, field)
-    const key = await this.storage.save(file!.buffer, type.ext)
+    const key = await this.storage.save(file!.buffer, type.ext, type.mime)
     return db.storedFile.create({
       data: {
         studioId,
@@ -89,14 +89,18 @@ export class FilesService {
   }
 
   /** Streams a stored file. Callers must have checked access first. */
-  send(res: Response, file: StoredFile, opts: { cache?: 'private' | 'public'; download?: boolean } = {}) {
-    if (file.deletedAt || !this.storage.exists(file.storageKey)) throw notFound('File')
+  async send(res: Response, file: StoredFile, opts: { cache?: 'private' | 'public'; download?: boolean } = {}) {
+    if (file.deletedAt) throw notFound('File')
+    const stream = await this.storage.open(file.storageKey)
+    if (!stream) throw notFound('File')
     res.setHeader('Content-Type', file.mimeType)
     res.setHeader('Content-Length', String(file.size))
     res.setHeader('X-Content-Type-Options', 'nosniff')
     res.setHeader('Cache-Control', `${opts.cache ?? 'private'}, max-age=86400`)
     const safeName = file.originalName.replace(/[^\w.\- ]/g, '_')
     res.setHeader('Content-Disposition', `${opts.download ? 'attachment' : 'inline'}; filename="${safeName}"`)
-    this.storage.open(file.storageKey).pipe(res)
+    // Headers are already sent if the storage stream fails midway; just end the response.
+    stream.on('error', () => res.destroy())
+    stream.pipe(res)
   }
 }

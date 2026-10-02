@@ -10,7 +10,7 @@ export { FeatureTooltip, FeatureInfoBadge }
 export type { FeatureInfo }
 
 const statusExplanations: Record<string, { title: string; summary: string }> = {
-  'Upcoming': { title: 'Upcoming Event', summary: 'Booking confirmed on the calendar. Crew and shot lists are scheduled.' },
+  'Upcoming': { title: 'Upcoming Event', summary: 'Booking confirmed and the event date is coming up.' },
   'In Progress': { title: 'In Progress', summary: 'Shooting, culling, or editing actively underway by the studio team.' },
   'Awaiting Selection': { title: 'Awaiting Selection', summary: 'Gallery link has been sent to client; waiting for couple to pick favorites.' },
   'Completed': { title: 'Completed Selection', summary: 'Client has locked their favorite picks. Ready for Lightroom/album layout.' },
@@ -127,7 +127,7 @@ export function StatCard({
             <i className="bi bi-info-circle" />
           </span>
         </div>
-        <p className="stat-value">{value}</p>
+        <div className="stat-value">{value}</div>
         {trend !== undefined && (
           <p className={`stat-trend ${trend >= 0 ? 'up' : 'down'}`}>
             <i className={`bi bi-arrow-${trend >= 0 ? 'up' : 'down'}-right`} />
@@ -212,6 +212,11 @@ export function EmptyState({ icon, title, text, action }: { icon: string; title:
       {action}
     </div>
   )
+}
+
+/** Marks a promised feature that is not available yet (instead of a check mark). */
+export function ComingSoonTag() {
+  return <span className="pill pill-warning coming-soon-tag">Coming soon</span>
 }
 
 /** Error state with a Retry button, in the EmptyState style. */

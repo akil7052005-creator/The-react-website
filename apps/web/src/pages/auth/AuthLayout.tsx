@@ -1,14 +1,26 @@
 import { useState, type ReactNode } from 'react'
 import type { FieldPath, FieldValues, UseFormReturn } from 'react-hook-form'
 import { Link } from 'react-router-dom'
-import poster from '../../assets/wedding-poster-horizontal.png'
+import heroJpg from '../../assets/login-hero.jpg'
+import heroWebp from '../../assets/login-hero.webp'
 import { FieldShell } from '../../components/form/form'
 
 export function AuthLayout({ title, subtitle, children, footer }: { title: string; subtitle: ReactNode; children: ReactNode; footer?: ReactNode }) {
   return (
     <div className="auth-shell">
+      {/* Photo panel on the left; on phones the same panel becomes a 180px banner above the form. */}
       <aside className="auth-panel">
-        <img src={poster} alt="" aria-hidden="true" />
+        <picture className="auth-photo">
+          <source srcSet={heroWebp} type="image/webp" />
+          <img
+            src={heroJpg}
+            alt="Bride and groom holding hands with a rose garland"
+            width={504}
+            height={504}
+            loading="eager"
+            fetchPriority="high"
+          />
+        </picture>
         <Link to="/" className="brand">
           <span className="brand-mark">W</span>
           <div className="brand-info">
@@ -16,26 +28,24 @@ export function AuthLayout({ title, subtitle, children, footer }: { title: strin
             <span className="brand-sub">Studio OS</span>
           </div>
         </Link>
-        <div>
+        <div className="auth-panel-copy">
           <h2>
             Every wedding, <em>beautifully</em> organised.
           </h2>
           <p>Client selections, flipbook albums, GST invoices and your portfolio website — in one studio workspace.</p>
-          <ul className="checklist" style={{ marginTop: 18 }}>
+          <ul className="checklist auth-features">
             <li>
               <i className="bi bi-check-circle-fill" /> Private selection links with quota lock
             </li>
             <li>
-              <i className="bi bi-check-circle-fill" /> 3D flipbook albums with client feedback
+              <i className="bi bi-check-circle-fill" /> Flipbook albums with client feedback
             </li>
             <li>
               <i className="bi bi-check-circle-fill" /> GST-ready invoices with CGST/SGST/IGST
             </li>
           </ul>
+          <p className="auth-panel-foot">© {new Date().getFullYear()} Weddyzone Studio</p>
         </div>
-        <p className="muted" style={{ color: 'rgba(255,255,255,0.6)' }}>
-          © {new Date().getFullYear()} Weddyzone Studio
-        </p>
       </aside>
       <main className="auth-main">
         <section className="card auth-card">

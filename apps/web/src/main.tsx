@@ -1,7 +1,7 @@
-import { StrictMode } from 'react'
+import { lazy, StrictMode, Suspense, type ComponentType } from 'react'
 import { createRoot } from 'react-dom/client'
 import { QueryClientProvider } from '@tanstack/react-query'
-import { createBrowserRouter, Outlet, RouterProvider, type RouteObject } from 'react-router-dom'
+import { createBrowserRouter, Navigate, Outlet, RouterProvider, type RouteObject } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import './index.css'
 import './additions.css'
@@ -10,39 +10,52 @@ import './styles/billing.css'
 import './styles/business.css'
 import { queryClient } from './lib/query'
 import { features } from './lib/env'
-import { RedirectIfAuthed, RequireAuth } from './auth/AuthProvider'
+import { RedirectIfAuthed, RequireAdmin, RequireAuth } from './auth/AuthProvider'
 import { ConfirmProvider } from './components/Modal'
+import { PageSkeleton } from './components/ui'
 import AppLayout from './layout/AppLayout'
-import Login from './pages/auth/Login'
-import Signup from './pages/auth/Signup'
-import { ForgotPassword, ResetPassword } from './pages/auth/Passwords'
-import Dashboard from './pages/Dashboard'
-import PhotoSelection from './pages/PhotoSelection'
-import DigitalAlbum from './pages/DigitalAlbum'
-import FaceRecognition from './pages/FaceRecognition'
-import AllSubscription from './pages/AllSubscription'
-import MySubscription from './pages/MySubscription'
-import AllAccess from './pages/AllAccess'
-import ReferAndEarn from './pages/ReferAndEarn'
-import WhatsAppCredit from './pages/WhatsAppCredit'
-import Billing from './pages/Billing'
-import MyWebsite from './pages/MyWebsite'
-import GalleryBanner from './pages/GalleryBanner'
-import MyProfile from './pages/MyProfile'
-import HelpCenter from './pages/HelpCenter'
-import SupportTickets from './pages/SupportTickets'
-import Logout from './pages/Logout'
-import NotFound from './pages/NotFound'
-import PublicSelection from './pages/public/PublicSelection'
-import PublicAlbum from './pages/public/PublicAlbum'
-import InvoicePrint from './pages/InvoicePrint'
-import PublicSite from './pages/public/PublicSite'
+import AdminLayout from './layout/AdminLayout'
+import RouteError from './pages/RouteError'
+
+// Each page is its own chunk, downloaded the first time it is opened. The layouts show a
+// skeleton (<Suspense> in Root and AppLayout) while a page's code loads.
+const page = <T extends { default: ComponentType }>(load: () => Promise<T>) => lazy(load)
+const Login = page(() => import('./pages/auth/Login'))
+const Signup = page(() => import('./pages/auth/Signup'))
+const ForgotPassword = page(() => import('./pages/auth/Passwords').then((m) => ({ default: m.ForgotPassword })))
+const ResetPassword = page(() => import('./pages/auth/Passwords').then((m) => ({ default: m.ResetPassword })))
+const Dashboard = page(() => import('./pages/Dashboard'))
+const PhotoSelection = page(() => import('./pages/PhotoSelection'))
+const DigitalAlbum = page(() => import('./pages/DigitalAlbum'))
+const FaceRecognition = page(() => import('./pages/FaceRecognition'))
+const AllSubscription = page(() => import('./pages/AllSubscription'))
+const MySubscription = page(() => import('./pages/MySubscription'))
+const AllAccess = page(() => import('./pages/AllAccess'))
+const ReferAndEarn = page(() => import('./pages/ReferAndEarn'))
+const WhatsAppCredit = page(() => import('./pages/WhatsAppCredit'))
+const Billing = page(() => import('./pages/Billing'))
+const MyWebsite = page(() => import('./pages/MyWebsite'))
+const GalleryBanner = page(() => import('./pages/GalleryBanner'))
+const MyProfile = page(() => import('./pages/MyProfile'))
+const HelpCenter = page(() => import('./pages/HelpCenter'))
+const SupportTickets = page(() => import('./pages/SupportTickets'))
+const Logout = page(() => import('./pages/Logout'))
+const NotFound = page(() => import('./pages/NotFound'))
+const PublicSelection = page(() => import('./pages/public/PublicSelection'))
+const PublicAlbum = page(() => import('./pages/public/PublicAlbum'))
+const InvoicePrint = page(() => import('./pages/InvoicePrint'))
+const PublicSite = page(() => import('./pages/public/PublicSite'))
+const AdminTickets = page(() => import('./pages/admin/AdminTickets'))
+const AdminFaqs = page(() => import('./pages/admin/AdminFaqs'))
+const AdminPlans = page(() => import('./pages/admin/AdminPlans'))
 
 // Root element: things every route needs (confirm dialogs use the router for "leave page?" prompts).
 function Root() {
   return (
     <ConfirmProvider>
-      <Outlet />
+      <Suspense fallback={<PageSkeleton />}>
+        <Outlet />
+      </Suspense>
     </ConfirmProvider>
   )
 }
@@ -71,9 +84,12 @@ const studioRoutes: RouteObject[] = [
 const router = createBrowserRouter([
   {
     element: <Root />,
+    // Friendly crash screen; React Router's default one shows the stack trace even in production.
+    errorElement: <RouteError />,
     children: [
-      { path: '/login', element: <RedirectIfAuthed><Login /></RedirectIfAuthed> },
-      { path: '/signup', element: <RedirectIfAuthed to="/profile"><Signup /></RedirectIfAuthed> },
+      // Login handles an existing session itself (shows who is logged in, offers to switch account).
+      { path: '/login', element: <Login /> },
+      { path: '/signup', element: <RedirectIfAuthed><Signup /></RedirectIfAuthed> },
       { path: '/forgot-password', element: <ForgotPassword /> },
       { path: '/reset-password', element: <ResetPassword /> },
       // Client-facing pages: no login, access by unguessable token.
@@ -87,6 +103,23 @@ const router = createBrowserRouter([
             <InvoicePrint />
           </RequireAuth>
         ),
+      },
+      // Platform admin area: SUPER_ADMIN only (checked here and again by the API on every request).
+      {
+        path: '/admin',
+        element: (
+          <RequireAdmin>
+            <AdminLayout />
+          </RequireAdmin>
+        ),
+        children: [
+          { index: true, element: <Navigate to="/admin/tickets" replace /> },
+          { path: 'tickets', element: <AdminTickets /> },
+          { path: 'help', element: <AdminFaqs /> },
+          { path: 'plans', element: <AdminPlans /> },
+          { path: 'logout', element: <Logout /> },
+          { path: '*', element: <NotFound /> },
+        ],
       },
       {
         path: '/',

@@ -13,6 +13,7 @@ export const PLANS = [
     sortOrder: 1,
     limits: { eventsPerMonth: 10, albums: 10, storageGb: 100, teamSeats: 1, includedCredits: 0 },
     features: ['10 events / month', '100 GB storage', 'Photo selection', 'Digital albums', 'Basic website'],
+    comingSoon: [],
   },
   {
     code: 'PRO' as const,
@@ -24,6 +25,7 @@ export const PLANS = [
     sortOrder: 2,
     limits: { eventsPerMonth: 30, albums: 50, storageGb: 500, teamSeats: 1, includedCredits: 0 },
     features: ['30 events / month', '500 GB storage', 'Photo selection', 'Digital albums', 'Custom domain'],
+    comingSoon: ['Custom domain'],
   },
   {
     code: 'STUDIO' as const,
@@ -35,6 +37,7 @@ export const PLANS = [
     sortOrder: 3,
     limits: { eventsPerMonth: null, albums: null, storageGb: 2048, teamSeats: 5, includedCredits: 1000 },
     features: ['Unlimited events', '2 TB storage', 'Digital albums', '5 team seats', 'Priority support'],
+    comingSoon: ['5 team seats', 'Priority support'],
   },
   {
     code: 'ALL_ACCESS' as const,
@@ -53,6 +56,7 @@ export const PLANS = [
       '10,000 WhatsApp credits every year',
       'Dedicated account manager',
     ],
+    comingSoon: ['Custom domain', 'Dedicated account manager'],
   },
 ]
 
@@ -114,20 +118,8 @@ export const FAQS = [
 
 export async function seedReference(prisma: PrismaClient) {
   for (const p of PLANS) {
-    await prisma.plan.upsert({
-      where: { code: p.code },
-      create: p,
-      update: {
-        name: p.name,
-        tagline: p.tagline,
-        monthlyPrice: p.monthlyPrice,
-        yearlyPrice: p.yearlyPrice,
-        popular: p.popular,
-        sortOrder: p.sortOrder,
-        limits: p.limits,
-        features: p.features,
-      },
-    })
+    // Plans are edited by platform admins (/admin/plans) once they exist, so the seed only adds missing ones.
+    await prisma.plan.upsert({ where: { code: p.code }, create: p, update: {} })
   }
   for (const t of TEMPLATES) {
     await prisma.whatsAppTemplate.upsert({ where: { key: t.key }, create: t, update: { name: t.name, body: t.body } })

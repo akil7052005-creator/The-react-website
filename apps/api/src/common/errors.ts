@@ -42,3 +42,10 @@ export const insufficientCredits = (needed: number, balance: number) =>
 
 export const fileInvalid = (message: string, field = 'file') =>
   new AppError(HttpStatus.UNPROCESSABLE_ENTITY, ERROR_CODES.FILE_INVALID, message, { [field]: message })
+
+export const emailFailed = () =>
+  new AppError(
+    HttpStatus.SERVICE_UNAVAILABLE,
+    ERROR_CODES.EMAIL_FAILED,
+    "We couldn't send the email right now. Please try again in a few minutes.",
+  )

@@ -28,7 +28,7 @@ import {
 import { formatDate, formatNumber, timeAgo } from '../utils/format'
 import { featureInfo } from '../data/featureInfo'
 import AlbumCard from '../components/AlbumCard'
-import poster from '../assets/wedding-poster-horizontal.png'
+import poster from '../assets/wedding-photo.jpg'
 import { AlbumViewer } from '../components/AlbumViewer'
 import FaceMatchSimulator from '../components/FaceMatchSimulator'
 import WhatsAppPreviewModal from '../components/WhatsAppPreviewModal'
@@ -53,25 +53,25 @@ const allStudioHighlights: (FeatureBarItem & { flag?: keyof typeof features })[]
     title: 'Smart Selection',
     icon: 'images',
     badge: 'Live Sync',
-    summary: 'Couples heart their favorite shots on their phone with automatic package quota lock.',
-    highlights: ['Export directly to Lightroom XML', 'Zero login friction for couples', 'Real-time quota lock'],
-    tip: 'WhatsApp reminders reduce selection turnaround to 3.2 days.'
+    summary: 'Couples heart their favorite shots on their phone, limited to the photos in their package.',
+    highlights: ['Export picked filenames for a Lightroom filter', 'Zero login friction for couples', 'Real-time quota lock'],
+    tip: 'Send a WhatsApp reminder from Photo Selection as the deadline gets close.'
   },
   {
-    title: '3D Flipbook Album',
+    title: 'Digital Flipbook Album',
     icon: 'journal-album',
     badge: 'Interactive',
-    summary: 'Transform layout designs into realistic 3D virtual flipbooks with audio page turns.',
-    highlights: ['Spread commenting & approval', 'High-res zoom on bridal jewelry', 'Password protected links'],
+    summary: 'Share designed album spreads as an online flipbook couples can browse spread by spread.',
+    highlights: ['Spread commenting & approval', '2× zoom for detail checks', 'Private share link'],
     tip: 'Get digital approval before sending expensive physical print orders.'
   },
   {
     title: 'GST Invoicing',
     icon: 'receipt',
     badge: 'GST Ready',
-    summary: 'Create GST-compliant photography invoices and collect advance payments via UPI.',
-    highlights: ['Automated CGST/SGST/IGST', 'WhatsApp invoice delivery', 'Milestone payment reminders'],
-    tip: 'Schedule reminders 48 hours prior to album handover.'
+    summary: 'Create GST-compliant photography invoices and record advance and balance payments.',
+    highlights: ['Automated CGST/SGST/IGST', 'WhatsApp invoice delivery', 'Milestone payment tracking'],
+    tip: 'Add milestones so you can see what is due before album handover.'
   }
 ]
 const studioHighlights = allStudioHighlights.filter((h) => !h.flag || features[h.flag])
@@ -249,7 +249,7 @@ function Dashboard() {
               title="Share Digital Gallery"
               badge="Client Portal"
               icon="share"
-              summary="Generate instant WhatsApp links or QR codes to share private proofing albums with couples and guests."
+              summary="Send private selection and album links to couples on WhatsApp."
               position="bottom"
               width={280}
             >
@@ -263,7 +263,7 @@ function Dashboard() {
               title="Create New Wedding Event"
               badge="Quick Setup"
               icon="plus-circle"
-              summary="Create a new event workspace, set client selection quotas, and generate venue face-recognition QR stands."
+              summary="Create a new event workspace for a client, then add photo selections, albums and invoices to it."
               position="bottom"
               width={280}
             >
@@ -293,7 +293,7 @@ function Dashboard() {
         <div className="idb-actions">
           <FeatureTooltip
             title="Interactive 3D Virtual Album"
-            summary="Open a photorealistic wedding album with page-curling animations, zoom, and couple feedback notes."
+            summary="Open a wedding album as a flipbook with spread-by-spread navigation, zoom, and couple feedback notes."
             position="bottom"
             width={280}
           >
@@ -352,7 +352,7 @@ function Dashboard() {
                 summary: 'Aggregates all wedding shoots, engagements, and sangeets actively managed by your studio.',
                 highlights: [`${d!.stats.upcomingEvents} upcoming events scheduled`],
                 metric: `${d!.stats.totalEvents.trend >= 0 ? '+' : ''}${d!.stats.totalEvents.trend}% new bookings vs last month`,
-                tip: 'Keep your calendar synced to avoid double-booking primary photographers.',
+                tip: 'Add every booking here to avoid double-booking your primary photographers.',
               }}
             />
             <StatCard
@@ -380,7 +380,7 @@ function Dashboard() {
                 title: '3D Virtual Flipbook Albums',
                 badge: `${d!.stats.publishedAlbums} Published`,
                 icon: 'journal-album',
-                summary: 'Photorealistic digital flipbooks shared with clients before sending to physical print labs.',
+                summary: 'Digital flipbooks shared with clients before sending to physical print labs.',
                 highlights: ['Spread-by-spread navigation', 'Direct spread commenting & client revisions', 'Private share links'],
                 tip: 'Collect client spread sign-offs before placing physical print lab orders.',
               }}
@@ -581,39 +581,6 @@ function Dashboard() {
                 ))
               )}
             </Card>
-
-            <FeatureTooltip
-              title="Weddingz Mobile Companion"
-              badge="iOS & Android"
-              icon="phone"
-              summary="Access your entire studio workflow anywhere: shoot locations, bride contacts, instant WhatsApp notifications, and payment receipts."
-              highlights={[
-                'Instant push notification when client completes selection',
-                'On-site QR code display for guests without laptop setup',
-                'Works seamlessly offline during remote destination shoots',
-              ]}
-              position="left"
-              width={300}
-            >
-              <div className="app-promo app-promo-catchy">
-                <p className="eyebrow">
-                  <i className="bi bi-phone" /> Weddingz Mobile
-                </p>
-                <h3>Your studio, in your pocket.</h3>
-                <p>Share galleries, track selections and collect payments — right from your phone.</p>
-                <div className="store-btns">
-                  <a href="#" className="store-btn" onClick={(e) => e.preventDefault()}>
-                    <i className="bi bi-apple" />
-                    App Store
-                  </a>
-                  <a href="#" className="store-btn" onClick={(e) => e.preventDefault()}>
-                    <i className="bi bi-google-play" />
-                    Google Play
-                  </a>
-                </div>
-                <span className="promo-ring" />
-              </div>
-            </FeatureTooltip>
           </div>
 
           {/* Recent Albums */}

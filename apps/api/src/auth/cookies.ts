@@ -15,13 +15,13 @@ function base(): CookieOptions {
   }
 }
 
-export function setAuthCookies(res: Response, access: string, refresh: string) {
+export function setAuthCookies(res: Response, tokens: { access: string; refresh: string; refreshMaxAgeMs: number }) {
   const c = config()
-  res.cookie(ACCESS_COOKIE, access, { ...base(), path: '/', maxAge: c.ACCESS_TOKEN_TTL_MINUTES * 60_000 })
-  res.cookie(REFRESH_COOKIE, refresh, {
+  res.cookie(ACCESS_COOKIE, tokens.access, { ...base(), path: '/', maxAge: c.ACCESS_TOKEN_TTL_MINUTES * 60_000 })
+  res.cookie(REFRESH_COOKIE, tokens.refresh, {
     ...base(),
     path: REFRESH_COOKIE_PATH,
-    maxAge: c.REFRESH_TOKEN_TTL_DAYS * 86_400_000,
+    maxAge: tokens.refreshMaxAgeMs,
   })
 }
 
