@@ -71,7 +71,7 @@ export class DashboardController {
     const chartStart = new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() - 5, 1))
     const chartEnd = new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 3, 1))
 
-    const [totalEvents, photoSelections, digitalAlbums, upcomingEvents, activeSelections, publishedAlbums, next, recent, activity, chartEvents, openSelections, workAlbums, recentAlbums, banner] =
+    const [totalEvents, photoSelections, digitalAlbums, upcomingEvents, activeSelections, publishedAlbums, next, recent, activity, chartEvents, openSelections, workAlbums, recentAlbums, banner, completedSelections] =
       await Promise.all([
         createdCounts('event'),
         createdCounts('selection'),
@@ -118,6 +118,7 @@ export class DashboardController {
           include: { image: true },
           orderBy: { position: 'asc' },
         }),
+        this.prisma.selection.count({ where: { ...live, status: 'SUBMITTED' } }),
       ])
 
     const monthly = Array.from({ length: 8 }, (_, i) => {
@@ -148,7 +149,7 @@ export class DashboardController {
     ].slice(0, 4)
 
     return {
-      stats: { totalEvents, photoSelections, digitalAlbums, upcomingEvents, activeSelections, publishedAlbums },
+      stats: { totalEvents, photoSelections, digitalAlbums, upcomingEvents, activeSelections, publishedAlbums, completedSelections },
       nextAssignment: next ? { ...eventDto(next), daysLeft: daysBetween(today, toIso(next.date)) } : null,
       recentEvents: recent.map(eventDto),
       activity: activity.map((n) => this.notifications.toDto(n)),

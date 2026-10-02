@@ -25,7 +25,7 @@ export const clientDto = (c: Client): ClientDto => ({
   createdAt: c.createdAt.toISOString(),
 })
 
-export const eventRef = (e: Event): EventRef => ({ id: e.id, code: e.code, title: e.title })
+export const eventRef = (e: Event): EventRef => ({ id: e.id, code: e.code, title: e.title, type: e.type })
 
 export const eventDto = (e: Event & { client: Client }): EventDto => ({
   id: e.id,

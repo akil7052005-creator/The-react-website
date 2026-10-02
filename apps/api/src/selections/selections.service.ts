@@ -102,8 +102,16 @@ export class SelectionsService {
     }
     const sortField = q.sort?.replace('-', '')
     const direction = q.sort?.startsWith('-') ? 'desc' : 'asc'
-    const orderBy: Prisma.SelectionOrderByWithRelationInput =
-      sortField === 'deadline' ? { deadline: direction } : sortField === 'code' ? { code: direction } : { createdAt: 'desc' }
+    // Sortable columns of the Photo Selection table; anything else = newest first.
+    const sorts: Record<string, Prisma.SelectionOrderByWithRelationInput> = {
+      deadline: { deadline: direction },
+      code: { code: direction },
+      created: { createdAt: direction },
+      project: { event: { client: { name: direction } } },
+      photos: { photos: { _count: direction } },
+      status: { status: direction },
+    }
+    const orderBy: Prisma.SelectionOrderByWithRelationInput = (sortField && sorts[sortField]) || { createdAt: 'desc' }
     const [rows, total] = await Promise.all([
       this.prisma.selection.findMany({ where, include, orderBy, ...skipTake(q) }),
       this.prisma.selection.count({ where }),
@@ -113,7 +121,9 @@ export class SelectionsService {
 
   async summary(studioId: string) {
     const today = toDate(todayIST())
-    const [active, completed, submitted, picked] = await Promise.all([
+    const [selections, photos, active, completed, submitted, picked] = await Promise.all([
+      this.prisma.selection.count({ where: { studioId, deletedAt: null } }),
+      this.prisma.photo.count({ where: { deletedAt: null, selection: { studioId, deletedAt: null } } }),
       this.prisma.selection.count({ where: { studioId, deletedAt: null, status: { not: 'SUBMITTED' }, deadline: { gte: today } } }),
       this.prisma.selection.count({ where: { studioId, deletedAt: null, status: 'SUBMITTED' } }),
       this.prisma.selection.findMany({
@@ -128,7 +138,14 @@ export class SelectionsService {
       submitted.length === 0
         ? null
         : submitted.reduce((s, r) => s + (r.submittedAt!.getTime() - r.createdAt.getTime()), 0) / submitted.length / 86_400_000
-    return { active, completed, picked: Number(picked[0]?.n ?? 0), avgTurnaroundDays: avg === null ? null : Math.round(avg * 10) / 10 }
+    return {
+      selections,
+      photos,
+      active,
+      completed,
+      picked: Number(picked[0]?.n ?? 0),
+      avgTurnaroundDays: avg === null ? null : Math.round(avg * 10) / 10,
+    }
   }
 
   async create(studioId: string, body: z.output<typeof createSelectionSchema>) {

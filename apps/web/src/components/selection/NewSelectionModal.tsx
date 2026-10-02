@@ -1,11 +1,12 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { createSelectionSchema, todayIST, type SelectionDto, type SendResultDto } from '@weddyzone/shared'
+import { createSelectionSchema, todayIST, type EventDto, type SelectionDto, type SendResultDto } from '@weddyzone/shared'
 import { useState } from 'react'
 import { useFieldArray } from 'react-hook-form'
 import { toast } from 'sonner'
 import { api } from '../../lib/api'
 import { toastError } from '../../lib/query'
 import { copyText, publicLink, sendViaWhatsApp } from '../../lib/whatsapp'
+import { EventModal } from '../EventModal'
 import { EventSelectField } from '../EventSelect'
 import { applyApiErrors, SubmitButton, TextField, useGuardedClose, useZodForm } from '../form/form'
 import { Modal, useConfirm } from '../Modal'
@@ -22,6 +23,9 @@ export function NewSelectionModal({ open, onClose }: { open: boolean; onClose: (
   const confirm = useConfirm()
   const [created, setCreated] = useState<SelectionDto | null>(null)
   const [uploaded, setUploaded] = useState(0)
+  // Creating the project's event right here, so a new client can be set up in one go.
+  const [newEventOpen, setNewEventOpen] = useState(false)
+  const [newEvent, setNewEvent] = useState<EventDto | null>(null)
   const form = useZodForm(createSelectionSchema, {
     defaultValues: { eventId: '', quota: 100, deadline: inDays(14), members: [] },
   })
@@ -46,6 +50,7 @@ export function NewSelectionModal({ open, onClose }: { open: boolean; onClose: (
   const reset = () => {
     setCreated(null)
     setUploaded(0)
+    setNewEvent(null)
     form.reset()
     onClose()
   }
@@ -84,6 +89,7 @@ export function NewSelectionModal({ open, onClose }: { open: boolean; onClose: (
   }
 
   return (
+    <>
     <Modal
       open={open}
       onClose={created ? reset : guardedClose}
@@ -128,7 +134,14 @@ export function NewSelectionModal({ open, onClose }: { open: boolean; onClose: (
       ) : (
         <form id="selection-form" onSubmit={form.handleSubmit((v) => create.mutate(v))} noValidate data-testid="selection-form">
           <div className="form-grid">
-            <EventSelectField form={form} name="eventId" full />
+            <EventSelectField
+              key={newEvent?.id ?? 'pick'}
+              form={form}
+              name="eventId"
+              full
+              initial={newEvent ? { id: newEvent.id, code: newEvent.code, title: newEvent.title, type: newEvent.type } : null}
+              onCreateNew={() => setNewEventOpen(true)}
+            />
             <TextField form={form} name="quota" label="Selection quota (photos)" type="number" required min={1} inputMode="numeric" hint="The couple can pick up to this many photos" />
             <TextField form={form} name="deadline" label="Deadline" type="date" required min={todayIST()} />
           </div>
@@ -161,5 +174,14 @@ export function NewSelectionModal({ open, onClose }: { open: boolean; onClose: (
         </form>
       )}
     </Modal>
+    <EventModal
+      open={newEventOpen}
+      onClose={() => setNewEventOpen(false)}
+      onCreated={(e) => {
+        setNewEvent(e)
+        form.setValue('eventId', e.id, { shouldDirty: true, shouldValidate: true })
+      }}
+    />
+    </>
   )
 }

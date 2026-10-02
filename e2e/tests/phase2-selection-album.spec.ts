@@ -25,7 +25,11 @@ test.beforeEach(async ({ context }) => {
 
 test('create an event with a new client inline', async ({ page }) => {
   await login(page)
-  await page.getByRole('button', { name: 'New Event' }).click()
+  // New events are created from the Add Photo Selection dialog (the Dashboard is kept minimal).
+  await page.goto('/photo-selection')
+  await page.getByRole('button', { name: 'Add Photo Selection' }).click()
+  const selectionDialog = page.getByRole('dialog', { name: 'New Selection' })
+  await selectionDialog.getByRole('button', { name: '+ New event' }).click()
   const dialog = page.getByRole('dialog', { name: 'New Event' })
 
   // Validation first.
@@ -47,13 +51,17 @@ test('create an event with a new client inline', async ({ page }) => {
   await dialog.getByLabel('Expected guests').fill('300')
   await dialog.getByRole('button', { name: 'Create event' }).click()
   await expect(page.getByText(/Event EVT-\d+ created/)).toBeVisible()
-  await expect(page.getByRole('cell', { name: new RegExp(`${couple} & Ravi Wedding`) })).toBeVisible()
+  // The new event is picked in the selection dialog straight away.
+  await expect(selectionDialog.getByText(`${couple} & Ravi Wedding`)).toBeVisible()
+  await selectionDialog.getByRole('button', { name: 'Cancel' }).click()
+  await page.getByTestId('confirm-ok').click()
+  await expect(selectionDialog).toHaveCount(0)
 })
 
 test('selection: create, upload, share, pick with quota lock, submit', async ({ page, context }) => {
   await login(page)
   await page.goto('/photo-selection')
-  await page.getByRole('button', { name: 'New Selection' }).click()
+  await page.getByRole('button', { name: 'Add Photo Selection' }).click()
   const dialog = page.getByRole('dialog', { name: 'New Selection' })
   await pickOption(page, 'f-eventId', couple, new RegExp(couple))
   await dialog.getByLabel('Selection quota (photos)').fill('2')
@@ -79,10 +87,10 @@ test('selection: create, upload, share, pick with quota lock, submit', async ({ 
   expect(link).toMatch(/\/s\/[\w-]+$/)
   await upload.getByRole('button', { name: 'Done' }).click()
 
-  // Remind from the list: confirm → WhatsApp tab opens → a credit is used.
+  // "Send" from the list (a reminder, as the link was already shared): confirm → WhatsApp tab opens → a credit is used.
   const credits = Number((await page.getByTestId('credit-chip').locator('span').innerText()).replace(/,/g, ''))
   const row = page.getByRole('row', { name: new RegExp(couple) })
-  await row.getByRole('button', { name: 'Remind' }).click()
+  await row.getByRole('button', { name: /^Send / }).click()
   const popup = context.waitForEvent('page')
   await page.getByTestId('confirm-ok').click()
   // The tab opens blank (so popup blockers allow it), then navigates to WhatsApp.

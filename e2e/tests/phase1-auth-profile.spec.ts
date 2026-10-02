@@ -62,7 +62,10 @@ test('sign up a new studio', async ({ page }) => {
   await page.getByRole('textbox', { name: 'Password', exact: true }).fill('Lotus2026')
   await page.getByRole('button', { name: 'Create studio' }).click()
   await expect(page).toHaveURL(/\/$/)
-  await expect(page.getByText('Studio Starter')).toBeVisible()
+  // Lands on the (minimal) dashboard, on the Starter trial (plan tag in the sidebar).
+  await expect(page.getByRole('heading', { name: /^Good (morning|afternoon|evening), Meena$/ })).toBeVisible()
+  await expect(page.getByRole('link', { name: /New Selection/ })).toBeVisible()
+  await expect(page.locator('.brand-pro-tag')).toHaveText('STARTER')
 
   // The 50 trial credits are not flagged as a low balance.
   await page.goto('/whatsapp-credit')

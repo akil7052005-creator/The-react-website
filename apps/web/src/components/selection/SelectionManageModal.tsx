@@ -21,7 +21,8 @@ import { PhotoUploader } from '../PhotoUploader'
 import { EmptyState, ErrorState, Progress, Skeleton, StatusPill } from '../ui'
 import WhatsAppPreviewModal from '../WhatsAppPreviewModal'
 
-type Tab = 'photos' | 'share' | 'settings'
+export type SelectionManageTab = 'photos' | 'share' | 'settings'
+type Tab = SelectionManageTab
 
 function refreshAll(qc: ReturnType<typeof useQueryClient>, id: string) {
   qc.invalidateQueries({ queryKey: ['selections'] })
@@ -104,10 +105,19 @@ function SettingsTab({ s, onDeleted }: { s: SelectionDto; onDeleted: () => void 
   )
 }
 
-export function SelectionManageModal({ selection, onClose }: { selection: SelectionDto | null; onClose: () => void }) {
+export function SelectionManageModal({
+  selection,
+  onClose,
+  initialTab = 'photos',
+}: {
+  selection: SelectionDto | null
+  onClose: () => void
+  /** Which tab opens first: 'photos' (upload & download) or 'settings'. */
+  initialTab?: SelectionManageTab
+}) {
   const qc = useQueryClient()
   const confirm = useConfirm()
-  const [tab, setTab] = useState<Tab>('photos')
+  const [tab, setTab] = useState<Tab>(initialTab)
   const [preview, setPreview] = useState(false)
   const id = selection?.id ?? ''
 
@@ -231,6 +241,19 @@ export function SelectionManageModal({ selection, onClose }: { selection: Select
         {tab === 'photos' && (
           <div className="stack" style={{ gap: 16 }}>
             {s.status !== 'SUBMITTED' && <PhotoUploader endpoint={`/selections/${s.id}/photos`} onUploaded={() => refreshAll(qc, s.id)} label="Add more photos" />}
+            <div className="download-bar">
+              <span>
+                <i className="bi bi-download" /> Download the client's picks ({s.pickedCount})
+              </span>
+              <div className="row-actions">
+                <button className="btn btn-sm btn-ghost" onClick={() => exportPicks('txt')} disabled={s.pickedCount === 0}>
+                  <i className="bi bi-filetype-txt" /> Lightroom list
+                </button>
+                <button className="btn btn-sm btn-ghost" onClick={() => exportPicks('csv')} disabled={s.pickedCount === 0}>
+                  <i className="bi bi-filetype-csv" /> CSV with names & comments
+                </button>
+              </div>
+            </div>
             {photos.isPending ? (
               <div className="photo-grid">
                 {Array.from({ length: 8 }).map((_, i) => (

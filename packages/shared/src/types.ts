@@ -114,6 +114,7 @@ export interface EventRef {
   id: string
   code: string
   title: string
+  type: EventType
 }
 
 export interface SelectionMemberDto {
@@ -523,6 +524,8 @@ export interface DashboardDto {
     upcomingEvents: number
     activeSelections: number
     publishedAlbums: number
+    /** Selections the client has submitted. */
+    completedSelections: number
   }
   nextAssignment: (EventDto & { daysLeft: number }) | null
   recentEvents: EventDto[]
