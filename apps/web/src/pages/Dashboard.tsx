@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import type { DashboardDto, EventDto } from '@weddyzone/shared'
 import { Link, useSearchParams } from 'react-router-dom'
+import welcomePhoto from '../assets/wedding-photo.jpg'
 import { useMe } from '../auth/AuthProvider'
 import { EventModal } from '../components/EventModal'
 import { ErrorState, PageHeader, StatCard, StatSkeletonRow } from '../components/ui'
@@ -73,6 +74,17 @@ function Dashboard() {
           })}
         </div>
       )}
+
+      <section className="welcome-banner" aria-label="Welcome">
+        <img src={welcomePhoto} alt="Bride and groom under a floral wedding arch" width={950} height={1016} loading="lazy" />
+        <div className="welcome-banner-text">
+          <p className="eyebrow">Welcome to Weddyzone</p>
+          <h2>
+            Every wedding, <em>beautifully</em> organised.
+          </h2>
+          <p>Share photo selections, send albums for approval and keep every booking in one place.</p>
+        </div>
+      </section>
 
       {linkedEvent.data && <EventModal open onClose={closeEvent} event={linkedEvent.data} />}
     </div>
