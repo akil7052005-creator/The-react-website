@@ -99,6 +99,51 @@ export const TEMPLATES = [
       'I run my studio on Weddyzone Studio — selections, flipbook albums and GST invoices in one place. ' +
       'Sign up with my code {{code}} and we both get ₹1,500: {{link}}',
   },
+  // Weddyzone's own messages to studios (plan alerts). Sent from the platform's number: they cost the
+  // studio no credits. With the WhatsApp Cloud API, each must exist as an approved template named
+  // after its key in lower case, with its variables in the order of PLATFORM_TEMPLATE_PARAMS.
+  {
+    key: 'PLAN_EXPIRY_REMINDER',
+    name: 'Plan expiry reminder',
+    creditCost: 0,
+    body: 'Hi {{studioName}}, your Weddyzone {{planName}} plan expires on {{date}}. Renew in one click to keep working without a break: {{link}}',
+  },
+  {
+    key: 'PLAN_EXPIRED_GRACE',
+    name: 'Plan expired (grace)',
+    creditCost: 0,
+    body: 'Hi {{studioName}}, your Weddyzone {{planName}} plan expired on {{date}}. Renew within {{graceDays}} days to keep adding events and uploads: {{link}}',
+  },
+  {
+    key: 'PLAN_READ_ONLY',
+    name: 'Account read-only',
+    creditCost: 0,
+    body: 'Hi {{studioName}}, your Weddyzone {{planName}} plan has ended and your account is now read-only. Your photos and albums are safe and your clients can still view them. Renew any time: {{link}}',
+  },
+  {
+    key: 'PLAN_PAYMENT_FAILED',
+    name: 'Plan payment failed',
+    creditCost: 0,
+    body: "Hi {{studioName}}, your payment for the Weddyzone {{planName}} plan didn't go through. Please retry here: {{link}}",
+  },
+  {
+    key: 'PLAN_RENEWED',
+    name: 'Plan renewed',
+    creditCost: 0,
+    body: 'Hi {{studioName}}, your Weddyzone {{planName}} plan renewed successfully. Next renewal: {{date}}. Thank you!',
+  },
+  {
+    key: 'PLAN_PURCHASED',
+    name: 'Plan purchased',
+    creditCost: 0,
+    body: 'Hi {{studioName}}, your Weddyzone {{planName}} plan is active until {{date}}. Invoice {{invoiceNumber}} is in My Subscription.',
+  },
+  {
+    key: 'PLAN_WINBACK',
+    name: 'Win-back offer',
+    creditCost: 0,
+    body: 'Hi {{studioName}}, we miss you at Weddyzone! Come back with {{percent}}% off using code {{code}}, valid until {{date}}: {{link}}',
+  },
 ]
 
 export const FAQS = [

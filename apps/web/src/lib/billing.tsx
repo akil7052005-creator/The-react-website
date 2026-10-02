@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import type { BillingCycle, PaymentDto, PlanDto, SubscriptionDto, UsageItem } from '@weddyzone/shared'
+import { gstOn, type BillingCycle, type MySubscriptionBannerDto, type PaymentDto, type PlanDto, type SubscriptionDto, type UsageItem } from '@weddyzone/shared'
 import { toast } from 'sonner'
 import { ME_KEY } from '../auth/AuthProvider'
 import { useConfirm } from '../components/Modal'
@@ -19,6 +19,15 @@ export const usePlans = () => useQuery({ queryKey: ['plans'], queryFn: () => api
 export const useSubscription = () =>
   useQuery({ queryKey: ['subscription'], queryFn: () => api.get<SubscriptionOverview>('/subscription') })
 
+/** Compact plan status for banners (GET /me/subscription). */
+export const usePlanBanner = () =>
+  useQuery({ queryKey: ['subscription', 'banner'], queryFn: () => api.get<MySubscriptionBannerDto>('/me/subscription'), refetchInterval: 5 * 60_000 })
+
+/** Same plan and cycle, and it's ending, ended or failed to charge: the plan button says "Renew". */
+export function isRenewal(current: SubscriptionDto | undefined, plan: PlanDto, cycle: BillingCycle): boolean {
+  return Boolean(current && !current.isTrial && current.plan.code === plan.code && current.cycle === cycle && current.status !== 'ACTIVE' && current.status !== 'TRIAL')
+}
+
 export function priceFor(plan: PlanDto, cycle: BillingCycle): number | null {
   return cycle === 'YEARLY' ? plan.yearlyPricePaise : plan.monthlyPricePaise
 }
@@ -37,26 +46,33 @@ export function usePlanActions() {
   const confirm = useConfirm()
 
   const refresh = () => {
+    // Also refreshes the plan banner (['subscription', 'banner']).
     qc.invalidateQueries({ queryKey: ['subscription'] })
     qc.invalidateQueries({ queryKey: ME_KEY })
     qc.invalidateQueries({ queryKey: ['credits'] })
     qc.invalidateQueries({ queryKey: ['referrals'] })
   }
 
-  const change = (plan: PlanDto, cycle: BillingCycle, current?: SubscriptionDto) => {
+  const change = (plan: PlanDto, cycle: BillingCycle, current?: SubscriptionDto, couponCode?: string) => {
     const price = priceFor(plan, cycle)
     if (price === null) {
       toast.error(`${plan.name} is billed yearly only`)
       return Promise.resolve(false)
     }
     const currentPrice = current ? current.pricePaise : 0
-    const verb = !current || current.isTrial ? 'Subscribe to' : price >= currentPrice ? 'Upgrade to' : 'Switch to'
+    const renewal = isRenewal(current, plan, cycle)
+    const verb = renewal ? 'Renew' : !current || current.isTrial || current.readOnly ? 'Subscribe to' : price >= currentPrice ? 'Upgrade to' : 'Switch to'
+    const gst = gstOn(price)
     return confirm({
       title: `${verb} ${plan.name}?`,
       icon: 'patch-check',
       message: (
         <>
-          You'll pay <strong>{formatMoney(price)}</strong> {cycle === 'YEARLY' ? 'per year' : 'per month'} (+18% GST). The {plan.name} plan starts right away
+          You'll pay <strong>{formatMoney(price + gst)}</strong> ({formatMoney(price)} + {formatMoney(gst)} GST) {cycle === 'YEARLY' ? 'per year' : 'per month'}
+          {couponCode ? <>, less your coupon <strong>{couponCode}</strong></> : null}.{' '}
+          {renewal && current && !current.readOnly && current.status !== 'GRACE'
+            ? `Your plan continues from ${new Date(current.currentPeriodEnd).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}, so you lose no days`
+            : `The ${plan.name} plan starts as soon as the payment is confirmed`}
           {plan.limits.includedCredits ? ` and includes ${plan.limits.includedCredits.toLocaleString('en-IN')} WhatsApp credits` : ''}.
           <TestModeNote />
         </>
@@ -64,8 +80,9 @@ export function usePlanActions() {
       confirmLabel: `${verb} ${plan.name}`,
       onConfirm: async () => {
         try {
-          await api.post('/subscription/change', { planCode: plan.code, cycle })
-          toast.success(`You're now on the ${plan.name} plan`, { description: 'Test mode, no real charge' })
+          const res = await api.post<{ checkout: unknown }>('/subscription/change', { planCode: plan.code, cycle, couponCode })
+          if (res.checkout) toast.info('Complete the payment to activate your plan')
+          else toast.success(renewal ? `${plan.name} renewed` : `You're now on the ${plan.name} plan`, { description: 'Test mode, no real charge' })
           refresh()
         } catch (e) {
           toastError(e)
@@ -74,30 +91,6 @@ export function usePlanActions() {
       },
     })
   }
-
-  const cancel = (s: SubscriptionDto) =>
-    confirm({
-      title: `Cancel your ${s.plan.name} plan?`,
-      tone: 'danger',
-      message: (
-        <>
-          You keep {s.plan.name} until <strong>{new Date(s.currentPeriodEnd).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</strong>. After
-          that your studio moves to Starter and its limits apply. You can resume any time before then.
-        </>
-      ),
-      confirmLabel: 'Cancel plan',
-      cancelLabel: 'Keep my plan',
-      onConfirm: async () => {
-        try {
-          await api.post('/subscription/cancel')
-          toast.success(`${s.plan.name} will end on ${new Date(s.currentPeriodEnd).toLocaleDateString('en-IN')}`)
-          refresh()
-        } catch (e) {
-          toastError(e)
-          throw e
-        }
-      },
-    })
 
   const resume = async (s: SubscriptionDto) => {
     try {
@@ -109,5 +102,17 @@ export function usePlanActions() {
     }
   }
 
-  return { change, cancel, resume }
+  const setAutoRenew = async (autoRenew: boolean) => {
+    try {
+      await api.post('/subscription/auto-renew', { autoRenew })
+      toast.success(autoRenew ? 'Auto-renew is on' : 'Auto-renew is off', {
+        description: autoRenew ? 'Your plan renews by itself at the end of each period.' : "We'll remind you before your plan ends.",
+      })
+      refresh()
+    } catch (e) {
+      toastError(e)
+    }
+  }
+
+  return { change, resume, setAutoRenew, refresh }
 }

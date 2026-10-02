@@ -1,6 +1,8 @@
-import type { UsageItem } from '@weddyzone/shared'
+import { SUBSCRIPTION_STATUS_LABELS, type UsageItem } from '@weddyzone/shared'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { PageHeader, Card, ComingSoonTag, Progress, StatusPill, FeatureTooltip, EmptyState, ErrorState, CardSkeleton, type FeatureInfo } from '../components/ui'
+import { CancelPlanDialog, PlanBanner } from '../components/PlanBanner'
+import { PageHeader, Card, ComingSoonTag, Progress, StatusPill, FeatureTooltip, EmptyState, ErrorState, CardSkeleton, Toggle, type FeatureInfo } from '../components/ui'
 import { formatDate, formatMoney, formatNumber } from '../utils/format'
 import { featureInfo } from '../data/featureInfo'
 import { usePlanActions, useSubscription } from '../lib/billing'
@@ -21,7 +23,8 @@ function usageSummary(u: UsageItem) {
 
 function MySubscription() {
   const q = useSubscription()
-  const { cancel, resume } = usePlanActions()
+  const { resume, setAutoRenew } = usePlanActions()
+  const [cancelling, setCancelling] = useState(false)
 
   if (q.isPending) {
     return (
@@ -48,20 +51,24 @@ function MySubscription() {
   const { subscription: sub, usage, recentPayments } = q.data
   const plan = sub.plan
   const yearly = sub.cycle === 'YEARLY'
+  const ended = sub.readOnly
+  const dateText = (iso: string) => <strong>{formatDate(iso)}</strong>
 
   return (
     <div className="stack">
       <PageHeader
         eyebrow="Plans & Usage"
-        featureBadge={`Active Tier: ${plan.name}`}
+        featureBadge={`${SUBSCRIPTION_STATUS_LABELS[sub.status]}: ${plan.name}`}
         title="My Studio Subscription"
         subtitle="Manage your current tier, track real-time quota usage, and review billing statements."
       />
+      <PlanBanner always />
 
       <div className="grid grid-1-2">
         <div className="lux lux-catchy">
           <p className="eyebrow">
-            <i className="bi bi-patch-check-fill" /> {sub.isTrial ? 'Free Trial' : sub.cancelAtPeriodEnd ? 'Cancelled Membership' : 'Active Membership'}
+            <i className="bi bi-patch-check-fill" />{' '}
+            {sub.isTrial ? 'Free Trial' : ended ? 'Ended — read-only' : sub.status === 'GRACE' ? 'Grace period' : sub.cancelAtPeriodEnd ? 'Cancelled Membership' : 'Active Membership'}
           </p>
           <h2>
             <em>{plan.name}</em> Studio Plan
@@ -71,18 +78,18 @@ function MySubscription() {
             <small style={{ fontSize: 16, fontWeight: 500, opacity: 0.8 }}> / {yearly ? 'year' : 'month'}</small>
           </p>
           <p style={{ marginTop: 10, color: 'rgba(255, 255, 255, 0.85)' }}>
-            {sub.isTrial ? (
-              <>
-                Trial ends on <strong>{formatDate(sub.currentPeriodEnd)}</strong> · choose a plan to keep going
-              </>
+            {sub.isTrial && !ended ? (
+              <>Trial ends on {dateText(sub.currentPeriodEnd)} · choose a plan to keep going</>
+            ) : ended ? (
+              <>Ended on {dateText(sub.currentPeriodEnd)} · renew to add events and uploads again</>
+            ) : sub.status === 'GRACE' ? (
+              <>Expired on {dateText(sub.currentPeriodEnd)} · full access until {sub.graceEndsAt ? dateText(sub.graceEndsAt) : 'the grace period ends'}</>
             ) : sub.cancelAtPeriodEnd ? (
-              <>
-                Ends on <strong>{formatDate(sub.currentPeriodEnd)}</strong> · then Starter limits apply
-              </>
+              <>Ends on {dateText(sub.currentPeriodEnd)} · then your studio becomes read-only</>
+            ) : sub.autoRenew ? (
+              <>Renews automatically on {dateText(sub.currentPeriodEnd)} · Billed {yearly ? 'yearly' : 'monthly'}</>
             ) : (
-              <>
-                Renews on <strong>{formatDate(sub.currentPeriodEnd)}</strong> · Billed {yearly ? 'yearly' : 'monthly'}
-              </>
+              <>Expires on {dateText(sub.currentPeriodEnd)} · Billed {yearly ? 'yearly' : 'monthly'}</>
             )}
           </p>
           <div className="store-btns" style={{ marginTop: 20 }}>
@@ -93,18 +100,25 @@ function MySubscription() {
               <i className="bi bi-stars" /> See All-Access
             </Link>
           </div>
-          {!sub.isTrial && (
-            <p style={{ marginTop: 14 }}>
-              {sub.cancelAtPeriodEnd ? (
-                <button className="link link-light" onClick={() => resume(sub)}>
-                  Resume my plan
-                </button>
-              ) : (
-                <button className="link link-light" onClick={() => cancel(sub)}>
-                  Cancel plan
-                </button>
+          {!sub.isTrial && !ended && (
+            <div style={{ marginTop: 14, display: 'grid', gap: 10 }}>
+              {!sub.cancelAtPeriodEnd && sub.status !== 'GRACE' && (
+                <div className="auto-renew-light">
+                  <Toggle checked={sub.autoRenew} onChange={() => setAutoRenew(!sub.autoRenew)} label="Auto-renew at the end of each period" />
+                </div>
               )}
-            </p>
+              <p style={{ margin: 0 }}>
+                {sub.cancelAtPeriodEnd ? (
+                  <button className="link link-light" onClick={() => resume(sub)}>
+                    Resume my plan
+                  </button>
+                ) : (
+                  <button className="link link-light" onClick={() => setCancelling(true)}>
+                    Cancel plan
+                  </button>
+                )}
+              </p>
+            </div>
           )}
         </div>
 
@@ -185,6 +199,7 @@ function MySubscription() {
                     <th>Plan Cycle</th>
                     <th className="num">Amount</th>
                     <th className="num">Status</th>
+                    <th className="num">Invoice</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -196,6 +211,15 @@ function MySubscription() {
                       <td className="num">
                         <StatusPill status={p.status === 'SUCCESS' ? 'Paid' : p.status === 'FAILED' ? 'Failed' : 'Pending'} />
                       </td>
+                      <td className="num">
+                        {p.invoiceNumber ? (
+                          <Link to={`/my-subscription/invoices/${p.id}`} className="link" title={p.invoiceNumber}>
+                            <i className="bi bi-receipt" /> View
+                          </Link>
+                        ) : (
+                          <span className="muted">—</span>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -204,6 +228,7 @@ function MySubscription() {
           )}
         </Card>
       </div>
+      {cancelling && <CancelPlanDialog sub={sub} onClose={() => setCancelling(false)} />}
     </div>
   )
 }

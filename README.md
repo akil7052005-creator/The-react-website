@@ -74,6 +74,15 @@ corepack pnpm lint && corepack pnpm typecheck && corepack pnpm test && corepack 
 
 The e2e database is wiped on every run — never point `E2E_DATABASE_URL` or `TEST_DATABASE_URL` at real data.
 
+## Subscriptions & plan-deadline alerts
+
+Platform admins (SUPER_ADMIN) get `/admin` (dashboard: MRR/ARR, plan split, MRR trend, new vs churned), `/admin/subscriptions` (filterable table, CSV, extend / change plan / cancel / remind), `/admin/subscriptions/:id`, `/admin/alerts` (bell feed) and `/admin/settings` (reminder days, grace days, digest time, win-back coupon, optional two-factor sign-in). Every `/api/v1/admin/*` call returns 403 to anyone else and is written to `admin_audit_log`.
+
+- **Plans activate only from a confirmed payment**: checkout opens a gateway order; `POST /api/v1/webhooks/payments` (HMAC-SHA256 with `PAYMENT_WEBHOOK_SECRET`, Razorpay format, idempotent) creates/renews the subscription, issues a sequential GST invoice (`WZ/2026-27/00001`) and alerts the studio and admins. In test mode the mock gateway confirms through the same handler.
+- **Hourly job** (`JOBS_ENABLED`, all dates in IST): T-7 (in-app + email + WhatsApp), T-3 (in-app + WhatsApp), T-1 (all + admin), deadline → GRACE (+ admin), grace end → EXPIRED (read-only, + admin), win-back coupon, 80% usage alerts, 09:00 IST admin digest. Every alert has a unique dedupe key, so re-runs never send twice. Run it on demand: `POST /api/v1/admin/jobs/subscription-alerts/run`.
+- **Expired = read-only**: no new events, albums or photo uploads; clients still open delivered albums and selections; nothing is deleted.
+- Platform WhatsApp alerts use the `PLAN_*` templates and the WhatsApp Cloud API (`WHATSAPP_CLOUD_TOKEN`), never the studio's credits.
+
 ## Feature flags
 
 `FEATURE_FACE_RECOGNITION=false` (in `apps/web/.env` and `apps/api/.env`) hides AI Face Recognition: its nav item, dashboard card, feature chip, scanner button and route. The code is kept for later.

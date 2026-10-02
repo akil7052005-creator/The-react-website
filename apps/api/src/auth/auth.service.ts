@@ -25,6 +25,7 @@ import { PlansService } from '../core/plans.service'
 import { StudioMapper } from '../core/studio.mapper'
 import { MailService } from '../infra/mail.service'
 import { PrismaService, type Tx } from '../prisma/prisma.service'
+import { decryptSecret, verifyTotp } from './totp'
 
 export const SIGNUP_BONUS_CREDITS = 50
 export const TRIAL_DAYS = 30
@@ -105,16 +106,18 @@ export class AuthService {
       })
       const starter = await this.plans.byCode('STARTER', tx)
       const now = new Date()
-      await tx.subscription.create({
+      const sub = await tx.subscription.create({
         data: {
           studioId: studio.id,
           planId: starter.id,
           cycle: 'MONTHLY',
+          status: 'TRIAL',
           isTrial: true,
           currentPeriodStart: now,
           currentPeriodEnd: new Date(now.getTime() + TRIAL_DAYS * 86_400_000),
         },
       })
+      await tx.subscriptionEvent.create({ data: { subscriptionId: sub.id, type: 'CREATED', toPlan: `${starter.name} (trial)`, note: `${TRIAL_DAYS}-day free trial` } })
       await tx.websiteSettings.create({
         data: {
           studioId: studio.id,
@@ -150,6 +153,19 @@ export class AuthService {
       throw new AppError(HttpStatus.UNAUTHORIZED, 'INVALID_CREDENTIALS', 'Incorrect email or password', {
         password: 'Incorrect email or password',
       })
+    }
+    // Two-factor sign-in (platform admins who turned it on): the password alone is not enough.
+    if (user.totpEnabledAt && user.totpSecret) {
+      if (!input.otp) {
+        throw new AppError(HttpStatus.UNAUTHORIZED, ERROR_CODES.OTP_REQUIRED, 'Enter the 6-digit code from your authenticator app', {
+          otp: 'Enter the 6-digit code from your authenticator app',
+        })
+      }
+      if (!verifyTotp(decryptSecret(user.totpSecret), input.otp)) {
+        throw new AppError(HttpStatus.UNAUTHORIZED, ERROR_CODES.OTP_REQUIRED, 'That code is not right — check your authenticator app', {
+          otp: 'That code is not right or has expired',
+        })
+      }
     }
     await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } })
     return { user, tokens: await this.issueTokens(user) }

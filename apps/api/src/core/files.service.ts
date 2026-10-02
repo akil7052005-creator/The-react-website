@@ -58,7 +58,8 @@ export class FilesService {
     if (!type || !rules.mimes.includes(type.mime)) {
       throw fileInvalid(`${file.originalname} is not a supported file — upload ${rules.label}`, field)
     }
-    await this.usage.assertStorage(studioId, file.size)
+    // A read-only (expired) studio can still update its logo and write to support.
+    await this.usage.assertStorage(studioId, file.size, kind === 'PHOTO' || kind === 'BANNER')
     return { type, checksum: sha256(file.buffer) }
   }
 

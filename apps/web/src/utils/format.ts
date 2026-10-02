@@ -42,9 +42,9 @@ export const formatBytes = (bytes: number) => {
 // Maps any status label to a colour tone used by <StatusPill>.
 const tones: Record<string, string[]> = {
   success: ['Delivered', 'Completed', 'Published', 'Paid', 'Live', 'Active', 'Resolved', 'Read', 'Rewarded', 'Sent', 'Success'],
-  warning: ['Awaiting Selection', 'Pending', 'In Review', 'Processing', 'Scheduled', 'Medium'],
-  info: ['Upcoming', 'In Progress', 'Open'],
-  danger: ['Overdue', 'Failed', 'High', 'Expired', 'Cancelled'],
+  warning: ['Awaiting Selection', 'Pending', 'In Review', 'Processing', 'Scheduled', 'Medium', 'Expiring soon', 'Grace period'],
+  info: ['Upcoming', 'In Progress', 'Open', 'Trial'],
+  danger: ['Overdue', 'Failed', 'High', 'Expired', 'Cancelled', 'Payment failed'],
 }
 
 export function statusTone(status: string) {

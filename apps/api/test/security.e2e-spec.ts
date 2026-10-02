@@ -36,6 +36,8 @@ describe('Security — auth on every route, tenant isolation, public tokens', ()
     const isPublic = (path: string) =>
       path.startsWith('/api/v1/public/') ||
       path === '/api/v1/health' ||
+      // Called by the payment gateway, authenticated by its HMAC signature instead of a session.
+      path === '/api/v1/webhooks/payments' ||
       ['/api/v1/auth/signup', '/api/v1/auth/login', '/api/v1/auth/refresh', '/api/v1/auth/logout', '/api/v1/auth/forgot-password', '/api/v1/auth/reset-password'].includes(path) ||
       path.startsWith('/api/docs')
     const failures: string[] = []

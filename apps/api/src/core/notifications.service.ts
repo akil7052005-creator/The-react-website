@@ -17,7 +17,7 @@ export class NotificationsService {
 
   async notify(studioId: string, n: NewNotification, db: Tx | PrismaService = this.prisma) {
     await db.notification.create({
-      data: { studioId, type: n.type, title: n.title, body: n.body, link: n.link, icon: n.icon ?? 'bell' },
+      data: { studioId, type: n.type, title: n.title, body: n.body, link: n.link, icon: n.icon ?? 'bell', sentAt: new Date() },
     })
   }
 

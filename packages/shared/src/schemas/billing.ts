@@ -83,6 +83,13 @@ export type RecordPaymentInput = z.input<typeof recordPaymentSchema>
 export const changePlanSchema = z.object({
   planCode: z.enum(PLAN_CODES, { error: 'Select a plan' }),
   cycle: z.enum(BILLING_CYCLES),
+  couponCode: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .max(40)
+    .optional()
+    .transform((v) => v || undefined),
 })
 export type ChangePlanInput = z.input<typeof changePlanSchema>
 

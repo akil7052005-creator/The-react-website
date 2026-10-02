@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import welcomePhoto from '../assets/wedding-photo.jpg'
 import { useMe } from '../auth/AuthProvider'
 import { EventModal } from '../components/EventModal'
+import { PlanBanner } from '../components/PlanBanner'
 import { ErrorState, PageHeader, StatCard, StatSkeletonRow } from '../components/ui'
 import { api } from '../lib/api'
 import { formatNumber } from '../utils/format'
@@ -55,6 +56,8 @@ function Dashboard() {
           </Link>
         }
       />
+
+      <PlanBanner always />
 
       {q.isPending ? (
         <StatSkeletonRow count={3} />

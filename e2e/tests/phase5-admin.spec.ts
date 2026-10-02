@@ -33,7 +33,9 @@ test('an admin answers a studio ticket from the support inbox', async ({ page, b
   await page.getByRole('textbox', { name: 'Email' }).fill(ADMIN.email)
   await page.getByRole('textbox', { name: 'Password', exact: true }).fill(ADMIN.password)
   await page.getByRole('button', { name: 'Log in' }).click()
-  await expect(page).toHaveURL(/\/admin\/tickets/)
+  await expect(page).toHaveURL(/\/admin$/)
+  await expect(page.getByRole('heading', { name: 'Subscriptions dashboard' })).toBeVisible()
+  await page.goto('/admin/tickets')
   await expect(page.getByRole('heading', { name: 'Support inbox' })).toBeVisible()
 
   await page.getByRole('searchbox', { name: 'Search tickets' }).fill(subject)

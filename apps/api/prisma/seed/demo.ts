@@ -1,8 +1,16 @@
 import type { EventStatus, EventType, FileKind, PrismaClient } from '@prisma/client'
 import {
+  addCycle,
+  addDays,
+  addMonthsIst,
   computeInvoiceTotals,
+  computeStatus,
+  DEFAULT_ALERT_SETTINGS,
   financialYearStart,
   formatInvoiceNumber,
+  gstOn,
+  istParts,
+  platformInvoiceNumber,
   todayIST,
   WEBSITE_SECTION_KEYS,
 } from '@weddyzone/shared'
@@ -25,6 +33,13 @@ const today = todayIST()
 const dateOnly = (offsetDays: number) => new Date(new Date(`${today}T00:00:00.000Z`).getTime() + offsetDays * DAY)
 const ago = (days: number, hours = 0) => new Date(Date.now() - days * DAY - hours * 3_600_000)
 const token = () => randomBytes(18).toString('base64url')
+
+/** Weddyzone's own invoice numbers for the demo plan payments (same series the API uses). */
+async function nextPlatformInvoice(prisma: PrismaClient, at: Date): Promise<string> {
+  const fy = financialYearStart(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(at))
+  const row = await prisma.platformCounter.upsert({ where: { key: `invoice:${fy}` }, create: { key: `invoice:${fy}`, value: 1 }, update: { value: { increment: 1 } } })
+  return platformInvoiceNumber(fy, row.value)
+}
 
 interface Ctx {
   prisma: PrismaClient
@@ -115,25 +130,49 @@ export async function seedDemo(prisma: PrismaClient, uploadDirRaw: string, webAs
     data: { studioId: studio.id, name: 'Arjun Mehta', email: DEMO_EMAIL, phone: '+919876543210', passwordHash, role: 'OWNER', lastLoginAt: new Date() },
   })
 
-  const periodStart = ago(28)
-  const periodEnd = new Date(periodStart)
-  periodEnd.setUTCMonth(periodEnd.getUTCMonth() + 1)
-  await prisma.subscription.create({
-    data: { studioId: studio.id, planId: plans.PRO.id, cycle: 'MONTHLY', currentPeriodStart: periodStart, currentPeriodEnd: periodEnd },
+  // Pro monthly, paid three months running (GST on top), renewing in a couple of days.
+  const proGst = gstOn(plans.PRO.monthlyPrice!)
+  const anchorDay = istParts(ago(28 + 2 * 30)).day
+  let periodStart = ago(28 + 2 * 30)
+  const demoSub = await prisma.subscription.create({
+    data: {
+      studioId: studio.id,
+      planId: plans.PRO.id,
+      cycle: 'MONTHLY',
+      status: 'ACTIVE',
+      currentPeriodStart: periodStart,
+      currentPeriodEnd: addCycle(periodStart, 'MONTHLY', anchorDay),
+      anchorDay,
+      amountPaid: plans.PRO.monthlyPrice! + proGst,
+      gstAmount: proGst,
+    },
   })
-  for (let m = 3; m >= 1; m--) {
+  await prisma.subscriptionEvent.create({ data: { subscriptionId: demoSub.id, type: 'CREATED', toPlan: 'Pro', amount: plans.PRO.monthlyPrice! + proGst, createdAt: periodStart } })
+  for (let m = 0; m < 3; m++) {
+    const periodEnd = addCycle(periodStart, 'MONTHLY', anchorDay)
     await prisma.payment.create({
       data: {
         studioId: studio.id,
         purpose: 'SUBSCRIPTION',
         description: 'Pro plan · Monthly',
-        amount: plans.PRO.monthlyPrice!,
+        amount: plans.PRO.monthlyPrice! + proGst,
+        gst: proGst,
         status: 'SUCCESS',
         provider: 'mock',
         providerRef: `mock_${token()}`,
-        createdAt: ago(28 + (m - 1) * 30),
+        subscriptionId: demoSub.id,
+        planId: plans.PRO.id,
+        cycle: 'MONTHLY',
+        periodStart,
+        periodEnd,
+        invoiceNumber: await nextPlatformInvoice(prisma, periodStart),
+        paidAt: periodStart,
+        createdAt: periodStart,
       },
     })
+    if (m > 0) await prisma.subscriptionEvent.create({ data: { subscriptionId: demoSub.id, type: 'RENEWED', fromPlan: 'Pro', toPlan: 'Pro', amount: plans.PRO.monthlyPrice! + proGst, createdAt: periodStart } })
+    await prisma.subscription.update({ where: { id: demoSub.id }, data: { currentPeriodStart: periodStart, currentPeriodEnd: periodEnd } })
+    periodStart = periodEnd
   }
 
   // --- Clients & events --------------------------------------------------------
@@ -451,23 +490,71 @@ export async function seedDemo(prisma: PrismaClient, uploadDirRaw: string, webAs
   }
 
   // --- Referrals & wallet ---------------------------------------------------------------
-  const referred: [string, number, boolean][] = [
-    ['Lens & Light Studio', 12, true],
-    ['Moments by Kiran', 28, true],
-    ['Frame Tales', 34, false],
-    ['Candid Clicks', 50, true],
+  // Referred studios double as the platform admin's demo subscriptions, one in each state:
+  // expiring soon, in grace, trial and expired (read-only).
+  const referred: [string, number, boolean, string, { plan: 'PRO' | 'STUDIO' | 'STARTER'; cycle: 'MONTHLY' | 'YEARLY'; endInDays: number }][] = [
+    ['Lens & Light Studio', 12, true, '9840011223', { plan: 'PRO', cycle: 'MONTHLY', endInDays: 2 }],
+    ['Moments by Kiran', 28, true, '9845022334', { plan: 'STUDIO', cycle: 'YEARLY', endInDays: -1 }],
+    ['Frame Tales', 34, false, '9876033445', { plan: 'STARTER', cycle: 'MONTHLY', endInDays: 5 }],
+    ['Candid Clicks', 50, true, '9900044556', { plan: 'PRO', cycle: 'MONTHLY', endInDays: -10 }],
   ]
   let wallet = 0
-  for (const [name, days, rewarded] of referred) {
+  for (const [name, days, rewarded, phone, plan] of referred) {
     const s = await prisma.studio.create({
-      data: { name, slug: name.toLowerCase().replace(/[^a-z]+/g, '-'), referralCode: name.replace(/[^A-Za-z]/g, '').slice(0, 6).toUpperCase() + '11', createdAt: ago(days) },
+      data: { name, slug: name.toLowerCase().replace(/[^a-z]+/g, '-'), phone: `+91${phone}`, referralCode: name.replace(/[^A-Za-z]/g, '').slice(0, 6).toUpperCase() + '11', createdAt: ago(days) },
     })
     await prisma.user.create({
-      data: { studioId: s.id, name: `${name} Owner`, email: `owner@${s.slug}.example.com`, passwordHash: await bcrypt.hash(randomBytes(12).toString('hex'), 4), role: 'OWNER' },
+      data: { studioId: s.id, name: `${name} Owner`, email: `owner@${s.slug}.example.com`, phone: `+91${phone}`, passwordHash: await bcrypt.hash(randomBytes(12).toString('hex'), 4), role: 'OWNER' },
     })
-    await prisma.subscription.create({
-      data: { studioId: s.id, planId: rewarded ? plans.PRO.id : plans.STARTER.id, isTrial: !rewarded, currentPeriodStart: ago(days), currentPeriodEnd: new Date(ago(days).getTime() + 30 * DAY) },
+    const p = plans[plan.plan]
+    const trial = !rewarded
+    const end = addDays(new Date(), plan.endInDays)
+    const start = trial ? addDays(end, -30) : addMonthsIst(end, plan.cycle === 'YEARLY' ? -12 : -1)
+    const base = plan.cycle === 'YEARLY' ? p.yearlyPrice : p.monthlyPrice!
+    const sub = await prisma.subscription.create({
+      data: {
+        studioId: s.id,
+        planId: p.id,
+        cycle: plan.cycle,
+        isTrial: trial,
+        status: computeStatus(
+          { status: 'ACTIVE', isTrial: trial, startDate: start, endDate: end, graceEndsAt: null, cancelAtPeriodEnd: false, autoRenew: false, gatewaySubscriptionId: null, lastPaymentFailedAt: null },
+          new Date(),
+          DEFAULT_ALERT_SETTINGS,
+        ),
+        currentPeriodStart: start,
+        currentPeriodEnd: end,
+        graceEndsAt: plan.endInDays < 0 ? addDays(end, DEFAULT_ALERT_SETTINGS.graceDays) : null,
+        anchorDay: trial ? null : istParts(start).day,
+        amountPaid: trial ? 0 : base + gstOn(base),
+        gstAmount: trial ? 0 : gstOn(base),
+      },
     })
+    await prisma.subscriptionEvent.create({ data: { subscriptionId: sub.id, type: 'CREATED', toPlan: trial ? `${p.name} (trial)` : p.name, amount: trial ? null : base + gstOn(base), createdAt: start } })
+    if (!trial) {
+      await prisma.payment.create({
+        data: {
+          studioId: s.id,
+          purpose: 'SUBSCRIPTION',
+          description: `${p.name} plan · ${plan.cycle === 'YEARLY' ? 'Yearly' : 'Monthly'}`,
+          amount: base + gstOn(base),
+          gst: gstOn(base),
+          status: 'SUCCESS',
+          provider: 'mock',
+          subscriptionId: sub.id,
+          planId: p.id,
+          cycle: plan.cycle,
+          periodStart: start,
+          periodEnd: end,
+          invoiceNumber: await nextPlatformInvoice(prisma, start),
+          paidAt: start,
+          createdAt: start,
+        },
+      })
+    }
+    if (plan.endInDays < -DEFAULT_ALERT_SETTINGS.graceDays) {
+      await prisma.subscriptionEvent.create({ data: { subscriptionId: sub.id, type: 'EXPIRED', fromPlan: p.name, note: 'Grace period ended; studio is read-only', createdAt: addDays(end, DEFAULT_ALERT_SETTINGS.graceDays) } })
+    }
     await prisma.websiteSettings.create({ data: { studioId: s.id, sections: WEBSITE_SECTION_KEYS.map((key) => ({ key, on: key !== 'blog' })) } })
     const ref = await prisma.referral.create({
       data: { referrerStudioId: studio.id, referredStudioId: s.id, rewardAmount: 150_000, status: rewarded ? 'REWARDED' : 'PENDING', rewardedAt: rewarded ? ago(days - 2) : null, createdAt: ago(days) },

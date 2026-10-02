@@ -107,3 +107,19 @@ Choices made where the build brief was ambiguous or where the environment forced
 | **Smaller photo counts than the mock** (20–36 per selection instead of 320–1,240) | Keeps the seed fast and the repo light; names, statuses, codes and relationships mirror the mock. |
 | **Face-recognition mock content** (face events, "Face AI" ticket/activity/messages) is not seeded | Out of scope for v1. |
 | **Demo login**: `hello@goldenhour.studio` / `Golden@2026`; admin `admin@weddyzone.app` / `Admin@2026` | Printed by the seed; change or remove in production with `SEED_DEMO=false`. |
+
+## Subscriptions & alerts
+
+| Decision | Why |
+| --- | --- |
+| **Extended the existing Subscription/Payment/Notification models** instead of new ones | `cycle` = billing cycle, `currentPeriodStart/End` = start date / deadline. Added grace, auto-renew, amounts, gateway ids, invoice numbers, recipient/channel/dedupe key. |
+| **Status is computed, then stored** (`computeStatus` in `@weddyzone/shared`) | Reads (access checks, admin lists) recompute from the dates, so a studio is never locked out or let in because the hourly job hasn't run yet. The job saves it for filtering and sends the alerts. |
+| **All calendar maths in IST**, stored in UTC; months clamp to the month's last day and return to the anchor day (31 Jan → 28 Feb → 31 Mar) | "Days left" counts IST calendar days, so a reminder never fires twice or is skipped around midnight. |
+| **After downtime only the most urgent reminder is sent** (T-3 at 2 days left, not T-7 too) | No burst of stale messages. Exactly-once comes from the unique dedupe key, not timing. |
+| **Studio cancellation = cancel at period end; then CANCELLED (read-only), no grace** | Replaces the old "fall back to Starter" behaviour: the brief makes ended plans read-only. Admin cancel is immediate. |
+| **Plan prices exclude GST; checkout charges 18% on top** | As the pricing pages say. Pro yearly = ₹24,990 + ₹4,498.20 = ₹29,488.20. |
+| **Renewing the same plan early continues from the current deadline** | Paying a week early loses no days. Changing plan starts a fresh period from now (no proration, as before). |
+| **Admin alerts are one shared feed** (no per-admin read state) | Small team; any admin clearing an alert clears it for all. |
+| **Webhook path is `/api/v1/webhooks/payments`, admin API under `/api/v1/admin/*`** | Same `/api/v1` prefix as every other route. |
+| **Auto-renew without a gateway mandate doesn't suppress reminders** | Only a gateway subscription can actually charge; in test mode the job simulates the renewal webhook at the deadline. |
+| **Two-factor sign-in is optional TOTP** (no new dependency), secrets AES-GCM encrypted | Works with any authenticator app. |

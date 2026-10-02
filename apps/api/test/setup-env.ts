@@ -10,3 +10,6 @@ process.env.RATE_LIMIT_PUBLIC_PER_MIN = process.env.TEST_RATE_LIMIT ?? '10000'
 process.env.SMTP_HOST = ''
 process.env.JWT_ACCESS_SECRET ??= 'test-access-secret-test-access-secret-123'
 process.env.JWT_REFRESH_SECRET ??= 'test-refresh-secret-test-refresh-secret-12'
+// Payment webhooks are signed with this in the tests; the hourly job is run by hand, never on a timer.
+process.env.PAYMENT_WEBHOOK_SECRET ??= 'test-webhook-secret'
+process.env.JOBS_ENABLED = 'false'

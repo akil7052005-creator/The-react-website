@@ -1,11 +1,24 @@
 import { Injectable } from '@nestjs/common'
 import type { UsageItem } from '@weddyzone/shared'
-import { planLimit } from '../common/errors'
+import { HttpStatus } from '@nestjs/common'
+import { ERROR_CODES } from '@weddyzone/shared'
+import { AppError, planLimit } from '../common/errors'
 import { startOfMonthUtc } from '../common/util'
 import { PrismaService, type Tx } from '../prisma/prisma.service'
 import { PlansService } from './plans.service'
 
 const GB = 1024 ** 3
+
+export const subscriptionReadOnly = (planName: string, status: string) =>
+  new AppError(
+    HttpStatus.PAYMENT_REQUIRED,
+    ERROR_CODES.SUBSCRIPTION_READ_ONLY,
+    status === 'CANCELLED'
+      ? `Your ${planName} plan has ended, so your studio is read-only. Choose a plan to add new events and uploads.`
+      : `Your ${planName} plan has expired, so your studio is read-only. Renew to add new events and uploads.`,
+    undefined,
+    { status, renewLink: '/subscriptions' },
+  )
 
 /** Checks plan quotas (events, albums, storage, credits) before anything is created. */
 @Injectable()
@@ -60,8 +73,18 @@ export class UsageService {
     ]
   }
 
+  /**
+   * Expired and cancelled studios are read-only: no new events, albums or photo uploads. Nothing is
+   * deleted, and their clients can still open delivered albums and selections.
+   */
+  async assertWritable(studioId: string, db: Tx | PrismaService = this.prisma) {
+    const eff = await this.plans.effective(studioId, db)
+    if (eff.readOnly) throw subscriptionReadOnly(eff.plan.name, eff.status)
+    return eff
+  }
+
   async assertCanCreateEvent(studioId: string, db: Tx | PrismaService = this.prisma) {
-    const { plan } = await this.plans.effective(studioId, db)
+    const { plan } = await this.assertWritable(studioId, db)
     const limit = this.plans.limits(plan).eventsPerMonth
     if (limit === null) return
     const { eventsThisMonth } = await this.counts(studioId, db)
@@ -76,7 +99,7 @@ export class UsageService {
   }
 
   async assertCanCreateAlbum(studioId: string, db: Tx | PrismaService = this.prisma) {
-    const { plan } = await this.plans.effective(studioId, db)
+    const { plan } = await this.assertWritable(studioId, db)
     const limit = this.plans.limits(plan).albums
     if (limit === null) return
     const { albums } = await this.counts(studioId, db)
@@ -90,8 +113,9 @@ export class UsageService {
     }
   }
 
-  async assertStorage(studioId: string, addBytes: number) {
-    const { plan } = await this.plans.effective(studioId)
+  /** `writes`: photo and banner uploads are blocked when read-only; logos and support attachments are not. */
+  async assertStorage(studioId: string, addBytes: number, writes = true) {
+    const { plan } = writes ? await this.assertWritable(studioId) : await this.plans.effective(studioId)
     const limitGb = this.plans.limits(plan).storageGb
     if (limitGb === null) return
     const { storageBytes } = await this.counts(studioId)

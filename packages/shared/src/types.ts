@@ -21,6 +21,7 @@ import type {
 } from './enums'
 import type { PlanLimits } from './schemas/billing'
 import type { SupplyType } from './gst'
+import type { AlertSettings, CancelReason, SubscriptionEventType, SubscriptionStatus } from './subscriptions'
 
 export interface ApiErrorBody {
   error: {
@@ -244,12 +245,33 @@ export interface AdminPlanDto extends PlanDto {
 export interface SubscriptionDto {
   plan: PlanDto
   cycle: BillingCycle
-  status: 'ACTIVE' | 'CANCELLED'
+  status: SubscriptionStatus
   isTrial: boolean
   currentPeriodStart: string
+  /** The deadline. */
   currentPeriodEnd: string
+  /** When a plan in grace turns read-only (set once the deadline passes). */
+  graceEndsAt: string | null
   cancelAtPeriodEnd: boolean
+  autoRenew: boolean
+  /** IST calendar days until the deadline (0 on the day, negative after). */
+  daysLeft: number
+  /** Expired or cancelled: the studio can view everything but not create events, albums or uploads. */
+  readOnly: boolean
   pricePaise: number
+}
+
+/** GET /me/subscription — just enough for the dashboard banner. */
+export interface MySubscriptionBannerDto {
+  planName: string
+  planCode: PlanCode
+  status: SubscriptionStatus
+  endDate: string
+  graceEndsAt: string | null
+  daysLeft: number
+  readOnly: boolean
+  autoRenew: boolean
+  renewLink: string
 }
 
 export interface UsageItem {
@@ -264,10 +286,31 @@ export interface PaymentDto {
   id: string
   purpose: 'SUBSCRIPTION' | 'CREDIT_PACK'
   description: string
+  /** Total charged, GST included. */
   amountPaise: number
+  gstPaise: number
   status: 'SUCCESS' | 'FAILED' | 'PENDING'
   provider: string
+  invoiceNumber: string | null
+  paidAt: string | null
   createdAt: string
+}
+
+/** Tax invoice Weddyzone issues to a studio for a plan payment. */
+export interface PlatformInvoiceDto {
+  number: string
+  date: string
+  seller: { name: string; gstin: string | null; address: string | null; stateCode: string | null }
+  buyer: { name: string; gstin: string | null; address: string | null; stateCode: string | null; email: string | null }
+  description: string
+  sac: string
+  taxablePaise: number
+  cgstPaise: number
+  sgstPaise: number
+  igstPaise: number
+  totalPaise: number
+  totalInWords: string
+  paymentRef: string | null
 }
 
 export interface CheckoutResultDto {
@@ -534,4 +577,106 @@ export interface DashboardDto {
   pipeline: { name: string; progress: number; link: string }[]
   recentAlbums: AlbumDto[]
   activeBanner: BannerDto | null
+}
+
+// ------------------------------------------------------------------ platform admin: subscriptions
+
+export interface AdminSubscriptionRowDto {
+  id: string
+  studio: { id: string; name: string; slug: string }
+  owner: { name: string; email: string; phone: string | null }
+  plan: { id: string; code: PlanCode; name: string }
+  cycle: BillingCycle
+  /** Last amount paid for this subscription, GST included. */
+  amountPaise: number
+  startDate: string
+  endDate: string
+  graceEndsAt: string | null
+  daysLeft: number
+  tone: 'green' | 'amber' | 'red' | 'grey'
+  status: SubscriptionStatus
+  isTrial: boolean
+  autoRenew: boolean
+  cancelAtPeriodEnd: boolean
+  createdAt: string
+}
+
+export interface SubscriptionEventDto {
+  id: string
+  type: SubscriptionEventType
+  fromPlan: string | null
+  toPlan: string | null
+  amountPaise: number | null
+  actorName: string | null
+  note: string | null
+  createdAt: string
+}
+
+export interface SentNotificationDto {
+  id: string
+  recipientType: 'ADMIN' | 'STUDIO'
+  channel: 'IN_APP' | 'EMAIL' | 'WHATSAPP'
+  type: string
+  title: string
+  message: string
+  sentAt: string | null
+  error: string | null
+  createdAt: string
+}
+
+export interface AdminSubscriptionDetailDto extends AdminSubscriptionRowDto {
+  studioProfile: {
+    city: string | null
+    stateCode: string | null
+    gstin: string | null
+    email: string | null
+    phone: string | null
+    createdAt: string
+  }
+  gatewaySubscriptionId: string | null
+  cancelReason: CancelReason | null
+  cancelDetails: string | null
+  usage: UsageItem[]
+  events: SubscriptionEventDto[]
+  payments: PaymentDto[]
+  notifications: SentNotificationDto[]
+}
+
+export interface AdminStatsDto {
+  activeByPlan: { code: PlanCode; name: string; count: number }[]
+  trials: number
+  mrrPaise: number
+  arrPaise: number
+  newThisMonth: number
+  expiringIn7Days: number
+  expiredThisMonth: number
+  failedPayments: number
+  inGrace: number
+  /** Last 12 months, oldest first; month is YYYY-MM. */
+  mrrTrend: { month: string; mrrPaise: number }[]
+  newVsChurned: { month: string; new: number; churned: number }[]
+  cancelReasons: { reason: CancelReason; count: number }[]
+}
+
+export interface AdminNotificationDto {
+  id: string
+  type: string
+  title: string
+  message: string
+  link: string | null
+  readAt: string | null
+  createdAt: string
+}
+
+export interface AdminAlertSettingsDto extends AlertSettings {
+  updatedAt: string | null
+}
+
+export interface TwoFactorStatusDto {
+  enabled: boolean
+}
+
+export interface TwoFactorSetupDto {
+  secret: string
+  otpauthUrl: string
 }

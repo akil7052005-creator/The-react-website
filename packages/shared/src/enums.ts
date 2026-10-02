@@ -158,6 +158,18 @@ export const NOTIFICATION_TYPES = [
   'PLAN_CHANGED',
   'CREDITS_ADDED',
   'EVENT_CREATED',
+  // Subscription lifecycle (studio and platform-admin alerts)
+  'SUBSCRIPTION_PURCHASED',
+  'SUBSCRIPTION_RENEWED',
+  'SUBSCRIPTION_REMINDER',
+  'SUBSCRIPTION_GRACE',
+  'SUBSCRIPTION_EXPIRED',
+  'SUBSCRIPTION_CANCELLED',
+  'SUBSCRIPTION_CHANGED',
+  'PAYMENT_FAILED',
+  'USAGE_HIGH',
+  'WINBACK_COUPON',
+  'ADMIN_DIGEST',
 ] as const
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number]
 

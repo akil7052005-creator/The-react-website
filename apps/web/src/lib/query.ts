@@ -27,6 +27,12 @@ function dispatchGlobal(e: unknown): boolean {
 export function toastError(e: unknown, fallback = 'Something went wrong. Please try again.') {
   if (dispatchGlobal(e)) return
   if (isApiError(e) && (e.code === 'UNAUTHENTICATED' || e.code === 'TOKEN_EXPIRED')) return
+  if (isApiError(e) && e.code === 'SUBSCRIPTION_READ_ONLY') {
+    // Expired studios are read-only: say so, with a way out.
+    const link = typeof e.details?.renewLink === 'string' ? e.details.renewLink : '/subscriptions'
+    toast.error(e.message, { id: 'read-only', action: { label: 'Renew', onClick: () => window.location.assign(link) } })
+    return
+  }
   toast.error(e instanceof Error && e.message ? e.message : fallback)
 }
 

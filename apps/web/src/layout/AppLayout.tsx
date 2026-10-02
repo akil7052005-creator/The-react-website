@@ -1,5 +1,6 @@
 import { Suspense, useState } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
+import { PlanBanner } from '../components/PlanBanner'
 import Sidebar from '../components/Sidebar'
 import Topbar from '../components/Topbar'
 import { GlobalDialogs } from '../components/GlobalDialogs'
@@ -8,6 +9,9 @@ import { PageSkeleton } from '../components/ui'
 function AppLayout() {
   // Controls the slide-in sidebar on phones/tablets.
   const [navOpen, setNavOpen] = useState(false)
+  // The dashboard and My Subscription show the plan banner themselves (always, not just when urgent).
+  const { pathname } = useLocation()
+  const ownBanner = pathname === '/' || pathname === '/my-subscription'
 
   return (
     <div className={`app ${navOpen ? 'nav-open' : ''}`}>
@@ -16,6 +20,11 @@ function AppLayout() {
       <div className="main">
         <Topbar onMenu={() => setNavOpen(true)} />
         <main className="content">
+          {!ownBanner && (
+            <div style={{ marginBottom: 16 }}>
+              <PlanBanner />
+            </div>
+          )}
           <Suspense fallback={<PageSkeleton />}>
             <Outlet />
           </Suspense>

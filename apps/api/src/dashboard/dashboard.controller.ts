@@ -85,7 +85,7 @@ export class DashboardController {
           orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
         }),
         this.prisma.event.findMany({ where: live, include: { client: true }, orderBy: { createdAt: 'desc' }, take: 6 }),
-        this.prisma.notification.findMany({ where: { studioId }, orderBy: { createdAt: 'desc' }, take: 5 }),
+        this.prisma.notification.findMany({ where: { studioId, channel: 'IN_APP' }, orderBy: { createdAt: 'desc' }, take: 5 }),
         this.prisma.event.findMany({ where: { ...live, date: { gte: chartStart, lt: chartEnd } }, select: { date: true } }),
         this.prisma.selection.findMany({
           where: { ...live, status: { not: 'SUBMITTED' }, deadline: { gte: toDate(today) } },

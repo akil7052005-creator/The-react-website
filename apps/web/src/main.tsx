@@ -1,13 +1,14 @@
 import { lazy, StrictMode, Suspense, type ComponentType } from 'react'
 import { createRoot } from 'react-dom/client'
 import { QueryClientProvider } from '@tanstack/react-query'
-import { createBrowserRouter, Navigate, Outlet, RouterProvider, type RouteObject } from 'react-router-dom'
+import { createBrowserRouter, Outlet, RouterProvider, type RouteObject } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import './index.css'
 import './additions.css'
 import './styles/client-pages.css'
 import './styles/billing.css'
 import './styles/business.css'
+import './styles/admin.css'
 import { queryClient } from './lib/query'
 import { features } from './lib/env'
 import { RedirectIfAuthed, RequireAdmin, RequireAuth } from './auth/AuthProvider'
@@ -48,6 +49,12 @@ const PublicSite = page(() => import('./pages/public/PublicSite'))
 const AdminTickets = page(() => import('./pages/admin/AdminTickets'))
 const AdminFaqs = page(() => import('./pages/admin/AdminFaqs'))
 const AdminPlans = page(() => import('./pages/admin/AdminPlans'))
+const AdminDashboard = page(() => import('./pages/admin/AdminDashboard'))
+const AdminSubscriptions = page(() => import('./pages/admin/AdminSubscriptions'))
+const AdminSubscriptionDetail = page(() => import('./pages/admin/AdminSubscriptionDetail'))
+const AdminAlerts = page(() => import('./pages/admin/AdminAlerts'))
+const AdminSettings = page(() => import('./pages/admin/AdminSettings'))
+const PlanInvoice = page(() => import('./pages/PlanInvoice'))
 
 // Root element: things every route needs (confirm dialogs use the router for "leave page?" prompts).
 function Root() {
@@ -97,6 +104,14 @@ const router = createBrowserRouter([
       { path: '/a/:token', element: <PublicAlbum /> },
       { path: '/w/:slug', element: <PublicSite /> },
       {
+        path: '/my-subscription/invoices/:id',
+        element: (
+          <RequireAuth>
+            <PlanInvoice />
+          </RequireAuth>
+        ),
+      },
+      {
         path: '/invoices/:id/print',
         element: (
           <RequireAuth>
@@ -113,7 +128,11 @@ const router = createBrowserRouter([
           </RequireAdmin>
         ),
         children: [
-          { index: true, element: <Navigate to="/admin/tickets" replace /> },
+          { index: true, element: <AdminDashboard /> },
+          { path: 'subscriptions', element: <AdminSubscriptions /> },
+          { path: 'subscriptions/:id', element: <AdminSubscriptionDetail /> },
+          { path: 'alerts', element: <AdminAlerts /> },
+          { path: 'settings', element: <AdminSettings /> },
           { path: 'tickets', element: <AdminTickets /> },
           { path: 'help', element: <AdminFaqs /> },
           { path: 'plans', element: <AdminPlans /> },

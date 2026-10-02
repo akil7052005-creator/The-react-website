@@ -65,8 +65,47 @@ enum BillingCycle {
 }
 
 enum SubscriptionStatus {
+  TRIAL
   ACTIVE
+  EXPIRING_SOON
+  GRACE
+  EXPIRED
   CANCELLED
+  PAYMENT_FAILED
+}
+
+enum SubscriptionEventType {
+  CREATED
+  RENEWED
+  UPGRADED
+  DOWNGRADED
+  CANCELLED
+  EXPIRED
+  GRACE_STARTED
+  PAYMENT_FAILED
+  EXTENDED_BY_ADMIN
+  PLAN_CHANGED_BY_ADMIN
+  AUTO_RENEW_CHANGED
+}
+
+enum CancelReason {
+  TOO_EXPENSIVE
+  NOT_ENOUGH_WORK
+  MISSING_FEATURES
+  SWITCHING_TOOL
+  TECHNICAL_ISSUES
+  OTHER
+}
+
+enum NotificationRecipient {
+  ADMIN
+  STUDIO
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  WHATSAPP
 }
 
 enum PaymentPurpose {
@@ -201,23 +240,27 @@ model Studio {
 }
 
 model User {
-  id           String    @id @default(uuid()) @db.Uuid
-  studioId     String?   @map("studio_id") @db.Uuid
-  name         String
-  email        String    @unique
-  phone        String?
-  passwordHash String    @map("password_hash")
-  role         UserRole  @default(OWNER)
-  lastLoginAt  DateTime? @map("last_login_at")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
+  id            String    @id @default(uuid()) @db.Uuid
+  studioId      String?   @map("studio_id") @db.Uuid
+  name          String
+  email         String    @unique
+  phone         String?
+  passwordHash  String    @map("password_hash")
+  role          UserRole  @default(OWNER)
+  lastLoginAt   DateTime? @map("last_login_at")
+  // Two-factor sign-in (platform admins): TOTP secret, encrypted; on when totpEnabledAt is set.
+  totpSecret    String?   @map("totp_secret")
+  totpEnabledAt DateTime? @map("totp_enabled_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
 
-  studio         Studio?         @relation(fields: [studioId], references: [id])
-  refreshTokens  RefreshToken[]
-  passwordResets PasswordReset[]
-  faqVotes       FaqFeedback[]
-  ticketMessages TicketMessage[]
-  adminActions   AdminAuditLog[]
+  studio             Studio?             @relation(fields: [studioId], references: [id])
+  refreshTokens      RefreshToken[]
+  passwordResets     PasswordReset[]
+  faqVotes           FaqFeedback[]
+  ticketMessages     TicketMessage[]
+  adminActions       AdminAuditLog[]
+  subscriptionEvents SubscriptionEvent[]
 
   @@index([studioId])
   @@map("users")
@@ -512,46 +555,149 @@ model Plan {
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   subscriptions Subscription[]
+  payments      Payment[]
 
   @@map("plans")
 }
 
+/// One per studio. `cycle` is the billing cycle; currentPeriodStart/End are the start date and the
+/// deadline. `status` is saved by the hourly job and admin actions; reads recompute it from the
+/// dates (computeStatus in @weddyzone/shared), so access never depends on when the job last ran.
 model Subscription {
-  id                 String             @id @default(uuid()) @db.Uuid
-  studioId           String             @unique @map("studio_id") @db.Uuid
-  planId             String             @map("plan_id") @db.Uuid
-  cycle              BillingCycle       @default(MONTHLY)
-  status             SubscriptionStatus @default(ACTIVE)
-  isTrial            Boolean            @default(false) @map("is_trial")
-  currentPeriodStart DateTime           @map("current_period_start")
-  currentPeriodEnd   DateTime           @map("current_period_end")
-  cancelAtPeriodEnd  Boolean            @default(false) @map("cancel_at_period_end")
-  cancelledAt        DateTime?          @map("cancelled_at")
-  createdAt          DateTime           @default(now()) @map("created_at")
-  updatedAt          DateTime           @updatedAt @map("updated_at")
+  id                    String             @id @default(uuid()) @db.Uuid
+  studioId              String             @unique @map("studio_id") @db.Uuid
+  planId                String             @map("plan_id") @db.Uuid
+  cycle                 BillingCycle       @default(MONTHLY)
+  status                SubscriptionStatus @default(ACTIVE)
+  isTrial               Boolean            @default(false) @map("is_trial")
+  currentPeriodStart    DateTime           @map("current_period_start")
+  currentPeriodEnd      DateTime           @map("current_period_end")
+  // Set when the deadline passes: full access until then, read-only after.
+  graceEndsAt           DateTime?          @map("grace_ends_at")
+  // Day of the month (IST) the paid plan started on, so renewals return to it after short months.
+  anchorDay             Int?               @map("anchor_day")
+  autoRenew             Boolean            @default(false) @map("auto_renew")
+  gatewaySubscriptionId String?            @unique @map("gateway_subscription_id")
+  // Last payment for this subscription (GST included) and the GST part of it.
+  amountPaid            Int                @default(0) @map("amount_paid")
+  gstAmount             Int                @default(0) @map("gst_amount")
+  lastPaymentFailedAt   DateTime?          @map("last_payment_failed_at")
+  cancelAtPeriodEnd     Boolean            @default(false) @map("cancel_at_period_end")
+  cancelledAt           DateTime?          @map("cancelled_at")
+  cancelReason          CancelReason?      @map("cancel_reason")
+  cancelDetails         String?            @map("cancel_details")
+  createdAt             DateTime           @default(now()) @map("created_at")
+  updatedAt             DateTime           @updatedAt @map("updated_at")
 
-  studio Studio @relation(fields: [studioId], references: [id])
-  plan   Plan   @relation(fields: [planId], references: [id])
+  studio        Studio              @relation(fields: [studioId], references: [id])
+  plan          Plan                @relation(fields: [planId], references: [id])
+  events        SubscriptionEvent[]
+  payments      Payment[]
+  notifications Notification[]
+  coupons       Coupon[]
 
+  @@index([currentPeriodEnd])
+  @@index([status, currentPeriodEnd])
   @@map("subscriptions")
 }
 
-model Payment {
-  id          String         @id @default(uuid()) @db.Uuid
-  studioId    String         @map("studio_id") @db.Uuid
-  purpose     PaymentPurpose
-  description String
-  amount      Int
-  status      PaymentStatus
-  provider    String
-  providerRef String?        @map("provider_ref")
-  meta        Json?
-  createdAt   DateTime       @default(now()) @map("created_at")
+/// Audit trail of a subscription: purchases, renewals, plan changes, expiry and admin actions.
+model SubscriptionEvent {
+  id             String                @id @default(uuid()) @db.Uuid
+  subscriptionId String                @map("subscription_id") @db.Uuid
+  type           SubscriptionEventType
+  fromPlan       String?               @map("from_plan")
+  toPlan         String?               @map("to_plan")
+  amount         Int?
+  // Null when the system did it (webhook, hourly job).
+  actorId        String?               @map("actor_id") @db.Uuid
+  note           String?
+  createdAt      DateTime              @default(now()) @map("created_at")
 
-  studio Studio @relation(fields: [studioId], references: [id])
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  actor        User?        @relation(fields: [actorId], references: [id])
+
+  @@index([subscriptionId, createdAt])
+  @@index([type, createdAt])
+  @@map("subscription_events")
+}
+
+/// Platform settings edited by admins, e.g. `alerts` (reminder days, grace days, digest time).
+model PlatformSetting {
+  key         String   @id
+  value       Json
+  updatedById String?  @map("updated_by_id") @db.Uuid
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_settings")
+}
+
+/// Platform-wide sequences, e.g. `invoice:2026` for Weddyzone's own GST invoices to studios.
+model PlatformCounter {
+  key   String @id
+  value Int    @default(0)
+
+  @@map("platform_counters")
+}
+
+/// Payment-gateway webhook deliveries already handled. Gateways retry; this makes repeats no-ops.
+model WebhookEvent {
+  id         String   @id
+  provider   String
+  type       String
+  receivedAt DateTime @default(now()) @map("received_at")
+
+  @@map("webhook_events")
+}
+
+/// Discount codes, e.g. the win-back coupon sent some days after a plan expires.
+model Coupon {
+  id             String    @id @default(uuid()) @db.Uuid
+  code           String    @unique
+  subscriptionId String?   @map("subscription_id") @db.Uuid
+  percentOff     Int       @map("percent_off")
+  expiresAt      DateTime  @map("expires_at")
+  redeemedAt     DateTime? @map("redeemed_at")
+  paymentId      String?   @map("payment_id") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@map("coupons")
+}
+
+model Payment {
+  id               String         @id @default(uuid()) @db.Uuid
+  studioId         String         @map("studio_id") @db.Uuid
+  purpose          PaymentPurpose
+  description      String
+  // Total charged (GST included) and the GST part of it, in paise.
+  amount           Int
+  gst              Int            @default(0)
+  status           PaymentStatus
+  provider         String
+  providerRef      String?        @map("provider_ref")
+  meta             Json?
+  // Plan payments: what was bought and which period it pays for.
+  subscriptionId   String?        @map("subscription_id") @db.Uuid
+  planId           String?        @map("plan_id") @db.Uuid
+  cycle            BillingCycle?
+  periodStart      DateTime?      @map("period_start")
+  periodEnd        DateTime?      @map("period_end")
+  gatewayOrderId   String?        @unique @map("gateway_order_id")
+  gatewayPaymentId String?        @unique @map("gateway_payment_id")
+  invoiceNumber    String?        @unique @map("invoice_number")
+  failureReason    String?        @map("failure_reason")
+  paidAt           DateTime?      @map("paid_at")
+  createdAt        DateTime       @default(now()) @map("created_at")
+
+  studio       Studio        @relation(fields: [studioId], references: [id])
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id])
+  plan         Plan?         @relation(fields: [planId], references: [id])
 
   @@index([studioId, purpose])
   @@index([studioId, createdAt])
+  @@index([purpose, status, createdAt])
   @@map("payments")
 }
 
@@ -856,20 +1002,34 @@ model TicketMessage {
   @@map("ticket_messages")
 }
 
+/// In-app notifications (the bell) and a record of every email/WhatsApp alert sent.
+/// Studio rows have studioId; platform-admin rows have recipientType ADMIN and no studioId
+/// (one feed shared by all admins). `body` is the message.
 model Notification {
-  id        String    @id @default(uuid()) @db.Uuid
-  studioId  String    @map("studio_id") @db.Uuid
-  type      String
-  title     String
-  body      String
-  link      String?
-  icon      String    @default("bell")
-  readAt    DateTime? @map("read_at")
-  createdAt DateTime  @default(now()) @map("created_at")
+  id             String                @id @default(uuid()) @db.Uuid
+  recipientType  NotificationRecipient @default(STUDIO) @map("recipient_type")
+  studioId       String?               @map("studio_id") @db.Uuid
+  channel        NotificationChannel   @default(IN_APP)
+  type           String
+  title          String
+  body           String
+  link           String?
+  icon           String                @default("bell")
+  // The subscription an alert is about (its history on the admin detail page).
+  subscriptionId String?               @map("subscription_id") @db.Uuid
+  // Unique per alert, recipient and channel, e.g. "expiry:<sub>:<deadline>:T-7:STUDIO:EMAIL".
+  dedupeKey      String?               @unique @map("dedupe_key")
+  sentAt         DateTime?             @map("sent_at")
+  error          String?
+  readAt         DateTime?             @map("read_at")
+  createdAt      DateTime              @default(now()) @map("created_at")
 
-  studio Studio @relation(fields: [studioId], references: [id])
+  studio       Studio?       @relation(fields: [studioId], references: [id])
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
 
   @@index([studioId, readAt, createdAt])
+  @@index([recipientType, channel, readAt, createdAt])
+  @@index([subscriptionId, createdAt])
   @@map("notifications")
 }
 

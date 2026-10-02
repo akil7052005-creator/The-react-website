@@ -19,8 +19,8 @@ export class NotificationsController {
   @ApiQuery({ name: 'limit', required: false })
   async list(@StudioId() studioId: string, @Query(zod(z.object({ limit: z.coerce.number().int().min(1).max(50).default(10) }))) q: { limit: number }) {
     const [rows, unreadCount] = await Promise.all([
-      this.prisma.notification.findMany({ where: { studioId }, orderBy: { createdAt: 'desc' }, take: q.limit }),
-      this.prisma.notification.count({ where: { studioId, readAt: null } }),
+      this.prisma.notification.findMany({ where: { studioId, channel: 'IN_APP' }, orderBy: { createdAt: 'desc' }, take: q.limit }),
+      this.prisma.notification.count({ where: { studioId, channel: 'IN_APP', readAt: null } }),
     ])
     return { data: rows.map((n) => this.notifications.toDto(n)), unreadCount }
   }
@@ -28,7 +28,7 @@ export class NotificationsController {
   @Post('read-all')
   @HttpCode(200)
   async readAll(@StudioId() studioId: string) {
-    await this.prisma.notification.updateMany({ where: { studioId, readAt: null }, data: { readAt: new Date() } })
+    await this.prisma.notification.updateMany({ where: { studioId, channel: 'IN_APP', readAt: null }, data: { readAt: new Date() } })
     return { ok: true }
   }
 

@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, HttpCode, Injectable, Param, ParseUUIDPipe, Patch, Post, Query, Req, UploadedFile, UseInterceptors } from '@nestjs/common'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { ApiConsumes, ApiTags } from '@nestjs/swagger'
+import { Throttle } from '@nestjs/throttler'
 import type { Faq, Plan, Prisma, TicketStatus } from '@prisma/client'
 import {
   faqSchema,
@@ -24,6 +25,7 @@ import { AuthUser, CurrentUser, Roles, StudioId } from '../auth/auth.decorators'
 import { badRequest, notFound } from '../common/errors'
 import { nextSequence, paginate, skipTake } from '../common/util'
 import { ApiListQuery, ApiZodBody, zod } from '../common/zod'
+import { config } from '../config'
 import { AuditService } from '../core/audit.service'
 import { FilesService, fileUrls, type UploadedFile as Upload } from '../core/files.service'
 import { NotificationsService } from '../core/notifications.service'
@@ -196,6 +198,7 @@ export class SupportController {
  */
 @ApiTags('admin')
 @Roles('SUPER_ADMIN')
+@Throttle({ default: { limit: config().RATE_LIMIT_ADMIN_PER_MIN, ttl: 60_000 } })
 @Controller('admin')
 export class AdminController {
   constructor(

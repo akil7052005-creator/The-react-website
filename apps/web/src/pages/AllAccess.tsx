@@ -71,7 +71,7 @@ function AllAccess() {
   const { change } = usePlanActions()
   const all = plans.data?.find((p) => p.code === 'ALL_ACCESS')
   const current = sub.data?.subscription
-  const onAllAccess = current?.plan.code === 'ALL_ACCESS' && current.status === 'ACTIVE'
+  const onAllAccess = current?.plan.code === 'ALL_ACCESS' && (current.status === 'ACTIVE' || current.status === 'TRIAL')
   // "Saves ₹21,989 compared to a la carte": 12 months of Studio minus the All-Access price.
   const studio = plans.data?.find((p) => p.code === 'STUDIO')
   const saving = all && studio?.monthlyPricePaise ? studio.monthlyPricePaise * 12 - all.yearlyPricePaise : null

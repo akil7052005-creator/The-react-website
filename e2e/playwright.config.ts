@@ -40,6 +40,8 @@ export default defineConfig({
         RATE_LIMIT_AUTH_PER_MIN: '1000',
         RATE_LIMIT_PUBLIC_PER_MIN: '5000',
         NODE_ENV: 'development',
+        // No hourly job during the run: its emails would land in the outbox the tests read.
+        JOBS_ENABLED: 'false',
       },
     },
     {

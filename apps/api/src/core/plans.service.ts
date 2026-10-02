@@ -1,19 +1,55 @@
 import { Injectable } from '@nestjs/common'
 import type { Plan, Subscription } from '@prisma/client'
-import type { AdminPlanDto, PlanDto, PlanLimits, SubscriptionDto } from '@weddyzone/shared'
+import {
+  computeStatus,
+  daysLeft,
+  isReadOnlyStatus,
+  type AdminPlanDto,
+  type AlertSettings,
+  type PlanDto,
+  type PlanLimits,
+  type SubscriptionDto,
+  type SubscriptionState,
+  type SubscriptionStatus,
+} from '@weddyzone/shared'
 import { notFound } from '../common/errors'
 import { PrismaService, type Tx } from '../prisma/prisma.service'
+import { SettingsService } from './settings.service'
 
 export interface EffectiveSubscription {
   subscription: Subscription
   plan: Plan
-  /** True when a cancelled subscription has run out and the studio fell back to Starter. */
-  lapsed: boolean
+  /** Recomputed from the dates at read time (the stored status may be up to an hour old). */
+  status: SubscriptionStatus
+  /** Expired or cancelled: the studio can view but not create events, albums or uploads. */
+  readOnly: boolean
+}
+
+/** The fields computeStatus needs, from a subscription row. */
+export function stateOf(s: Subscription): SubscriptionState {
+  return {
+    status: s.status,
+    isTrial: s.isTrial,
+    startDate: s.currentPeriodStart,
+    endDate: s.currentPeriodEnd,
+    graceEndsAt: s.graceEndsAt,
+    cancelAtPeriodEnd: s.cancelAtPeriodEnd,
+    autoRenew: s.autoRenew,
+    gatewaySubscriptionId: s.gatewaySubscriptionId,
+    lastPaymentFailedAt: s.lastPaymentFailedAt,
+  }
+}
+
+export function statusOf(s: Subscription, settings: Pick<AlertSettings, 'reminderDays' | 'graceDays'>, now = new Date()): SubscriptionStatus {
+  return computeStatus(stateOf(s), now, settings)
 }
 
 @Injectable()
 export class PlansService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly settings: SettingsService,
+  ) {}
 
   limits(plan: Plan): PlanLimits {
     return plan.limits as unknown as PlanLimits
@@ -53,31 +89,29 @@ export class PlansService {
     return plan
   }
 
-  /**
-   * The plan a studio is on right now. No background jobs: a subscription that
-   * was cancelled at period end is treated as Starter once that date passes.
-   */
+  /** The studio's subscription and plan, with its status as of now. */
   async effective(studioId: string, db: Tx | PrismaService = this.prisma): Promise<EffectiveSubscription> {
     const subscription = await db.subscription.findUnique({ where: { studioId }, include: { plan: true } })
     if (!subscription) throw notFound('Subscription')
-    if (subscription.cancelAtPeriodEnd && subscription.currentPeriodEnd < new Date()) {
-      const starter = await this.byCode('STARTER', db)
-      return { subscription, plan: starter, lapsed: true }
-    }
-    return { subscription, plan: subscription.plan, lapsed: false }
+    const status = statusOf(subscription, await this.settings.alerts())
+    return { subscription, plan: subscription.plan, status, readOnly: isReadOnlyStatus(status) }
   }
 
   subscriptionDto(eff: EffectiveSubscription): SubscriptionDto {
-    const { subscription: s, plan, lapsed } = eff
+    const { subscription: s, plan, status, readOnly } = eff
     const price = s.cycle === 'YEARLY' ? plan.yearlyPrice : (plan.monthlyPrice ?? plan.yearlyPrice)
     return {
       plan: this.toDto(plan),
       cycle: s.cycle,
-      status: lapsed || s.cancelAtPeriodEnd ? 'CANCELLED' : 'ACTIVE',
-      isTrial: s.isTrial && !lapsed,
+      status,
+      isTrial: s.isTrial,
       currentPeriodStart: s.currentPeriodStart.toISOString(),
       currentPeriodEnd: s.currentPeriodEnd.toISOString(),
+      graceEndsAt: s.graceEndsAt?.toISOString() ?? null,
       cancelAtPeriodEnd: s.cancelAtPeriodEnd,
+      autoRenew: s.autoRenew,
+      daysLeft: daysLeft(s.currentPeriodEnd),
+      readOnly,
       pricePaise: price,
     }
   }
