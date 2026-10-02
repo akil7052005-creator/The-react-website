@@ -18,14 +18,16 @@ import type { Request, Response } from 'express'
 import { z } from 'zod'
 import { AuthUser, CurrentUser, Roles } from '../auth/auth.decorators'
 import { decryptSecret, encryptSecret, generateTotpSecret, otpauthUrl, verifyTotp } from '../auth/totp'
-import { badRequest, conflict } from '../common/errors'
+import { badRequest, conflict, notFound } from '../common/errors'
 import { ApiZodBody, zod } from '../common/zod'
 import { config } from '../config'
 import { AuditService } from '../core/audit.service'
 import { SettingsService } from '../core/settings.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { AdminSubscriptionsService } from './admin-subscriptions.service'
+import { AlertsService, WHATSAPP_SKIPPED } from './alerts.service'
 import { istDay } from './format'
+import { platformInvoiceDto } from './invoice'
 import { SubscriptionJobsService } from './jobs.service'
 import { SubscriptionLifecycleService } from './lifecycle.service'
 
@@ -48,6 +50,7 @@ export class AdminSubscriptionsController {
     private readonly jobs: SubscriptionJobsService,
     private readonly settings: SettingsService,
     private readonly audit: AuditService,
+    private readonly alerts: AlertsService,
   ) {}
 
   @Get('stats')
@@ -72,6 +75,14 @@ export class AdminSubscriptionsController {
   @Get('subscriptions/:id')
   detail(@Param('id', ParseUUIDPipe) id: string) {
     return this.admin.detail(id)
+  }
+
+  /** Printable GST invoice for any studio's paid plan payment. */
+  @Get('payments/:id/invoice')
+  async invoice(@Param('id', ParseUUIDPipe) id: string) {
+    const p = await this.prisma.payment.findFirst({ where: { id, purpose: 'SUBSCRIPTION', status: 'SUCCESS' }, include: { studio: true } })
+    if (!p?.invoiceNumber) throw notFound('Invoice')
+    return platformInvoiceDto(p)
   }
 
   @Post('subscriptions/:id/extend')
@@ -114,9 +125,15 @@ export class AdminSubscriptionsController {
   @ApiZodBody(remindSchema)
   async remind(@CurrentUser() user: AuthUser, @Req() req: Request, @Param('id', ParseUUIDPipe) id: string, @Body(zod(remindSchema)) body: z.output<typeof remindSchema>) {
     const sent = await this.lifecycle.remindNow(id, body.channels)
-    await this.audit.record(user.userId, req, { action: 'subscription.remind', target: { type: 'subscription', id }, summary: `Sent a plan reminder (${body.channels.join(', ')})` })
     const rows = await this.prisma.notification.findMany({ where: { id: { in: sent.map((s) => s.row.id) } } })
-    return { results: rows.map((r) => ({ channel: r.channel, delivered: !!r.sentAt, error: r.error })) }
+    const results = body.channels.map((channel) => {
+      const r = rows.find((x) => x.channel === channel)
+      // WhatsApp without a provider is skipped, not failed.
+      return r ? { channel, delivered: !!r.sentAt, skipped: false, error: r.error } : { channel, delivered: false, skipped: true, error: WHATSAPP_SKIPPED }
+    })
+    const summary = results.map((r) => `${r.channel}${r.skipped ? ' (skipped)' : r.delivered ? '' : ' (failed)'}`).join(', ')
+    await this.audit.record(user.userId, req, { action: 'subscription.remind', target: { type: 'subscription', id }, summary: `Sent a plan reminder: ${summary}` })
+    return { results }
   }
 
   // ---------------------------------------------------------------- alerts feed + bell
@@ -142,15 +159,16 @@ export class AdminSubscriptionsController {
   // ---------------------------------------------------------------- settings
 
   @Get('settings/alerts')
-  alertSettings() {
-    return this.settings.alerts()
+  async alertSettings() {
+    return { ...(await this.settings.alerts()), whatsappConfigured: this.alerts.whatsappConfigured() }
   }
 
   @Put('settings/alerts')
   @ApiZodBody(alertSettingsSchema)
   async updateAlertSettings(@CurrentUser() user: AuthUser, @Req() req: Request, @Body(zod(alertSettingsSchema)) body: z.output<typeof alertSettingsSchema>) {
     const before = await this.settings.alerts()
-    const after = await this.settings.updateAlerts(body, user.userId)
+    const saved = await this.settings.updateAlerts(body, user.userId)
+    const after = { ...saved, whatsappConfigured: this.alerts.whatsappConfigured() }
     const changes = (['reminderDays', 'graceDays', 'digestTime', 'winbackAfterDays', 'winbackPercentOff'] as const)
       .filter((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]))
       .map((k) => `${k} ${JSON.stringify(before[k])} → ${JSON.stringify(after[k])}`)

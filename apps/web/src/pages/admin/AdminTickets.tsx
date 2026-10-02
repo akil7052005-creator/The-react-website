@@ -128,7 +128,7 @@ export default function AdminTickets() {
 
   return (
     <div className="stack">
-      <PageHeader eyebrow="Platform admin" title="Support inbox" subtitle="Every studio's tickets. Replies reach the studio as Weddyzone Support." />
+      <PageHeader title="Support inbox" subtitle="Every studio's tickets. Replies reach the studio as Weddyzone Support." />
       <Card
         title="Tickets"
         flush

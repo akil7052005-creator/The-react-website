@@ -64,10 +64,12 @@ export class UsageService {
         unit: 'GB',
       },
       {
+        // Credits are a prepaid balance, not a plan limit: no limit, and what's left is `remaining`.
         key: 'credits',
-        label: 'WhatsApp credits used',
+        label: 'WhatsApp credits used this month',
         used: c.creditsSpent,
-        limit: c.creditsSpent + c.creditBalance,
+        limit: null,
+        remaining: c.creditBalance,
         unit: '',
       },
     ]

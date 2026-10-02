@@ -32,6 +32,9 @@ export interface QueuedAlert {
   spec: AlertSpec
 }
 
+/** Shown for a WhatsApp alert that was not attempted because no provider is configured. */
+export const WHATSAPP_SKIPPED = 'Skipped – not configured'
+
 /**
  * Sends platform alerts to studios and admins, in-app, by email and on WhatsApp. Every alert is
  * first written as a Notification row (one per channel) — that row is both the claim that makes
@@ -55,8 +58,12 @@ export class AlertsService {
   async queue(spec: AlertSpec, db: Tx | PrismaService = this.prisma): Promise<QueuedAlert[]> {
     const recipient = spec.to.type
     const now = new Date()
+    // No WhatsApp provider: don't attempt (or record) WhatsApp alerts at all. Once one is configured,
+    // the next job run sends the WhatsApp alert for the stage that is due then.
+    const channels = spec.channels.filter((c) => c !== 'WHATSAPP' || this.whatsapp.isConfigured())
+    if (!channels.length) return []
     const rows = await db.notification.createManyAndReturn({
-      data: spec.channels.map((channel) => ({
+      data: channels.map((channel) => ({
         recipientType: recipient,
         studioId: spec.to.type === 'STUDIO' ? spec.to.studioId : null,
         channel,
@@ -96,6 +103,10 @@ export class AlertsService {
     const queued = await this.queue(spec)
     await this.dispatch(queued)
     return queued
+  }
+
+  whatsappConfigured(): boolean {
+    return this.whatsapp.isConfigured()
   }
 
   /** Every platform admin's email, plus ADMIN_ALERT_EMAILS. */

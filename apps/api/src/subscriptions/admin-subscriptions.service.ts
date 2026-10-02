@@ -7,6 +7,7 @@ import {
   daysLeft,
   deadlineTone,
   fromIst,
+  graceEnd,
   istParts,
   type AdminNotificationDto,
   type AdminStatsDto,
@@ -21,7 +22,7 @@ import {
 import { notFound } from '../common/errors'
 import { paginate } from '../common/util'
 import { paymentDto } from '../core/payment.service'
-import { PlansService, statusOf } from '../core/plans.service'
+import { PlansService, stateOf, statusOf } from '../core/plans.service'
 import { SettingsService } from '../core/settings.service'
 import { UsageService } from '../core/usage.service'
 import { PrismaService } from '../prisma/prisma.service'
@@ -63,7 +64,7 @@ export class AdminSubscriptionsService {
     private readonly jobs: SubscriptionJobsService,
   ) {}
 
-  private where(q: AdminSubscriptionQuery, now = new Date()): Prisma.SubscriptionWhereInput {
+  private where(q: Pick<AdminSubscriptionQuery, 'tab'> & Partial<AdminSubscriptionQuery>, now = new Date()): Prisma.SubscriptionWhereInput {
     const and: Prisma.SubscriptionWhereInput[] = []
     switch (q.tab) {
       case 'expiring':
@@ -80,6 +81,15 @@ export class AdminSubscriptionsService {
         break
       case 'failed':
         and.push({ status: 'PAYMENT_FAILED' })
+        break
+      case 'attention':
+        // In grace, payment failed, or the deadline is within 7 days (and the plan isn't ending on purpose).
+        and.push({
+          OR: [
+            { status: { in: ['GRACE', 'PAYMENT_FAILED'] } },
+            { currentPeriodEnd: { gte: now, lte: addDays(now, 7) }, status: { notIn: ['CANCELLED'] }, cancelAtPeriodEnd: false },
+          ],
+        })
         break
     }
     if (q.planId) and.push({ planId: q.planId })
@@ -129,10 +139,12 @@ export class AdminSubscriptionsService {
       owner: { name: owner?.name ?? '', email: owner?.email ?? s.studio.email ?? '', phone: s.studio.phone ?? owner?.phone ?? null },
       plan: { id: s.plan.id, code: s.plan.code, name: s.plan.name },
       cycle: s.cycle,
-      amountPaise: s.amountPaid,
+      // Admin amounts exclude GST (one convention across the admin area).
+      amountPaise: s.amountPaid - s.gstAmount,
       startDate: s.currentPeriodStart.toISOString(),
       endDate: s.currentPeriodEnd.toISOString(),
-      graceEndsAt: s.graceEndsAt?.toISOString() ?? null,
+      // In grace before the job has saved it: when grace will end with the current setting.
+      graceEndsAt: (s.graceEndsAt ?? (status === 'GRACE' ? graceEnd(stateOf(s), settings) : null))?.toISOString() ?? null,
       daysLeft: left,
       tone: deadlineTone(status, left),
       status,
@@ -159,10 +171,14 @@ export class AdminSubscriptionsService {
     const rows = await this.prisma.subscription.findMany({ where: this.where(q), include: rowInclude, orderBy: this.orderBy(q.sort), take: CSV_LIMIT })
     const now = new Date()
     const dtos = await Promise.all(rows.map((r) => this.rowDto(r, now)))
-    const header = ['Studio', 'Owner', 'Email', 'Phone', 'Plan', 'Cycle', 'Amount (INR, incl. GST)', 'Start', 'Deadline', 'Days left', 'Status', 'Trial', 'Auto-renew', 'Cancels at period end']
+    const header = ['Studio', 'Owner', 'Email', 'Phone', 'Plan', 'Cycle', 'Amount (INR, excl. GST)', 'Start', 'Deadline', 'Days left', 'Status', 'Grace ends (IST)', 'Trial', 'Auto-renew', 'Cancels at period end']
     const date = (iso: string) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date(iso))
+    const dateTime = (iso: string) => {
+      const p = istParts(new Date(iso))
+      return `${date(iso)} ${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')}`
+    }
     const lines = dtos.map((d) =>
-      [d.studio.name, d.owner.name, d.owner.email, d.owner.phone, d.plan.name, d.cycle, (d.amountPaise / 100).toFixed(2), date(d.startDate), date(d.endDate), d.daysLeft, d.status, d.isTrial ? 'yes' : 'no', d.autoRenew ? 'yes' : 'no', d.cancelAtPeriodEnd ? 'yes' : 'no']
+      [d.studio.name, d.owner.name, d.owner.email, d.owner.phone, d.plan.name, d.cycle, (d.amountPaise / 100).toFixed(2), date(d.startDate), date(d.endDate), d.daysLeft, d.status, d.graceEndsAt ? dateTime(d.graceEndsAt) : '', d.isTrial ? 'yes' : 'no', d.autoRenew ? 'yes' : 'no', d.cancelAtPeriodEnd ? 'yes' : 'no']
         .map(csvCell)
         .join(','),
     )
@@ -219,7 +235,7 @@ export class AdminSubscriptionsService {
     const trendStart = fromIst({ year: p.month === 12 ? p.year : p.year - 1, month: (p.month % 12) + 1, day: 1 })
     const live: Prisma.SubscriptionWhereInput = { status: { in: ['ACTIVE', 'EXPIRING_SOON', 'PAYMENT_FAILED', 'GRACE'] } }
 
-    const [plans, subs, trials, newThisMonth, expiringIn7Days, expiredThisMonth, failedPayments, inGrace, paid, events, reasons] = await Promise.all([
+    const [plans, subs, trials, newThisMonth, expiringIn7Days, expiredThisMonth, failedPayments, inGrace, paid, events, reasons, paymentFailed, needsAttention, adminCancelled] = await Promise.all([
       this.plans.listAll(),
       this.prisma.subscription.findMany({ where: { ...live, isTrial: false }, include: { plan: true } }),
       this.prisma.subscription.count({ where: { status: 'TRIAL' } }),
@@ -231,20 +247,18 @@ export class AdminSubscriptionsService {
       this.prisma.payment.findMany({
         // Payments from before periods were recorded have none: their period is derived below.
         where: { purpose: 'SUBSCRIPTION', status: 'SUCCESS', OR: [{ periodEnd: { gte: trendStart } }, { periodEnd: null, createdAt: { gte: addDays(trendStart, -366) } }] },
-        select: { amount: true, gst: true, cycle: true, periodStart: true, periodEnd: true, paidAt: true, createdAt: true },
+        select: { id: true, subscriptionId: true, amount: true, gst: true, cycle: true, periodStart: true, periodEnd: true, paidAt: true, createdAt: true },
       }),
       this.prisma.subscriptionEvent.findMany({
         where: { createdAt: { gte: trendStart }, OR: [{ type: 'CREATED', amount: { not: null } }, { type: { in: ['EXPIRED', 'CANCELLED'] } }] },
         select: { type: true, createdAt: true },
       }),
       this.prisma.subscription.groupBy({ by: ['cancelReason'], where: { cancelReason: { not: null } }, _count: { _all: true } }),
+      this.prisma.subscription.count({ where: { status: 'PAYMENT_FAILED' } }),
+      this.prisma.subscription.count({ where: this.where({ tab: 'attention' }, now) }),
+      // Cancelled by an admin (not at period end): their revenue stops at the cancellation.
+      this.prisma.subscription.findMany({ where: { status: 'CANCELLED', cancelAtPeriodEnd: false, cancelledAt: { not: null } }, select: { id: true, cancelledAt: true } }),
     ])
-
-    const monthlyOf = (s: Subscription & { plan: Plan }) => {
-      const base = s.amountPaid > 0 ? s.amountPaid - s.gstAmount : s.cycle === 'YEARLY' ? s.plan.yearlyPrice : (s.plan.monthlyPrice ?? s.plan.yearlyPrice / 12)
-      return s.cycle === 'YEARLY' ? base / 12 : base
-    }
-    const mrr = Math.round(subs.reduce((sum, s) => sum + monthlyOf(s), 0))
 
     // Month by month: MRR as of each month's end (or now), from the periods payments paid for.
     const months: { key: string; at: Date }[] = []
@@ -256,16 +270,10 @@ export class AdminSubscriptionsService {
       const end = i === 0 ? now : new Date(fromIst({ year: Math.floor(nextIdx / 12), month: (nextIdx % 12) + 1, day: 1 }).getTime() - 1)
       months.push({ key: `${y}-${String(m).padStart(2, '0')}`, at: end })
     }
-    const periods = paid.map((x) => {
-      const start = x.periodStart ?? x.paidAt ?? x.createdAt
-      return { ...x, start, end: x.periodEnd ?? addCycle(start, x.cycle ?? 'MONTHLY') }
-    })
-    const mrrTrend = months.map(({ key, at }) => ({
-      month: key,
-      mrrPaise: Math.round(
-        periods.filter((x) => x.start <= at && x.end > at).reduce((sum, x) => sum + (x.amount - x.gst) / (x.cycle === 'YEARLY' ? 12 : 1), 0),
-      ),
-    }))
+    const mrrAt = mrrCalculator(paid, new Map(adminCancelled.map((c) => [c.id, c.cancelledAt!])))
+    // The card and the trend's current month are the same number: MRR now.
+    const mrr = mrrAt(now)
+    const mrrTrend = months.map(({ key, at }) => ({ month: key, mrrPaise: mrrAt(at) }))
     const newVsChurned = months.map(({ key }) => ({
       month: key,
       new: events.filter((e) => e.type === 'CREATED' && monthKey(e.createdAt) === key).length,
@@ -283,6 +291,8 @@ export class AdminSubscriptionsService {
       expiredThisMonth,
       failedPayments,
       inGrace,
+      paymentFailed,
+      needsAttention,
       mrrTrend,
       newVsChurned,
       cancelReasons: CANCEL_REASONS.map((reason) => ({ reason: reason as CancelReason, count: reasonCounts.get(reason) ?? 0 })),
@@ -307,6 +317,42 @@ export class AdminSubscriptionsService {
 
   async markAllRead() {
     await this.prisma.notification.updateMany({ where: { recipientType: 'ADMIN', channel: 'IN_APP', readAt: null }, data: { readAt: new Date() } })
+  }
+}
+
+interface PaidPeriod {
+  id: string
+  subscriptionId: string | null
+  amount: number
+  gst: number
+  cycle: 'MONTHLY' | 'YEARLY' | null
+  periodStart: Date | null
+  periodEnd: Date | null
+  paidAt: Date | null
+  createdAt: Date
+}
+
+/**
+ * MRR (paise, excl. GST) at any instant: for each subscription, the paid billing period covering
+ * that instant (the latest one if a plan change made two overlap), as a monthly amount (yearly ÷ 12).
+ * Subscriptions an admin cancelled stop counting at the cancellation. The dashboard card and every
+ * point of the trend come from this one function.
+ */
+export function mrrCalculator(payments: PaidPeriod[], cancelledAt: Map<string, Date>) {
+  const periods = payments.map((x) => {
+    const start = x.periodStart ?? x.paidAt ?? x.createdAt
+    return { key: x.subscriptionId ?? x.id, sub: x.subscriptionId, start, end: x.periodEnd ?? addCycle(start, x.cycle ?? 'MONTHLY'), monthly: (x.amount - x.gst) / (x.cycle === 'YEARLY' ? 12 : 1) }
+  })
+  return (at: Date): number => {
+    const current = new Map<string, (typeof periods)[number]>()
+    for (const p of periods) {
+      if (p.start > at || p.end <= at) continue
+      const cancelled = p.sub ? cancelledAt.get(p.sub) : undefined
+      if (cancelled && cancelled <= at) continue
+      const seen = current.get(p.key)
+      if (!seen || p.start > seen.start) current.set(p.key, p)
+    }
+    return Math.round([...current.values()].reduce((sum, p) => sum + p.monthly, 0))
   }
 }
 

@@ -5,7 +5,7 @@ import { CancelPlanDialog, PlanBanner } from '../components/PlanBanner'
 import { PageHeader, Card, ComingSoonTag, Progress, StatusPill, FeatureTooltip, EmptyState, ErrorState, CardSkeleton, Toggle, type FeatureInfo } from '../components/ui'
 import { formatDate, formatMoney, formatNumber } from '../utils/format'
 import { featureInfo } from '../data/featureInfo'
-import { usePlanActions, useSubscription } from '../lib/billing'
+import { usageMax, usageText, usePlanActions, useSubscription } from '../lib/billing'
 
 const usageTips: Record<UsageItem['key'], { title: string; tip: string }> = {
   storage: { title: 'High-Speed Cloud Storage', tip: 'Upgrade to All-Access for 5 TB of storage.' },
@@ -16,8 +16,8 @@ const usageTips: Record<UsageItem['key'], { title: string; tip: string }> = {
 
 function usageSummary(u: UsageItem) {
   const unit = u.unit ? ` ${u.unit}` : ''
+  if (u.key === 'credits') return `${formatNumber(u.used)} credits used this month, ${formatNumber(u.remaining ?? 0)} left in your balance. Credits are prepaid, not a plan limit.`
   if (u.limit === null) return `${formatNumber(u.used)}${unit} used — unlimited on your plan.`
-  if (u.key === 'credits') return `${formatNumber(u.used)} credits used this month, ${formatNumber(u.limit - u.used)} left in your balance.`
   return `Used ${formatNumber(u.used)}${unit} of ${formatNumber(u.limit)}${unit} on your plan.`
 }
 
@@ -127,18 +127,23 @@ function MySubscription() {
             const tip = usageTips[u.key]
             const pct = u.limit ? Math.round((u.used / u.limit) * 100) : 0
             return (
-              <FeatureTooltip key={u.key} title={tip.title} badge={u.limit === null ? 'Unlimited' : `${pct}% Used`} summary={usageSummary(u)} tip={tip.tip} position="top" width={280}>
+              <FeatureTooltip
+                key={u.key}
+                title={tip.title}
+                badge={u.key === 'credits' ? 'Balance' : u.limit === null ? 'Unlimited' : `${pct}% Used`}
+                summary={usageSummary(u)}
+                tip={tip.tip}
+                position="top"
+                width={280}
+              >
                 <div className="progress-row" style={{ cursor: 'help' }}>
                   <div className="progress-meta">
                     <strong>
                       {u.label} <i className="bi bi-info-circle plan-feat-info" />
                     </strong>
-                    <span>
-                      {formatNumber(u.used)}
-                      {u.limit === null ? ` ${u.unit} · Unlimited` : ` / ${formatNumber(u.limit)} ${u.unit} (${pct}%)`}
-                    </span>
+                    <span>{usageText(u)}</span>
                   </div>
-                  <Progress value={u.used} max={u.limit ?? Math.max(u.used, 1) * 4} label={u.label} />
+                  <Progress value={u.used} max={usageMax(u)} label={u.label} />
                 </div>
               </FeatureTooltip>
             )

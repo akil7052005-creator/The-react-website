@@ -18,7 +18,8 @@ export const autoRenewSchema = z.object({ autoRenew: z.boolean() })
 
 // ------------------------------------------------------------------ admin
 
-export const ADMIN_SUBSCRIPTION_TABS = ['all', 'expiring', 'grace', 'expired', 'cancelled', 'failed'] as const
+/** `attention` = in grace, payment failed, or the deadline is within 7 days. */
+export const ADMIN_SUBSCRIPTION_TABS = ['all', 'attention', 'expiring', 'grace', 'expired', 'cancelled', 'failed'] as const
 export type AdminSubscriptionTab = (typeof ADMIN_SUBSCRIPTION_TABS)[number]
 
 export const adminSubscriptionQuerySchema = listQuerySchema.extend({

@@ -2,7 +2,6 @@ import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query } fr
 import { ApiTags } from '@nestjs/swagger'
 import type { Prisma } from '@prisma/client'
 import {
-  amountInWords,
   autoRenewSchema,
   buyCreditsSchema,
   cancelSubscriptionSchema,
@@ -20,12 +19,12 @@ import { z } from 'zod'
 import { StudioId } from '../auth/auth.decorators'
 import { notFound } from '../common/errors'
 import { paginate, skipTake, startOfMonthUtc } from '../common/util'
-import { config } from '../config'
 import { ApiListQuery, ApiZodBody, zod } from '../common/zod'
 import { messageDto } from '../core/messaging.service'
 import { PlansService } from '../core/plans.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { InvoicesService } from './invoices.service'
+import { platformInvoiceDto } from '../subscriptions/invoice'
 import { SubscriptionsService } from './subscriptions.service'
 
 @ApiTags('plans')
@@ -85,26 +84,7 @@ export class PlansController {
   async invoice(@StudioId() studioId: string, @Param('id', ParseUUIDPipe) id: string): Promise<PlatformInvoiceDto> {
     const p = await this.prisma.payment.findFirst({ where: { id, studioId, purpose: 'SUBSCRIPTION', status: 'SUCCESS' }, include: { studio: true } })
     if (!p?.invoiceNumber) throw notFound('Invoice')
-    const c = config()
-    const taxable = p.amount - p.gst
-    const intra = !!c.PLATFORM_STATE_CODE && c.PLATFORM_STATE_CODE === p.studio.stateCode
-    const half = Math.floor(p.gst / 2)
-    const address = [p.studio.addressLine1, p.studio.addressLine2, p.studio.city, p.studio.pincode].filter(Boolean).join(', ')
-    return {
-      number: p.invoiceNumber,
-      date: (p.paidAt ?? p.createdAt).toISOString(),
-      seller: { name: c.PLATFORM_LEGAL_NAME, gstin: c.PLATFORM_GSTIN ?? null, address: c.PLATFORM_ADDRESS ?? null, stateCode: c.PLATFORM_STATE_CODE ?? null },
-      buyer: { name: p.studio.name, gstin: p.studio.gstin, address: address || null, stateCode: p.studio.stateCode, email: p.studio.email },
-      description: p.description,
-      sac: '998314',
-      taxablePaise: taxable,
-      cgstPaise: intra ? half : 0,
-      sgstPaise: intra ? p.gst - half : 0,
-      igstPaise: intra ? 0 : p.gst,
-      totalPaise: p.amount,
-      totalInWords: amountInWords(p.amount),
-      paymentRef: p.gatewayPaymentId,
-    }
+    return platformInvoiceDto(p)
   }
 
   @Post('subscription/resume')

@@ -32,11 +32,10 @@ function Kpi({ label, value, sub, to, tone }: { label: string; value: string; su
   )
 }
 
-/** Active subscriptions per plan, as horizontal bars. */
+/** Active paid subscriptions per plan, as horizontal bars. */
 function PlanSplit({ data }: { data: AdminStatsDto['activeByPlan'] }) {
   const max = Math.max(1, ...data.map((d) => d.count))
-  const total = data.reduce((s, d) => s + d.count, 0)
-  if (!total) return <EmptyState icon="pie-chart" title="No paid plans yet" text="Active paid subscriptions will show here." />
+  if (!data.some((d) => d.count)) return <EmptyState icon="pie-chart" title="No paid plans yet" text="Active paid subscriptions will show here." />
   return (
     <div className="split-rows" role="list">
       {data.map((d) => (
@@ -53,19 +52,20 @@ function PlanSplit({ data }: { data: AdminStatsDto['activeByPlan'] }) {
 }
 
 const W = 600
-const H = 200
-const PAD = { l: 44, r: 8, t: 16, b: 24 }
+const H = 210
+const PAD = { l: 44, r: 8, t: 30, b: 24 }
 
-function MrrTrend({ data }: { data: AdminStatsDto['mrrTrend'] }) {
-  const max = Math.max(1, ...data.map((d) => d.mrrPaise))
+/** MRR at each month's end (the last point is now). Hover or focus a month for its new and churned counts. */
+function MrrTrend({ mrr, flow }: { mrr: AdminStatsDto['mrrTrend']; flow: AdminStatsDto['newVsChurned'] }) {
+  const max = Math.max(1, ...mrr.map((d) => d.mrrPaise))
   const iw = W - PAD.l - PAD.r
   const ih = H - PAD.t - PAD.b
-  const x = (i: number) => PAD.l + (data.length === 1 ? iw / 2 : (i / (data.length - 1)) * iw)
+  const x = (i: number) => PAD.l + (mrr.length === 1 ? iw / 2 : (i / (mrr.length - 1)) * iw)
   const y = (v: number) => PAD.t + ih - (v / max) * ih
-  const line = data.map((d, i) => `${i ? 'L' : 'M'}${x(i)},${y(d.mrrPaise)}`).join(' ')
-  const area = `${line} L${x(data.length - 1)},${PAD.t + ih} L${x(0)},${PAD.t + ih} Z`
+  const line = mrr.map((d, i) => `${i ? 'L' : 'M'}${x(i)},${y(d.mrrPaise)}`).join(' ')
+  const area = `${line} L${x(mrr.length - 1)},${PAD.t + ih} L${x(0)},${PAD.t + ih} Z`
   return (
-    <svg className="chart-svg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`MRR over the last 12 months, now ${formatMoney(data.at(-1)?.mrrPaise ?? 0)}`}>
+    <svg className="chart-svg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`MRR over the last 12 months, now ${formatMoney(mrr.at(-1)?.mrrPaise ?? 0)}`}>
       {[0, 0.5, 1].map((f) => (
         <g key={f}>
           <line className="grid-line" x1={PAD.l} x2={W - PAD.r} y1={y(max * f)} y2={y(max * f)} />
@@ -76,52 +76,19 @@ function MrrTrend({ data }: { data: AdminStatsDto['mrrTrend'] }) {
       ))}
       <path className="mrr-area" d={area} />
       <path className="mrr-line" d={line} />
-      {data.map((d, i) => (
-        <g key={d.month} tabIndex={0} aria-label={`${d.month}: ${formatMoney(d.mrrPaise)}`}>
-          <rect className="hit" x={x(i) - iw / data.length / 2} y={PAD.t} width={iw / data.length} height={ih} />
-          <circle className="mrr-dot" cx={x(i)} cy={y(d.mrrPaise)} r={3.5} />
-          <text className="tip" x={x(i)} y={y(d.mrrPaise) - 10} textAnchor="middle">
-            {compactInr(d.mrrPaise)}
-          </text>
-          <text x={x(i)} y={H - 6} textAnchor="middle">
-            {monthLabel(d.month)}
-          </text>
-        </g>
-      ))}
-    </svg>
-  )
-}
-
-function NewVsChurned({ data }: { data: AdminStatsDto['newVsChurned'] }) {
-  // Even, so the middle grid line is a whole number.
-  const peak = Math.max(2, ...data.flatMap((d) => [d.new, d.churned]))
-  const max = peak + (peak % 2)
-  const iw = W - PAD.l - PAD.r
-  const ih = H - PAD.t - PAD.b
-  const slot = iw / data.length
-  const bw = Math.min(14, slot / 2 - 3)
-  const y = (v: number) => PAD.t + ih - (v / max) * ih
-  return (
-    <svg className="chart-svg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="New and churned subscriptions per month">
-      {[0, 0.5, 1].map((f) => (
-        <g key={f}>
-          <line className="grid-line" x1={PAD.l} x2={W - PAD.r} y1={y(max * f)} y2={y(max * f)} />
-          <text x={PAD.l - 6} y={y(max * f) + 4} textAnchor="end">
-            {Math.round(max * f)}
-          </text>
-        </g>
-      ))}
-      {data.map((d, i) => {
-        const cx = PAD.l + slot * i + slot / 2
+      {mrr.map((d, i) => {
+        const f = flow.find((m) => m.month === d.month)
+        const tip = `${compactInr(d.mrrPaise)}${f && (f.new || f.churned) ? ` · +${f.new} new / −${f.churned} churned` : ''}`
+        // Keep the first and last tooltips inside the chart.
+        const anchor = i === 0 ? 'start' : i === mrr.length - 1 ? 'end' : 'middle'
         return (
-          <g key={d.month} tabIndex={0} aria-label={`${d.month}: ${d.new} new, ${d.churned} churned`}>
-            <rect className="hit" x={cx - slot / 2} y={PAD.t} width={slot} height={ih} />
-            <rect className="bar-new" x={cx - bw - 1} y={y(d.new)} width={bw} height={Math.max(0, PAD.t + ih - y(d.new))} rx={3} />
-            <rect className="bar-churn" x={cx + 1} y={y(d.churned)} width={bw} height={Math.max(0, PAD.t + ih - y(d.churned))} rx={3} />
-            <text className="tip" x={cx} y={Math.min(y(d.new), y(d.churned)) - 6} textAnchor="middle">
-              +{d.new} / −{d.churned}
+          <g key={d.month} tabIndex={0} aria-label={`${d.month}: ${formatMoney(d.mrrPaise)}${f ? `, ${f.new} new, ${f.churned} churned` : ''}`}>
+            <rect className="hit" x={x(i) - iw / mrr.length / 2} y={0} width={iw / mrr.length} height={H} />
+            <circle className="mrr-dot" cx={x(i)} cy={y(d.mrrPaise)} r={3.5} />
+            <text className="tip" x={x(i)} y={Math.max(12, y(d.mrrPaise) - 10)} textAnchor={anchor}>
+              {tip}
             </text>
-            <text x={cx} y={H - 6} textAnchor="middle">
+            <text x={x(i)} y={H - 6} textAnchor="middle">
               {monthLabel(d.month)}
             </text>
           </g>
@@ -131,25 +98,19 @@ function NewVsChurned({ data }: { data: AdminStatsDto['newVsChurned'] }) {
   )
 }
 
-/** Platform admin home: revenue, deadlines and churn at a glance. */
+/** Platform admin home: revenue and what needs attention. */
 export default function AdminDashboard() {
   const q = useQuery({ queryKey: ['admin', 'stats'], queryFn: () => api.get<AdminStatsDto>('/admin/stats'), refetchInterval: 60_000 })
   const s = q.data
   const active = s ? s.activeByPlan.reduce((n, p) => n + p.count, 0) : 0
   const reasons = s ? s.cancelReasons.filter((r) => r.count > 0).sort((a, b) => b.count - a.count) : []
+  const attention = s
+    ? [`${s.inGrace} in grace`, `${s.expiringIn7Days} expiring in 7 days`, `${s.paymentFailed} payment${s.paymentFailed === 1 ? '' : 's'} failed`].join(' · ')
+    : ''
 
   return (
     <div className="stack">
-      <PageHeader
-        eyebrow="Platform admin"
-        title="Subscriptions dashboard"
-        subtitle="Revenue, upcoming deadlines and churn across every studio. Amounts exclude GST."
-        actions={
-          <Link to="/admin/subscriptions?tab=expiring" className="btn btn-primary">
-            <i className="bi bi-alarm" /> Expiring soon
-          </Link>
-        }
-      />
+      <PageHeader title="Subscriptions dashboard" subtitle="Revenue and the studios that need attention." />
       {q.isPending ? (
         <>
           <StatSkeletonRow count={4} />
@@ -166,56 +127,35 @@ export default function AdminDashboard() {
         <>
           <div className="kpi-grid">
             <Kpi label="MRR" value={formatMoney(s!.mrrPaise)} sub={`ARR ${formatMoney(s!.arrPaise)}`} />
-            <Kpi label="Active paid subscriptions" value={formatNumber(active)} sub={`${formatNumber(s!.trials)} on trial`} to="/admin/subscriptions" />
-            <Kpi label="New this month" value={formatNumber(s!.newThisMonth)} sub="First paid plans" />
-            <Kpi label="Expiring in 7 days" value={formatNumber(s!.expiringIn7Days)} to="/admin/subscriptions?tab=expiring" tone={s!.expiringIn7Days ? 'warn' : undefined} />
-            <Kpi label="In grace" value={formatNumber(s!.inGrace)} sub="Past deadline, full access" to="/admin/subscriptions?tab=grace" tone={s!.inGrace ? 'warn' : undefined} />
+            <Kpi label="Active paid" value={formatNumber(active)} sub={`${formatNumber(s!.trials)} on trial`} to="/admin/subscriptions" />
+            <Kpi label="Needs attention" value={formatNumber(s!.needsAttention)} sub={attention} to="/admin/subscriptions?tab=attention" tone={s!.needsAttention ? 'warn' : undefined} />
             <Kpi label="Expired this month" value={formatNumber(s!.expiredThisMonth)} sub="Now read-only" to="/admin/subscriptions?tab=expired" tone={s!.expiredThisMonth ? 'bad' : undefined} />
-            <Kpi label="Failed payments" value={formatNumber(s!.failedPayments)} sub="This month" to="/admin/subscriptions?tab=failed" tone={s!.failedPayments ? 'bad' : undefined} />
-            <Kpi label="Cancellations" value={formatNumber(s!.cancelReasons.reduce((n, r) => n + r.count, 0))} sub="With a reason given" to="/admin/subscriptions?tab=cancelled" />
           </div>
 
           <div className="grid grid-2">
-            <Card title="MRR trend" subtitle="Monthly recurring revenue at each month's end (yearly plans ÷ 12)">
-              <MrrTrend data={s!.mrrTrend} />
+            <Card title="MRR trend" subtitle="At each month's end; yearly plans count ÷ 12">
+              <MrrTrend mrr={s!.mrrTrend} flow={s!.newVsChurned} />
             </Card>
-            <Card title="New vs churned" subtitle="First paid plans vs plans that expired or were cancelled">
-              <div className="chart-legend">
-                <span>
-                  <i style={{ background: 'var(--wine-700)' }} />
-                  New
-                </span>
-                <span>
-                  <i style={{ background: 'var(--gold)' }} />
-                  Churned
-                </span>
-              </div>
-              <NewVsChurned data={s!.newVsChurned} />
-            </Card>
-          </div>
-
-          <div className="grid grid-2">
             <Card title="Plan split" subtitle="Active paid subscriptions per plan">
               <PlanSplit data={s!.activeByPlan} />
             </Card>
-            <Card title="Why studios cancel" subtitle="Reasons given when cancelling">
-              {reasons.length === 0 ? (
-                <EmptyState icon="emoji-smile" title="No cancellations" text="Reasons appear here when a studio cancels." />
-              ) : (
-                <div className="split-rows" role="list">
-                  {reasons.map((r) => (
-                    <div className="split-row" role="listitem" key={r.reason} style={{ gridTemplateColumns: '1fr 1fr 44px' }}>
-                      <span>{CANCEL_REASON_LABELS[r.reason]}</span>
-                      <span className="split-track">
-                        <span style={{ width: `${(r.count / reasons[0].count) * 100}%`, background: 'var(--gold)' }} />
-                      </span>
-                      <strong>{r.count}</strong>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </Card>
           </div>
+
+          {reasons.length > 0 && (
+            <Card title="Why studios cancel" subtitle="Reasons given when cancelling">
+              <div className="split-rows" role="list">
+                {reasons.map((r) => (
+                  <div className="split-row reason-row" role="listitem" key={r.reason}>
+                    <span>{CANCEL_REASON_LABELS[r.reason]}</span>
+                    <span className="split-track">
+                      <span style={{ width: `${(r.count / reasons[0].count) * 100}%`, background: 'var(--gold)' }} />
+                    </span>
+                    <strong>{r.count}</strong>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
         </>
       )}
     </div>

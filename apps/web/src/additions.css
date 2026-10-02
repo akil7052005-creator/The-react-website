@@ -650,14 +650,18 @@
 .admin-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--wine-50);
+  color: var(--wine-700);
+  font-size: 12px;
   font-weight: 700;
+  white-space: nowrap;
 }
-.admin-badge::before {
-  display: none;
-}
-.admin-session-note {
-  font-size: 13px;
+.admin-gst-note {
+  font-size: 12.5px;
+  white-space: nowrap;
 }
 .admin-who p {
   display: grid;
@@ -734,11 +738,6 @@
   list-style: none;
   font-size: 13.5px;
   color: var(--text-2);
-}
-@media (max-width: 767px) {
-  .admin-session-note {
-    display: none;
-  }
 }
 
 /* Dashboard: stat tiles that open their page. */

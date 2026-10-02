@@ -55,6 +55,7 @@ const AdminSubscriptionDetail = page(() => import('./pages/admin/AdminSubscripti
 const AdminAlerts = page(() => import('./pages/admin/AdminAlerts'))
 const AdminSettings = page(() => import('./pages/admin/AdminSettings'))
 const PlanInvoice = page(() => import('./pages/PlanInvoice'))
+const AdminPlanInvoice = page(() => import('./pages/PlanInvoice').then((m) => ({ default: m.AdminPlanInvoice })))
 
 // Root element: things every route needs (confirm dialogs use the router for "leave page?" prompts).
 function Root() {
@@ -109,6 +110,15 @@ const router = createBrowserRouter([
           <RequireAuth>
             <PlanInvoice />
           </RequireAuth>
+        ),
+      },
+      {
+        // Printable, so outside the admin layout; still SUPER_ADMIN only.
+        path: '/admin/invoices/:id',
+        element: (
+          <RequireAdmin>
+            <AdminPlanInvoice />
+          </RequireAdmin>
         ),
       },
       {

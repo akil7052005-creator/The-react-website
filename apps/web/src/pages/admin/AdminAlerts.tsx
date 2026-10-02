@@ -17,7 +17,6 @@ export default function AdminAlerts() {
   return (
     <div className="stack">
       <PageHeader
-        eyebrow="Platform admin"
         title="Alerts"
         subtitle="New purchases, upcoming deadlines, expiries, failed payments and studios near their limits."
         actions={

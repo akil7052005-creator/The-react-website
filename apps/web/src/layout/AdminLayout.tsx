@@ -8,7 +8,6 @@ const adminNav = [
   { label: 'Revenue', items: [
     { to: '/admin', label: 'Dashboard', icon: 'speedometer2', end: true },
     { to: '/admin/subscriptions', label: 'Subscriptions', icon: 'credit-card-2-front' },
-    { to: '/admin/alerts', label: 'Alerts', icon: 'bell' },
   ] },
   { label: 'Manage', items: [
     { to: '/admin/tickets', label: 'Support inbox', icon: 'headset' },
@@ -64,11 +63,12 @@ function AdminLayout() {
           <button className="icon-btn menu-btn" onClick={() => setNavOpen(true)} aria-label="Open menu">
             <i className="bi bi-list" />
           </button>
-          <span className="pill pill-warning admin-badge">
-            <i className="bi bi-shield-lock" /> Admin
-          </span>
-          <span className="muted admin-session-note">You're signed in as a platform admin. Every change is recorded.</span>
+          {/* The one place admin money is labelled: every amount in the admin area excludes GST. */}
+          <span className="muted admin-gst-note">Amounts exclude GST</span>
           <div className="topbar-actions">
+            <span className="admin-badge" title="You're signed in as a platform admin. Every change is recorded.">
+              <i className="bi bi-shield-lock" /> Admin
+            </span>
             <AdminBell />
           </div>
         </header>

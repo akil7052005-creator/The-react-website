@@ -278,7 +278,10 @@ export interface UsageItem {
   key: 'events' | 'albums' | 'storage' | 'credits'
   label: string
   used: number
+  /** The plan's limit; null when there is none (unlimited plans, and WhatsApp credits). */
   limit: number | null
+  /** WhatsApp credits only: the prepaid balance left (credits are bought, not a plan quota). */
+  remaining?: number
   unit: string
 }
 
@@ -587,7 +590,7 @@ export interface AdminSubscriptionRowDto {
   owner: { name: string; email: string; phone: string | null }
   plan: { id: string; code: PlanCode; name: string }
   cycle: BillingCycle
-  /** Last amount paid for this subscription, GST included. */
+  /** Last amount paid for this subscription, excluding GST (admin amounts never include GST). */
   amountPaise: number
   startDate: string
   endDate: string
@@ -652,7 +655,11 @@ export interface AdminStatsDto {
   expiredThisMonth: number
   failedPayments: number
   inGrace: number
-  /** Last 12 months, oldest first; month is YYYY-MM. */
+  /** Subscriptions whose last payment failed (still before their deadline). */
+  paymentFailed: number
+  /** In grace, payment failed or expiring within 7 days (each subscription counted once). */
+  needsAttention: number
+  /** Last 12 months, oldest first; month is YYYY-MM. The last point is MRR now (= mrrPaise). */
   mrrTrend: { month: string; mrrPaise: number }[]
   newVsChurned: { month: string; new: number; churned: number }[]
   cancelReasons: { reason: CancelReason; count: number }[]
@@ -670,6 +677,8 @@ export interface AdminNotificationDto {
 
 export interface AdminAlertSettingsDto extends AlertSettings {
   updatedAt: string | null
+  /** False when no WhatsApp provider is set up: WhatsApp alerts are skipped, not attempted. */
+  whatsappConfigured?: boolean
 }
 
 export interface TwoFactorStatusDto {

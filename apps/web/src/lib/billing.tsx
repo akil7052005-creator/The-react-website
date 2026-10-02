@@ -28,6 +28,24 @@ export function isRenewal(current: SubscriptionDto | undefined, plan: PlanDto, c
   return Boolean(current && !current.isTrial && current.plan.code === plan.code && current.cycle === cycle && current.status !== 'ACTIVE' && current.status !== 'TRIAL')
 }
 
+/**
+ * How a usage meter reads. Plan quotas: "6 / 50 (12%)". WhatsApp credits are a prepaid balance,
+ * not a plan limit: "0 used this month · 1,839 left in balance".
+ */
+export function usageText(u: UsageItem): string {
+  const n = (v: number) => v.toLocaleString('en-IN')
+  const unit = u.unit ? ` ${u.unit}` : ''
+  if (u.key === 'credits') return `${n(u.used)} used this month · ${n(u.remaining ?? 0)} left in balance`
+  if (u.limit === null) return `${n(u.used)}${unit} · Unlimited`
+  return `${n(u.used)} / ${n(u.limit)}${unit} (${u.limit ? Math.round((u.used / u.limit) * 100) : 0}%)`
+}
+
+/** The bar's full width: the plan limit, or for credits everything available this month (used + left). */
+export function usageMax(u: UsageItem): number {
+  if (u.key === 'credits') return Math.max(1, u.used + (u.remaining ?? 0))
+  return u.limit ?? Math.max(u.used, 1) * 4
+}
+
 export function priceFor(plan: PlanDto, cycle: BillingCycle): number | null {
   return cycle === 'YEARLY' ? plan.yearlyPricePaise : plan.monthlyPricePaise
 }

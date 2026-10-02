@@ -4,9 +4,10 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { SubscriptionActionDialog, type SubscriptionAction } from '../../components/SubscriptionActions'
 import { Card, CardSkeleton, EmptyState, ErrorState, PageHeader, Progress, StatusPill } from '../../components/ui'
-import { DaysLeftBadge, formatIstDate, formatIstDateTime, SubscriptionStatusPill } from '../../lib/admin'
+import { DaysLeftBadge, deliveryLabel, durationText, formatIstDate, formatIstDateTime, planCycle, SubscriptionStatusPill } from '../../lib/admin'
 import { api, isApiError } from '../../lib/api'
-import { formatMoney, formatNumber } from '../../utils/format'
+import { usageMax, usageText } from '../../lib/billing'
+import { formatMoney } from '../../utils/format'
 
 const EVENT_LABELS: Record<SubscriptionEventType, string> = {
   CREATED: 'Subscribed',
@@ -23,42 +24,31 @@ const EVENT_LABELS: Record<SubscriptionEventType, string> = {
 }
 const CHANNEL_ICONS = { IN_APP: 'bell', EMAIL: 'envelope', WHATSAPP: 'whatsapp' } as const
 
-/** Live countdown to the deadline (or to the end of grace once the deadline has passed). */
+/** Time to the deadline (or to the end of grace once the deadline has passed): "2 days 22 hrs". Updates each minute. */
 function Countdown({ to, label }: { to: string; label: string }) {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000)
+    const t = setInterval(() => setNow(Date.now()), 60_000)
     return () => clearInterval(t)
   }, [])
   const diff = new Date(to).getTime() - now
   const over = diff < 0
-  const abs = Math.abs(diff)
-  const parts = [
-    { v: Math.floor(abs / 86_400_000), l: 'days' },
-    { v: Math.floor(abs / 3_600_000) % 24, l: 'hours' },
-    { v: Math.floor(abs / 60_000) % 60, l: 'min' },
-    { v: Math.floor(abs / 1000) % 60, l: 'sec' },
-  ]
   return (
     <div>
-      <p className="muted" style={{ margin: '0 0 8px' }}>
+      <p className="muted" style={{ margin: '0 0 6px' }}>
         {over ? `${label} passed` : label} · {formatIstDateTime(to)} IST
       </p>
-      <div className={`countdown${over ? ' over' : ''}`} role="timer" aria-live="off">
-        {parts.map((p) => (
-          <div key={p.l}>
-            <strong>{String(p.v).padStart(2, '0')}</strong>
-            <span>{p.l}</span>
-          </div>
-        ))}
-      </div>
+      <p className={`countdown-text${over ? ' over' : ''}`}>{over ? `${durationText(diff)} ago` : `${durationText(diff)} left`}</p>
     </div>
   )
 }
 
+const ALERTS_SHOWN = 5
+
 export default function AdminSubscriptionDetail() {
   const { id = '' } = useParams()
   const [dialog, setDialog] = useState<SubscriptionAction | null>(null)
+  const [showAllAlerts, setShowAllAlerts] = useState(false)
   const q = useQuery({ queryKey: ['admin', 'subscription', id], queryFn: () => api.get<AdminSubscriptionDetailDto>(`/admin/subscriptions/${id}`), refetchInterval: 30_000 })
   const s = q.data
 
@@ -98,7 +88,7 @@ export default function AdminSubscriptionDetail() {
           </Link>
         }
         title={s.studio.name}
-        subtitle={`${s.plan.name}${s.isTrial ? ' trial' : ''} · ${s.cycle === 'YEARLY' ? 'Yearly' : 'Monthly'} · deadline ${formatIstDate(s.endDate)}`}
+        subtitle={`${planCycle(s)} · deadline ${formatIstDate(s.endDate)}`}
         actions={
           <div className="store-btns" style={{ gap: 8, flexWrap: 'wrap' }}>
             <button className="btn btn-ghost" onClick={() => setDialog('remind')}>
@@ -135,7 +125,7 @@ export default function AdminSubscriptionDetail() {
                 </>
               )}
               <dt>Last paid</dt>
-              <dd>{s.amountPaise ? `${formatMoney(s.amountPaise)} incl. GST` : '—'}</dd>
+              <dd>{s.amountPaise ? formatMoney(s.amountPaise) : '—'}</dd>
               <dt>Auto-renew</dt>
               <dd>{s.autoRenew ? `On${s.gatewaySubscriptionId ? ` · ${s.gatewaySubscriptionId}` : ''}` : 'Off'}</dd>
               {s.cancelAtPeriodEnd && (
@@ -185,12 +175,9 @@ export default function AdminSubscriptionDetail() {
             <div className="progress-row" key={u.key}>
               <div className="progress-meta">
                 <strong>{u.label}</strong>
-                <span>
-                  {formatNumber(u.used)}
-                  {u.limit === null ? ` ${u.unit} · Unlimited` : ` / ${formatNumber(u.limit)} ${u.unit}`}
-                </span>
+                <span>{usageText(u)}</span>
               </div>
-              <Progress value={u.used} max={u.limit ?? Math.max(u.used, 1) * 4} label={u.label} />
+              <Progress value={u.used} max={usageMax(u)} label={u.label} />
             </div>
           ))}
         </Card>
@@ -199,7 +186,7 @@ export default function AdminSubscriptionDetail() {
           {s.payments.length === 0 ? (
             <EmptyState icon="receipt" title="No plan payments" />
           ) : (
-            <div className="table-wrap">
+            <div className="table-wrap admin-table-scroll">
               <table className="table">
                 <thead>
                   <tr>
@@ -215,8 +202,16 @@ export default function AdminSubscriptionDetail() {
                     <tr key={p.id}>
                       <td>{formatIstDate(p.paidAt ?? p.createdAt)}</td>
                       <td>{p.description}</td>
-                      <td className="mono">{p.invoiceNumber ?? '—'}</td>
-                      <td className="num cell-main">{formatMoney(p.amountPaise)}</td>
+                      <td className="mono">
+                        {p.invoiceNumber && p.status === 'SUCCESS' ? (
+                          <Link to={`/admin/invoices/${p.id}`} className="link" title="Open the printable GST invoice">
+                            {p.invoiceNumber}
+                          </Link>
+                        ) : (
+                          <span className="muted">{p.status === 'SUCCESS' ? '—' : 'Not paid'}</span>
+                        )}
+                      </td>
+                      <td className="num cell-main">{formatMoney(p.amountPaise - p.gstPaise)}</td>
                       <td className="num">
                         <StatusPill status={p.status === 'SUCCESS' ? 'Paid' : p.status === 'FAILED' ? 'Failed' : 'Pending'} />
                       </td>
@@ -263,7 +258,7 @@ export default function AdminSubscriptionDetail() {
           {s.notifications.length === 0 ? (
             <EmptyState icon="bell-slash" title="Nothing sent yet" />
           ) : (
-            <div className="table-wrap">
+            <div className="table-wrap admin-table-scroll">
               <table className="table">
                 <thead>
                   <tr>
@@ -275,7 +270,7 @@ export default function AdminSubscriptionDetail() {
                   </tr>
                 </thead>
                 <tbody>
-                  {s.notifications.map((n) => (
+                  {(showAllAlerts ? s.notifications : s.notifications.slice(0, ALERTS_SHOWN)).map((n) => (
                     <tr key={n.id}>
                       <td className="muted" style={{ whiteSpace: 'nowrap' }}>
                         {formatIstDateTime(n.createdAt)}
@@ -292,17 +287,26 @@ export default function AdminSubscriptionDetail() {
                           {n.message}
                         </div>
                       </td>
-                      <td title={n.error ?? undefined}>{n.sentAt ? <StatusPill status="Sent" /> : n.error ? <StatusPill status="Failed" /> : <StatusPill status="Pending" />}</td>
+                      <td title={n.error ?? undefined}>
+                        <StatusPill status={deliveryLabel(n)} />
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           )}
+          {s.notifications.length > ALERTS_SHOWN && (
+            <div className="show-all-row">
+              <button className="link" aria-expanded={showAllAlerts} onClick={() => setShowAllAlerts((v) => !v)}>
+                {showAllAlerts ? `Show latest ${ALERTS_SHOWN}` : `Show all ${s.notifications.length}`}
+              </button>
+            </div>
+          )}
         </Card>
       </div>
 
-      {dialog && <SubscriptionActionDialog action={dialog} row={s} onClose={() => setDialog(null)} />}
+      {dialog &&<SubscriptionActionDialog action={dialog} row={s} onClose={() => setDialog(null)} />}
     </div>
   )
 }

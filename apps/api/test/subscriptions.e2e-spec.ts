@@ -1,10 +1,13 @@
 import type { INestApplication } from '@nestjs/common'
 import type { PrismaClient } from '@prisma/client'
 import { addDays, fromIst, istParts } from '@weddyzone/shared'
+import { readFileSync } from 'fs'
+import { join } from 'path'
 import request from 'supertest'
 import { createAdmin } from '../prisma/create-admin'
 import { totpAt } from '../src/auth/totp'
 import { MailService, type MailMessage } from '../src/infra/mail.service'
+import { PlatformWhatsAppService } from '../src/infra/platform-whatsapp.service'
 import { SubscriptionJobsService } from '../src/subscriptions/jobs.service'
 import { signWebhook } from '../src/subscriptions/webhooks.controller'
 import { createTestApp, isoDaysFromToday, resetDb, signup, type SignedUp } from './helpers'
@@ -22,6 +25,9 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
   let adminPassword: string
   let A: SignedUp
   let mails: MailMessage[]
+  /** Pretend a WhatsApp provider is configured (the real Cloud API is never called in tests). */
+  let whatsappOn = true
+  const waSent: string[] = []
 
   const hook = (body: object, opts: { eventId?: string; secret?: string; signature?: string } = {}) => {
     const raw = JSON.stringify(body)
@@ -70,6 +76,12 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
     mails = []
     jest.spyOn(mail, 'send').mockImplementation(async (m) => {
       mails.push(m)
+    })
+    const wa = app.get(PlatformWhatsAppService)
+    jest.spyOn(wa, 'isConfigured').mockImplementation(() => whatsappOn)
+    jest.spyOn(wa, 'send').mockImplementation(async (phone, msg) => {
+      waSent.push(`${phone}:${msg.template}`)
+      return { body: await wa.renderMessage(msg), link: `https://wa.me/${phone.replace(/\D/g, '')}`, delivered: true }
     })
     await resetDb(prisma)
     const created = await createAdmin(prisma, { email: 'ops@weddyzone.test', name: 'Priya Ops' })
@@ -159,7 +171,8 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
       const adminAlerts = await prisma.notification.findMany({ where: { recipientType: 'ADMIN', type: 'SUBSCRIPTION_PURCHASED' } })
       expect(adminAlerts.map((n) => n.channel).sort()).toEqual(['EMAIL', 'IN_APP'])
       expect(adminAlerts[0].title).toBe('StudioRed chose Pro (Yearly)')
-      expect(adminAlerts[0].body).toMatch(/^₹29,488\.20 incl\. GST · created · expires \d{2} \w{3} \d{4}$/)
+      // Admin amounts exclude GST.
+      expect(adminAlerts[0].body).toMatch(/^₹24,990 \+ GST · created · expires \d{2} \w{3} \d{4}$/)
       // Instant admin email + studio confirmation with the invoice, each sent once despite the retries.
       expect(mails.filter((m) => m.to === adminEmail && /StudioRed chose Pro \(Yearly\)/.test(m.subject))).toHaveLength(1)
       const confirmation = mails.filter((m) => m.to === A.email)
@@ -174,7 +187,8 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
     it('shows the new purchase in the admin table and bell straight away', async () => {
       const list = await admin.get('/api/v1/admin/subscriptions').query({ search: 'studiored' }).expect(200)
       expect(list.body.meta.total).toBe(1)
-      expect(list.body.data[0]).toMatchObject({ studio: { name: 'StudioRed' }, plan: { code: 'PRO' }, cycle: 'YEARLY', amountPaise: 2_948_820, status: 'ACTIVE', tone: 'green' })
+      // Admin amounts exclude GST: ₹24,990, not the ₹29,488.20 charged.
+      expect(list.body.data[0]).toMatchObject({ studio: { name: 'StudioRed' }, plan: { code: 'PRO' }, cycle: 'YEARLY', amountPaise: 2_499_000, status: 'ACTIVE', tone: 'green' })
       expect(list.body.data[0].owner).toMatchObject({ email: A.email, phone: '+919876543210' })
       const bell = await admin.get('/api/v1/admin/notifications').expect(200)
       expect(bell.body.unreadCount).toBeGreaterThanOrEqual(1)
@@ -231,6 +245,9 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
 
     const at = (offsetMs: number) => new Date(end.getTime() + offsetMs)
     const keys = async () => (await alertsFor(subId)).map((n) => `${n.dedupeKey?.split(':').slice(-3).join(':')}`)
+    // Rows written together share a timestamp, so compare each stage's alerts as a set.
+    const stageKeys = async (...stages: string[]) => (await keys()).filter((k) => stages.includes(k.split(':')[0])).sort()
+    const set = (...k: string[]) => [...k].sort()
 
     it('sends nothing more than 7 days out', async () => {
       await jobs.run(at(-8 * DAY))
@@ -241,14 +258,16 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
       await jobs.run(at(-7 * DAY))
       await jobs.run(at(-7 * DAY + 3_600_000)) // the next hourly run
       await jobs.run(at(-6 * DAY)) // still the T-7 window
-      expect(await keys()).toEqual(['T-7:STUDIO:IN_APP', 'T-7:STUDIO:EMAIL', 'T-7:STUDIO:WHATSAPP'])
-      const inApp = (await alertsFor(subId))[0]
+      expect(await stageKeys('T-7')).toEqual(set('T-7:STUDIO:IN_APP', 'T-7:STUDIO:EMAIL', 'T-7:STUDIO:WHATSAPP'))
+      expect(await keys()).toHaveLength(3)
+      const inApp = (await alertsFor(subId)).find((n) => n.channel === 'IN_APP')!
       expect(inApp.link).toBe('/subscriptions?renew=PRO&cycle=MONTHLY')
       expect(inApp.body).toMatch(/expires on \d{2} \w{3} \d{4}/)
       const wa = (await alertsFor(subId)).find((n) => n.channel === 'WHATSAPP')!
-      // Recorded with the template text, not delivered without the Cloud API, and no credits spent.
+      // Sent from the platform's number with the approved template text; no studio credits spent.
       expect(wa.body).toContain('Deadline Studio')
-      expect(wa.error).toMatch(/not configured/)
+      expect(wa.sentAt).not.toBeNull()
+      expect(waSent.filter((x) => x.endsWith(':PLAN_EXPIRY_REMINDER'))).toHaveLength(1)
       expect(await prisma.whatsAppMessage.count({ where: { studioId: S.studioId } })).toBe(0)
       const credits = await prisma.studio.findUniqueOrThrow({ where: { id: S.studioId } })
       expect(credits.creditBalance).toBe(50)
@@ -260,7 +279,9 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
       await jobs.run(at(-3 * DAY + 60_000))
       await jobs.run(at(-1 * DAY))
       await jobs.run(at(-1 * DAY + 60_000))
-      expect((await keys()).slice(3)).toEqual(['T-3:STUDIO:IN_APP', 'T-3:STUDIO:WHATSAPP', 'T-1:STUDIO:IN_APP', 'T-1:STUDIO:EMAIL', 'T-1:STUDIO:WHATSAPP', 'T-1:ADMIN:IN_APP', 'T-1:ADMIN:EMAIL'])
+      expect(await stageKeys('T-3')).toEqual(set('T-3:STUDIO:IN_APP', 'T-3:STUDIO:WHATSAPP'))
+      expect(await stageKeys('T-1')).toEqual(set('T-1:STUDIO:IN_APP', 'T-1:STUDIO:EMAIL', 'T-1:STUDIO:WHATSAPP', 'T-1:ADMIN:IN_APP', 'T-1:ADMIN:EMAIL'))
+      expect(await keys()).toHaveLength(10)
     })
 
     it('moves ACTIVE → GRACE at the deadline (full access) and alerts admin instantly', async () => {
@@ -271,7 +292,8 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
       const sub = await prisma.subscription.findUniqueOrThrow({ where: { id: subId } })
       expect(sub.status).toBe('GRACE')
       expect(sub.graceEndsAt).toEqual(new Date(end.getTime() + 3 * DAY))
-      expect((await keys()).slice(10)).toEqual(['T:STUDIO:IN_APP', 'T:STUDIO:EMAIL', 'T:STUDIO:WHATSAPP', 'T:ADMIN:IN_APP', 'T:ADMIN:EMAIL'])
+      expect(await stageKeys('T')).toEqual(set('T:STUDIO:IN_APP', 'T:STUDIO:EMAIL', 'T:STUDIO:WHATSAPP', 'T:ADMIN:IN_APP', 'T:ADMIN:EMAIL'))
+      expect(await keys()).toHaveLength(15)
       const grace = (await alertsFor(subId)).find((n) => n.dedupeKey?.endsWith('T:STUDIO:IN_APP'))!
       expect(grace.body).toMatch(/renew within 3 days/i)
       const types = (await prisma.subscriptionEvent.findMany({ where: { subscriptionId: subId } })).map((e) => e.type)
@@ -283,7 +305,8 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
       await jobs.run(at(3 * DAY + 2 * 3_600_000))
       const sub = await prisma.subscription.findUniqueOrThrow({ where: { id: subId } })
       expect(sub.status).toBe('EXPIRED')
-      expect((await keys()).slice(15)).toEqual(['GRACE_END:STUDIO:IN_APP', 'GRACE_END:STUDIO:EMAIL', 'GRACE_END:STUDIO:WHATSAPP', 'GRACE_END:ADMIN:IN_APP', 'GRACE_END:ADMIN:EMAIL'])
+      expect(await stageKeys('GRACE_END')).toEqual(set('GRACE_END:STUDIO:IN_APP', 'GRACE_END:STUDIO:EMAIL', 'GRACE_END:STUDIO:WHATSAPP', 'GRACE_END:ADMIN:IN_APP', 'GRACE_END:ADMIN:EMAIL'))
+      expect(await keys()).toHaveLength(20)
 
       // Real "now" is past grace too, so the API enforces read-only.
       const banner = await S.agent.get('/api/v1/me/subscription').expect(200)
@@ -333,12 +356,15 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
     it('sends a manual reminder on chosen channels and lists it on the detail page', async () => {
       const res = await admin.post(`/api/v1/admin/subscriptions/${subId}/remind`).send({ channels: ['IN_APP', 'EMAIL'] }).expect(200)
       expect(res.body.results).toEqual([
-        { channel: 'IN_APP', delivered: true, error: null },
-        { channel: 'EMAIL', delivered: true, error: null },
+        { channel: 'IN_APP', delivered: true, skipped: false, error: null },
+        { channel: 'EMAIL', delivered: true, skipped: false, error: null },
       ])
       const detail = await admin.get(`/api/v1/admin/subscriptions/${subId}`).expect(200)
       expect(detail.body.notifications[0]).toMatchObject({ type: 'SUBSCRIPTION_REMINDER' })
       expect(detail.body.usage.map((u: { key: string }) => u.key)).toEqual(['events', 'albums', 'storage', 'credits'])
+      // WhatsApp credits are a prepaid balance, not a plan limit.
+      const balance = (await prisma.studio.findUniqueOrThrow({ where: { id: S.studioId } })).creditBalance
+      expect(detail.body.usage[3]).toMatchObject({ key: 'credits', label: 'WhatsApp credits used this month', used: 0, limit: null, remaining: balance })
     })
 
     it('lets an admin cancel: read-only at once, logged', async () => {
@@ -347,6 +373,128 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
       await admin.post(`/api/v1/admin/subscriptions/${subId}/cancel`).send({ note: 'again' }).expect(409)
       const cancelledTab = await admin.get('/api/v1/admin/subscriptions').query({ tab: 'cancelled' }).expect(200)
       expect(cancelledTab.body.data.map((r: { id: string }) => r.id)).toContain(subId)
+    })
+  })
+
+  describe('no WhatsApp provider configured', () => {
+    beforeAll(() => {
+      whatsappOn = false
+    })
+    afterAll(() => {
+      whatsappOn = true
+    })
+
+    it('does not attempt WhatsApp alerts, and says so in settings', async () => {
+      const N = await signup(app, { studioName: 'No WhatsApp Studio' })
+      const sub = await prisma.subscription.findUniqueOrThrow({ where: { studioId: N.studioId } })
+      const before = waSent.length
+      await jobs.run(new Date(sub.currentPeriodEnd.getTime() - 7 * DAY))
+      const rows = await alertsFor(sub.id)
+      expect(rows.map((r) => r.channel)).toEqual(['IN_APP', 'EMAIL'])
+      expect(waSent.length).toBe(before)
+      expect((await admin.get('/api/v1/admin/settings/alerts').expect(200)).body.whatsappConfigured).toBe(false)
+    })
+
+    it('reports WhatsApp as skipped (not failed) on "Send reminder now"', async () => {
+      const sub = await prisma.subscription.findUniqueOrThrow({ where: { studioId: A.studioId } })
+      const res = await admin.post(`/api/v1/admin/subscriptions/${sub.id}/remind`).send({ channels: ['IN_APP', 'WHATSAPP'] }).expect(200)
+      expect(res.body.results).toEqual([
+        { channel: 'IN_APP', delivered: true, skipped: false, error: null },
+        { channel: 'WHATSAPP', delivered: false, skipped: true, error: 'Skipped – not configured' },
+      ])
+      expect(await prisma.notification.count({ where: { subscriptionId: sub.id, channel: 'WHATSAPP', type: 'SUBSCRIPTION_REMINDER' } })).toBe(0)
+      const audit = await prisma.adminAuditLog.findFirstOrThrow({ where: { action: 'subscription.remind', targetId: sub.id }, orderBy: { createdAt: 'desc' } })
+      expect(audit.summary).toBe('Sent a plan reminder: IN_APP, WHATSAPP (skipped)')
+    })
+  })
+
+  describe('grace rows', () => {
+    it('list "Grace ends" for plans in grace even before the job has saved it', async () => {
+      const G = await signup(app, { studioName: 'Grace Row Studio' })
+      const end = new Date(Date.now() - 26 * 3_600_000)
+      await prisma.subscription.update({
+        where: { studioId: G.studioId },
+        data: { isTrial: false, status: 'ACTIVE', currentPeriodEnd: end, currentPeriodStart: addDays(end, -30), graceEndsAt: null },
+      })
+      await jobs.refreshStatuses(new Date(), true)
+      const list = await admin.get('/api/v1/admin/subscriptions').query({ tab: 'grace', search: 'Grace Row' }).expect(200)
+      expect(list.body.data).toHaveLength(1)
+      expect(list.body.data[0]).toMatchObject({ status: 'GRACE', graceEndsAt: new Date(end.getTime() + 3 * DAY).toISOString(), tone: 'red' })
+      expect(list.body.data[0].daysLeft).toBeLessThan(0)
+      const csv = await admin.get('/api/v1/admin/subscriptions/export.csv').query({ tab: 'grace', search: 'Grace Row' }).expect(200)
+      expect(csv.text).toMatch(/Grace ends \(IST\)/)
+      expect(csv.text).toMatch(/,GRACE,\d{4}-\d{2}-\d{2} \d{2}:\d{2},/)
+    })
+  })
+
+  describe('GST invoices for every paid plan payment', () => {
+    /** Runs the backfill migration's SQL exactly as `prisma migrate deploy` would. */
+    async function runBackfill() {
+      const file = join(__dirname, '../prisma/migrations/20261003090000_backfill_platform_invoices/migration.sql')
+      const sql = readFileSync(file, 'utf8').replace(/^--.*$/gm, '')
+      for (const stmt of sql.split(/;\s*\n/).map((x) => x.trim()).filter(Boolean)) await prisma.$executeRawUnsafe(stmt)
+    }
+
+    it('backfills old payments per financial year (IST), continues the series, and is safe to re-run', async () => {
+      const I = await signup(app, { studioName: 'Invoice Backfill Studio' })
+      const sub = await prisma.subscription.findUniqueOrThrow({ where: { studioId: I.studioId } })
+      const pay = (paidAt: string, invoiceNumber: string | null = null, status: 'SUCCESS' | 'FAILED' = 'SUCCESS') =>
+        prisma.payment.create({
+          data: {
+            studioId: I.studioId,
+            purpose: 'SUBSCRIPTION',
+            description: 'Pro plan · Monthly',
+            amount: 294_882,
+            gst: 44_982,
+            status,
+            provider: 'mock',
+            subscriptionId: sub.id,
+            cycle: 'MONTHLY',
+            paidAt: new Date(paidAt),
+            createdAt: new Date(paidAt),
+            invoiceNumber,
+          },
+        })
+      await pay('2025-05-10T06:00:00Z', 'WZ/2025-26/00007') // already numbered in FY 2025-26
+      const a = await pay('2025-06-15T06:00:00Z')
+      const b = await pay('2026-03-31T14:30:00Z') // 31 Mar 20:00 IST: still FY 2025-26
+      const c = await pay('2026-03-31T19:00:00Z') // 1 Apr 00:30 IST: FY 2026-27
+      const failed = await pay('2025-07-01T06:00:00Z', null, 'FAILED')
+      const fy26 = await prisma.payment.findMany({ where: { invoiceNumber: { startsWith: 'WZ/2026-27/' } } })
+      const lastFy26 = Math.max(0, ...fy26.map((p) => Number(p.invoiceNumber!.slice(-5))))
+
+      await runBackfill()
+      const num = async (id: string) => (await prisma.payment.findUniqueOrThrow({ where: { id } })).invoiceNumber
+      expect(await num(a.id)).toBe('WZ/2025-26/00008')
+      expect(await num(b.id)).toBe('WZ/2025-26/00009')
+      expect(await num(c.id)).toBe(`WZ/2026-27/${String(lastFy26 + 1).padStart(5, '0')}`)
+      expect(await num(failed.id)).toBeNull()
+      expect((await prisma.platformCounter.findUniqueOrThrow({ where: { key: 'invoice:2025' } })).value).toBe(9)
+      expect((await prisma.payment.findUniqueOrThrow({ where: { id: a.id } })).periodEnd).not.toBeNull()
+
+      await runBackfill()
+      expect(await num(a.id)).toBe('WZ/2025-26/00008')
+      expect((await prisma.platformCounter.findUniqueOrThrow({ where: { key: 'invoice:2025' } })).value).toBe(9)
+      // No paid plan payment is left without a number.
+      expect(await prisma.payment.count({ where: { purpose: 'SUBSCRIPTION', status: 'SUCCESS', invoiceNumber: null } })).toBe(0)
+
+      // The next real purchase in FY 2026-27 continues the series after the backfilled one.
+      const order = await pendingOrder(I.studioId, 'PRO', 'MONTHLY')
+      await hook(captured(order.gatewayOrderId!, order.amount)).expect(200)
+      expect(await num(order.id)).toBe(`WZ/2026-27/${String(lastFy26 + 2).padStart(5, '0')}`)
+    })
+
+    it('serves the printable invoice to admins (any studio) and to the paying studio only', async () => {
+      const p = await prisma.payment.findFirstOrThrow({ where: { studioId: A.studioId, purpose: 'SUBSCRIPTION', status: 'SUCCESS' } })
+      const res = await admin.get(`/api/v1/admin/payments/${p.id}/invoice`).expect(200)
+      expect(res.body).toMatchObject({ number: p.invoiceNumber, totalPaise: p.amount, taxablePaise: p.amount - p.gst, sac: '998314' })
+      await A.agent.get(`/api/v1/subscription/payments/${p.id}/invoice`).expect(200)
+      await A.agent.get(`/api/v1/admin/payments/${p.id}/invoice`).expect(403)
+      const other = await signup(app)
+      await other.agent.get(`/api/v1/subscription/payments/${p.id}/invoice`).expect(404)
+      const detail = await admin.get(`/api/v1/admin/subscriptions/${p.subscriptionId}`).expect(200)
+      const unnumbered = detail.body.payments.filter((x: { status: string; invoiceNumber: string | null }) => x.status === 'SUCCESS' && !x.invoiceNumber)
+      expect(unnumbered).toHaveLength(0)
     })
   })
 
@@ -432,6 +580,21 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
       expect(res.body.newVsChurned).toHaveLength(12)
       expect(res.body.activeByPlan.map((p: { code: string }) => p.code)).toEqual(['STARTER', 'PRO', 'STUDIO', 'ALL_ACCESS'])
       expect(res.body.newThisMonth).toBeGreaterThanOrEqual(2)
+      // The MRR card and the trend's current month are the same calculation.
+      expect(res.body.mrrTrend.at(-1).mrrPaise).toBe(res.body.mrrPaise)
+    })
+
+    it('counts "needs attention" once per subscription and lists exactly those', async () => {
+      const stats = (await admin.get('/api/v1/admin/stats').expect(200)).body
+      const tab = await admin.get('/api/v1/admin/subscriptions').query({ tab: 'attention', limit: 100 }).expect(200)
+      expect(tab.body.meta.total).toBe(stats.needsAttention)
+      expect(stats.needsAttention).toBeGreaterThan(0)
+      for (const r of tab.body.data as { status: string; daysLeft: number; cancelAtPeriodEnd: boolean }[]) {
+        expect(r.status === 'GRACE' || r.status === 'PAYMENT_FAILED' || (r.daysLeft >= 0 && r.daysLeft <= 7 && !r.cancelAtPeriodEnd)).toBe(true)
+      }
+      // A plan that is in grace and also failed to charge appears once.
+      const ids = tab.body.data.map((r: { id: string }) => r.id)
+      expect(new Set(ids).size).toBe(ids.length)
     })
 
     it('exports CSV (formula-safe), sorted by soonest deadline', async () => {

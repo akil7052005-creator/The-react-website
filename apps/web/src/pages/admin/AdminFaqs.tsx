@@ -112,7 +112,6 @@ export default function AdminFaqs() {
   return (
     <div className="stack">
       <PageHeader
-        eyebrow="Platform admin"
         title="Help Center"
         subtitle="The questions and answers every studio sees. Hidden FAQs stay here as drafts."
         actions={

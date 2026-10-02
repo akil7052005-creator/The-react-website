@@ -243,7 +243,7 @@ export default function AdminSettings() {
   const q = useQuery({ queryKey: SETTINGS_KEY, queryFn: () => api.get<AdminAlertSettingsDto>('/admin/settings/alerts') })
   return (
     <div className="stack">
-      <PageHeader eyebrow="Platform admin" title="Settings" subtitle="When studios are reminded about their plan deadline, how long grace lasts, and your sign-in security." />
+      <PageHeader title="Settings" subtitle="When studios are reminded about their plan deadline, how long grace lasts, and your sign-in security." />
       <div className="grid grid-2">
         {q.isPending ? <CardSkeleton rows={6} /> : q.isError ? <div className="card"><ErrorState error={q.error} onRetry={() => q.refetch()} /></div> : <AlertSettingsCard key={q.data.updatedAt ?? 'defaults'} settings={q.data} />}
         <TwoFactorCard />

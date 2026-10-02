@@ -74,7 +74,7 @@ export function AdminBell() {
           ))}
           <p className="menu-note">
             <Link to="/admin/alerts" className="link" onClick={() => setOpen(false)}>
-              See all alerts
+              View all
             </Link>
           </p>
         </div>

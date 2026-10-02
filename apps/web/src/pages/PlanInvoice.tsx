@@ -1,16 +1,38 @@
 import { useQuery } from '@tanstack/react-query'
 import { stateName, type PlatformInvoiceDto } from '@weddyzone/shared'
 import { useEffect } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { CardSkeleton, EmptyState, ErrorState } from '../components/ui'
 import { api, isApiError } from '../lib/api'
 import { formatDate, formatMoney } from '../utils/format'
 
-/** Weddyzone's GST tax invoice for one of the studio's plan payments. Print / Save as PDF from the browser. */
+/** Studio: Weddyzone's GST tax invoice for one of its own plan payments. */
 export default function PlanInvoice() {
   const { id = '' } = useParams()
-  const q = useQuery({ queryKey: ['plan-invoice', id], queryFn: () => api.get<PlatformInvoiceDto>(`/subscription/payments/${id}/invoice`) })
+  return <PlanInvoiceView path={`/subscription/payments/${id}/invoice`} backTo="/my-subscription" backLabel="Back to my subscription" />
+}
+
+/** Platform admin: the same invoice for any studio's plan payment (/admin/invoices/:id). */
+export function AdminPlanInvoice() {
+  const { id = '' } = useParams()
+  const navigate = useNavigate()
+  const back = () => (window.history.length > 1 ? navigate(-1) : navigate('/admin/subscriptions'))
+  return <PlanInvoiceView path={`/admin/payments/${id}/invoice`} onBack={back} backLabel="Back" />
+}
+
+/** Weddyzone's GST tax invoice for a plan payment. Print / Save as PDF from the browser. */
+function PlanInvoiceView({ path, backTo, onBack, backLabel }: { path: string; backTo?: string; onBack?: () => void; backLabel: string }) {
+  const q = useQuery({ queryKey: ['plan-invoice', path], queryFn: () => api.get<PlatformInvoiceDto>(path) })
   const inv = q.data
+  const backButton = backTo ? (
+    <Link to={backTo} className="btn btn-ghost">
+      <i className="bi bi-arrow-left" /> {backLabel}
+    </Link>
+  ) : (
+    <button className="btn btn-ghost" onClick={onBack}>
+      <i className="bi bi-arrow-left" /> {backLabel}
+    </button>
+  )
 
   useEffect(() => {
     if (inv) document.title = `${inv.number} · Weddyzone`
@@ -28,7 +50,7 @@ export default function PlanInvoice() {
       <div className="print-shell">
         <div className="card">
           {isApiError(q.error) && q.error.status === 404 ? (
-            <EmptyState icon="receipt" title="Invoice not found" action={<Link to="/my-subscription" className="btn btn-primary">Back to my subscription</Link>} />
+            <EmptyState icon="receipt" title="Invoice not found" action={backButton} />
           ) : (
             <ErrorState error={q.error} onRetry={() => q.refetch()} />
           )}
@@ -41,9 +63,7 @@ export default function PlanInvoice() {
   return (
     <div className="print-shell">
       <div className="print-toolbar no-print">
-        <Link to="/my-subscription" className="btn btn-ghost">
-          <i className="bi bi-arrow-left" /> Back to my subscription
-        </Link>
+        {backButton}
         <button className="btn btn-primary" onClick={() => window.print()}>
           <i className="bi bi-printer" /> Print / Save as PDF
         </button>

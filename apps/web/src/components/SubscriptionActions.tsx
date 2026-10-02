@@ -4,6 +4,7 @@ import {
   adminChangePlanSchema,
   extendSubscriptionSchema,
   REMINDER_CHANNELS,
+  type AdminAlertSettingsDto,
   type AdminPlanDto,
   type AdminSubscriptionRowDto,
   type ReminderChannel,
@@ -161,21 +162,33 @@ function CancelDialog({ row, onClose }: { row: Row; onClose: () => void }) {
   )
 }
 
+interface RemindResult {
+  channel: ReminderChannel
+  delivered: boolean
+  skipped: boolean
+  error: string | null
+}
+
 function RemindDialog({ row, onClose }: { row: Row; onClose: () => void }) {
   const refresh = useRefresh()
-  const [channels, setChannels] = useState<ReminderChannel[]>(['IN_APP', 'EMAIL', 'WHATSAPP'])
+  const settings = useQuery({ queryKey: ['admin', 'settings', 'alerts'], queryFn: () => api.get<AdminAlertSettingsDto>('/admin/settings/alerts') })
+  // Without a WhatsApp provider the API skips WhatsApp, so it isn't offered (unknown until loaded: offered).
+  const whatsappOff = settings.data?.whatsappConfigured === false
+  const [picked, setPicked] = useState<ReminderChannel[]>(['IN_APP', 'EMAIL', 'WHATSAPP'])
+  const channels = picked.filter((c) => c !== 'WHATSAPP' || !whatsappOff)
   const send = useMutation({
-    mutationFn: () => api.post<{ results: { channel: ReminderChannel; delivered: boolean; error: string | null }[] }>(`/admin/subscriptions/${row.id}/remind`, { channels }),
+    mutationFn: () => api.post<{ results: RemindResult[] }>(`/admin/subscriptions/${row.id}/remind`, { channels }),
     onSuccess: async (r) => {
-      const failed = r.results.filter((x) => !x.delivered)
+      const failed = r.results.filter((x) => !x.delivered && !x.skipped)
+      const skipped = r.results.filter((x) => x.skipped)
       if (failed.length) toast.warning(`Sent, but ${failed.map((f) => CHANNEL_LABELS[f.channel]).join(', ')} not delivered`, { description: failed[0].error ?? undefined })
-      else toast.success(`Reminder sent to ${row.studio.name}`)
+      else toast.success(`Reminder sent to ${row.studio.name}`, skipped.length ? { description: `${skipped.map((s) => CHANNEL_LABELS[s.channel]).join(', ')} skipped – not configured` } : undefined)
       await refresh()
       onClose()
     },
     onError: (e) => toastError(e),
   })
-  const toggle = (c: ReminderChannel) => setChannels((cs) => (cs.includes(c) ? cs.filter((x) => x !== c) : [...cs, c]))
+  const toggle = (c: ReminderChannel) => setPicked((cs) => (cs.includes(c) ? cs.filter((x) => x !== c) : [...cs, c]))
   return (
     <Modal
       open
@@ -200,13 +213,19 @@ function RemindDialog({ row, onClose }: { row: Row; onClose: () => void }) {
         <legend className="muted" style={{ marginBottom: 8 }}>
           Channels
         </legend>
-        {REMINDER_CHANNELS.map((c) => (
-          <label key={c} className="check-row">
-            <input type="checkbox" checked={channels.includes(c)} onChange={() => toggle(c)} /> {CHANNEL_LABELS[c]}
-          </label>
-        ))}
+        {REMINDER_CHANNELS.map((c) => {
+          const off = c === 'WHATSAPP' && whatsappOff
+          return (
+            <label key={c} className="check-row" style={off ? { opacity: 0.6, cursor: 'not-allowed' } : undefined}>
+              <input type="checkbox" checked={channels.includes(c)} disabled={off} onChange={() => toggle(c)} /> {CHANNEL_LABELS[c]}
+              {off && <span className="muted"> — not configured</span>}
+            </label>
+          )
+        })}
         <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-          WhatsApp is sent from Weddyzone's number and never uses the studio's credits.
+          {whatsappOff
+            ? 'WhatsApp needs the WhatsApp Cloud API (WHATSAPP_CLOUD_TOKEN) before alerts can go out on it.'
+            : "WhatsApp is sent from Weddyzone's number and never uses the studio's credits."}
         </p>
       </fieldset>
     </Modal>

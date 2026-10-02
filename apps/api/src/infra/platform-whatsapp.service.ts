@@ -53,6 +53,12 @@ export class PlatformWhatsAppService {
 
   constructor(private readonly prisma: PrismaService) {}
 
+  /** True when the WhatsApp Cloud API is set up. Without it no WhatsApp alert is attempted. */
+  isConfigured(): boolean {
+    const c = config()
+    return Boolean(c.WHATSAPP_CLOUD_TOKEN && c.WHATSAPP_PHONE_NUMBER_ID)
+  }
+
   async renderMessage(msg: PlatformWhatsApp): Promise<string> {
     const t = await this.prisma.whatsAppTemplate.findUnique({ where: { key: msg.template } })
     return t ? render(t.body, msg.vars) : Object.values(msg.vars).join(' · ')
@@ -63,9 +69,7 @@ export class PlatformWhatsAppService {
     const body = await this.renderMessage(msg)
     const link = waLink(toPhone, body)
     const c = config()
-    if (!c.WHATSAPP_CLOUD_TOKEN || !c.WHATSAPP_PHONE_NUMBER_ID) {
-      return { body, link, delivered: false }
-    }
+    if (!this.isConfigured()) return { body, link, delivered: false }
     const digits = toPhone.replace(/\D/g, '')
     const to = digits.length === 10 ? `91${digits}` : digits
     const res = await fetch(`${GRAPH_URL}/${c.WHATSAPP_PHONE_NUMBER_ID}/messages`, {

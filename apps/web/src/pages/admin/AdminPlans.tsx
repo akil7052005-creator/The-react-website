@@ -6,6 +6,7 @@ import { FieldShell, SubmitButton, useGuardedClose } from '../../components/form
 import { Modal } from '../../components/Modal'
 import { Card, CardSkeleton, ComingSoonTag, ErrorState, PageHeader, StatusPill } from '../../components/ui'
 import { useUrlState } from '../../hooks/useUrlState'
+import { limitFeature, storageText } from '../../lib/admin'
 import { api, isApiError } from '../../lib/api'
 import { toastError } from '../../lib/query'
 import { formatMoney, formatNumber } from '../../utils/format'
@@ -190,7 +191,7 @@ export default function AdminPlans() {
 
   return (
     <div className="stack">
-      <PageHeader eyebrow="Platform admin" title="Plans" subtitle="Prices, limits and features studios see on the pricing pages. Prices exclude 18% GST." />
+      <PageHeader title="Plans" subtitle="Prices, limits and features studios see on the pricing pages." />
       {q.isPending ? (
         <CardSkeleton rows={6} />
       ) : q.isError ? (
@@ -220,15 +221,25 @@ export default function AdminPlans() {
                 )}
                 <strong>{formatMoney(p.yearlyPricePaise)}</strong> / year
               </p>
+              {/* Each limit once: feature lines that only restate a limit are folded into it. */}
               <ul className="admin-plan-limits">
-                <li>Events / month: {limitText(p.limits.eventsPerMonth)}</li>
-                <li>Albums: {limitText(p.limits.albums)}</li>
-                <li>Storage: {limitText(p.limits.storageGb, ' GB')}</li>
-                <li>Team seats: {formatNumber(p.limits.teamSeats)}</li>
-                <li>Credits included: {formatNumber(p.limits.includedCredits)}</li>
+                {(
+                  [
+                    ['eventsPerMonth', 'Events / month', limitText(p.limits.eventsPerMonth)],
+                    ['albums', 'Albums', limitText(p.limits.albums)],
+                    ['storageGb', 'Storage', storageText(p.limits.storageGb)],
+                    ['teamSeats', 'Team seats', formatNumber(p.limits.teamSeats)],
+                    ['includedCredits', 'WhatsApp credits included', formatNumber(p.limits.includedCredits)],
+                  ] as const
+                ).map(([key, label, value]) => (
+                  <li key={key}>
+                    {label}: {value}
+                    {p.comingSoon.some((f) => limitFeature(f) === key) && <ComingSoonTag />}
+                  </li>
+                ))}
               </ul>
               <ul className="checklist">
-                {p.features.map((f) => (
+                {p.features.filter((f) => !limitFeature(f)).map((f) => (
                   <li key={f} className={p.comingSoon.includes(f) ? 'is-coming-soon' : ''}>
                     {p.comingSoon.includes(f) ? <i className="bi bi-clock" /> : <i className="bi bi-check-circle-fill" />}
                     <span>{f}</span>
