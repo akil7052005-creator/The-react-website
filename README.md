@@ -106,6 +106,7 @@ Everything that would need a third party sits behind an interface with a simple 
    - The API refuses to start in production with development values (localhost URLs, example JWT secrets, no email provider)
    - `S3_BUCKET`, `S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` for a **private** Cloudflare R2 or AWS S3 bucket. Required in production: the host's disk is wiped on redeploy.
 4. Seed reference data once: `pnpm --filter @weddyzone/api db:seed:prod` (plans, WhatsApp templates and FAQs only; it never creates accounts and is safe to re-run). Never run plain `db:seed` against production: it creates demo logins whose passwords are in this repo (it now refuses to when `NODE_ENV=production`).
+5. Create your platform admin (signs in at `/login`, lands in `/admin`): `pnpm --filter @weddyzone/api admin:create -- --email you@yourdomain.com --name "Your Name"`. It prints a random password once; store it in a password manager. Forgot it? Run it again with `--reset-password` (this also signs that admin out everywhere). Admin sessions end after `ADMIN_SESSION_HOURS` (default 8) without activity, and every admin action is recorded in the `admin_audit_log` table.
 
 ### Web (Vercel)
 
