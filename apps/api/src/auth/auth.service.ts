@@ -35,6 +35,14 @@ const DUMMY_HASH = bcrypt.hashSync('never-a-real-password', BCRYPT_ROUNDS)
 export interface IssuedTokens {
   access: string
   refresh: string
+  /** How long the refresh cookie lives: ADMIN_SESSION_HOURS for platform admins, REFRESH_TOKEN_TTL_DAYS otherwise. */
+  refreshMaxAgeMs: number
+}
+
+/** Platform admins get much shorter sessions than studio users. */
+export function refreshTtlMs(role: User['role']): number {
+  const c = config()
+  return role === 'SUPER_ADMIN' ? c.ADMIN_SESSION_HOURS * 3_600_000 : c.REFRESH_TOKEN_TTL_DAYS * 86_400_000
 }
 
 @Injectable()
@@ -154,19 +162,20 @@ export class AuthService {
       { secret: c.JWT_ACCESS_SECRET, expiresIn: `${c.ACCESS_TOKEN_TTL_MINUTES}m` },
     )
     const jti = randomUUID()
+    const ttlMs = refreshTtlMs(user.role)
     const refresh = await this.jwt.signAsync(
       { sub: user.id, jti },
-      { secret: c.JWT_REFRESH_SECRET, expiresIn: `${c.REFRESH_TOKEN_TTL_DAYS}d` },
+      { secret: c.JWT_REFRESH_SECRET, expiresIn: `${Math.round(ttlMs / 1000)}s` },
     )
     await this.prisma.refreshToken.create({
       data: {
         id: jti,
         userId: user.id,
         tokenHash: sha256(refresh),
-        expiresAt: new Date(Date.now() + c.REFRESH_TOKEN_TTL_DAYS * 86_400_000),
+        expiresAt: new Date(Date.now() + ttlMs),
       },
     })
-    return { access, refresh }
+    return { access, refresh, refreshMaxAgeMs: ttlMs }
   }
 
   /**

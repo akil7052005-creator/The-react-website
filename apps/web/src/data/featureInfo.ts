@@ -1,8 +1,5 @@
 // Comprehensive feature descriptions and cursor-hover information across Weddyzone studio platform.
 
-/** Plan features that are promised but not built yet: shown with a "Coming soon" tag, not a check mark. */
-export const COMING_SOON_FEATURES: ReadonlySet<string> = new Set(['Custom domain', '5 team seats', 'Priority support', 'Dedicated account manager'])
-
 export const featureInfo = {
   // Navigation & Core Services
   dashboard: {

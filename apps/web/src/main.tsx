@@ -1,7 +1,7 @@
 import { lazy, StrictMode, Suspense, type ComponentType } from 'react'
 import { createRoot } from 'react-dom/client'
 import { QueryClientProvider } from '@tanstack/react-query'
-import { createBrowserRouter, Outlet, RouterProvider, type RouteObject } from 'react-router-dom'
+import { createBrowserRouter, Navigate, Outlet, RouterProvider, type RouteObject } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import './index.css'
 import './additions.css'
@@ -10,10 +10,11 @@ import './styles/billing.css'
 import './styles/business.css'
 import { queryClient } from './lib/query'
 import { features } from './lib/env'
-import { RedirectIfAuthed, RequireAuth } from './auth/AuthProvider'
+import { RedirectIfAuthed, RequireAdmin, RequireAuth } from './auth/AuthProvider'
 import { ConfirmProvider } from './components/Modal'
 import { PageSkeleton } from './components/ui'
 import AppLayout from './layout/AppLayout'
+import AdminLayout from './layout/AdminLayout'
 import RouteError from './pages/RouteError'
 
 // Each page is its own chunk, downloaded the first time it is opened. The layouts show a
@@ -44,6 +45,9 @@ const PublicSelection = page(() => import('./pages/public/PublicSelection'))
 const PublicAlbum = page(() => import('./pages/public/PublicAlbum'))
 const InvoicePrint = page(() => import('./pages/InvoicePrint'))
 const PublicSite = page(() => import('./pages/public/PublicSite'))
+const AdminTickets = page(() => import('./pages/admin/AdminTickets'))
+const AdminFaqs = page(() => import('./pages/admin/AdminFaqs'))
+const AdminPlans = page(() => import('./pages/admin/AdminPlans'))
 
 // Root element: things every route needs (confirm dialogs use the router for "leave page?" prompts).
 function Root() {
@@ -99,6 +103,23 @@ const router = createBrowserRouter([
             <InvoicePrint />
           </RequireAuth>
         ),
+      },
+      // Platform admin area: SUPER_ADMIN only (checked here and again by the API on every request).
+      {
+        path: '/admin',
+        element: (
+          <RequireAdmin>
+            <AdminLayout />
+          </RequireAdmin>
+        ),
+        children: [
+          { index: true, element: <Navigate to="/admin/tickets" replace /> },
+          { path: 'tickets', element: <AdminTickets /> },
+          { path: 'help', element: <AdminFaqs /> },
+          { path: 'plans', element: <AdminPlans /> },
+          { path: 'logout', element: <Logout /> },
+          { path: '*', element: <NotFound /> },
+        ],
       },
       {
         path: '/',

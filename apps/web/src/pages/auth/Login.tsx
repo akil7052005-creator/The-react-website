@@ -9,10 +9,16 @@ import { api } from '../../lib/api'
 import { toastError } from '../../lib/query'
 import { AuthLayout, PasswordField } from './AuthLayout'
 
-/** Where to go after logging in: a same-site `?next=` path, otherwise the dashboard. */
-function safeNext(params: URLSearchParams) {
+/**
+ * Where to go after logging in: a same-site `?next=` path, otherwise home. Platform admins only
+ * ever land in /admin (their home), studio users never do.
+ */
+function safeNext(params: URLSearchParams, admin = false) {
   const next = params.get('next')
-  return next && next.startsWith('/') && !next.startsWith('//') ? next : '/'
+  const ok = next && next.startsWith('/') && !next.startsWith('//')
+  const inAdmin = ok && (next === '/admin' || next.startsWith('/admin/'))
+  if (admin) return inAdmin ? next : '/admin'
+  return ok && !inAdmin ? next : '/'
 }
 
 export default function Login() {
@@ -27,7 +33,7 @@ export default function Login() {
     onSuccess: (data) => {
       qc.setQueryData(ME_KEY, data)
       toast.success(`Welcome back, ${data.user.name.split(' ')[0]}!`)
-      navigate(safeNext(params), { replace: true })
+      navigate(safeNext(params, data.user.role === 'SUPER_ADMIN'), { replace: true })
     },
     onError: (e) => applyApiErrors(form, e),
   })
@@ -45,7 +51,8 @@ export default function Login() {
 
   if (me.isPending || login.isSuccess) return <PageSkeleton />
 
-  const signedIn = me.data?.studio ? me.data : null
+  const isAdmin = me.data?.user.role === 'SUPER_ADMIN'
+  const signedIn = me.data?.studio || isAdmin ? me.data : null
   if (signedIn) {
     return (
       <AuthLayout title="You're already logged in" subtitle="Continue to your studio, or switch to another account.">
@@ -56,8 +63,8 @@ export default function Login() {
           </span>
         </div>
         <div className="stack" style={{ gap: 10, marginTop: 18 }}>
-          <Link to={safeNext(params)} replace className="btn btn-primary btn-block btn-lg">
-            <i className="bi bi-grid-1x2" /> Go to dashboard
+          <Link to={safeNext(params, isAdmin)} replace className="btn btn-primary btn-block btn-lg">
+            <i className={`bi bi-${isAdmin ? 'shield-lock' : 'grid-1x2'}`} /> {isAdmin ? 'Go to admin panel' : 'Go to dashboard'}
           </Link>
           <button type="button" className="btn btn-ghost btn-block" onClick={() => switchAccount.mutate()} disabled={switchAccount.isPending}>
             {switchAccount.isPending ? <Spinner size={14} /> : <i className="bi bi-arrow-left-right" />} Log in with a different account
@@ -77,11 +84,6 @@ export default function Login() {
         </>
       }
     >
-      {params.get('admin') && (
-        <p className="notice warning" style={{ marginBottom: 14 }}>
-          <i className="bi bi-info-circle" /> Platform admin accounts use the admin API; log in with a studio account here.
-        </p>
-      )}
       <form method="post" onSubmit={form.handleSubmit((v) => login.mutate(v))} noValidate>
         <TextField form={form} name="email" label="Email" type="email" autoComplete="email" required placeholder="you@studio.com" />
         <PasswordField form={form} name="password" label="Password" autoComplete="current-password" />

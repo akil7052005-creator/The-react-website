@@ -19,5 +19,5 @@
     "noFallthroughCasesInSwitch": true,
     "types": ["node", "jest"]
   },
-  "include": ["src", "test", "prisma/seed.ts", "prisma/seed-production.ts"]
+  "include": ["src", "test", "prisma/seed.ts", "prisma/seed-production.ts", "prisma/create-admin.ts"]
 }

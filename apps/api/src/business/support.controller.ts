@@ -1,7 +1,7 @@
-import { Body, Controller, Delete, Get, HttpCode, Injectable, Param, ParseUUIDPipe, Patch, Post, Query, UploadedFile, UseInterceptors } from '@nestjs/common'
+import { Body, Controller, Delete, Get, HttpCode, Injectable, Param, ParseUUIDPipe, Patch, Post, Query, Req, UploadedFile, UseInterceptors } from '@nestjs/common'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { ApiConsumes, ApiTags } from '@nestjs/swagger'
-import type { Prisma, TicketStatus } from '@prisma/client'
+import type { Faq, Plan, Prisma, TicketStatus } from '@prisma/client'
 import {
   faqSchema,
   listQuerySchema,
@@ -12,15 +12,19 @@ import {
   ticketStatusSchema,
   toPaise,
   updatePlanSchema,
+  type AdminFaqDto,
+  type AdminPlanDto,
   type ListQuery,
   type TicketDetailDto,
   type TicketDto,
 } from '@weddyzone/shared'
+import type { Request } from 'express'
 import { z } from 'zod'
 import { AuthUser, CurrentUser, Roles, StudioId } from '../auth/auth.decorators'
 import { badRequest, notFound } from '../common/errors'
 import { nextSequence, paginate, skipTake } from '../common/util'
 import { ApiListQuery, ApiZodBody, zod } from '../common/zod'
+import { AuditService } from '../core/audit.service'
 import { FilesService, fileUrls, type UploadedFile as Upload } from '../core/files.service'
 import { NotificationsService } from '../core/notifications.service'
 import { PlansService } from '../core/plans.service'
@@ -186,7 +190,10 @@ export class SupportController {
   }
 }
 
-/** Platform staff endpoints: reply to any studio's tickets, manage FAQs and plans. */
+/**
+ * Platform admin endpoints (the /admin area of the web app): every studio's tickets, FAQs and plans.
+ * Only SUPER_ADMIN users get in, and every change is written to the admin audit log.
+ */
 @ApiTags('admin')
 @Roles('SUPER_ADMIN')
 @Controller('admin')
@@ -195,6 +202,7 @@ export class AdminController {
     private readonly prisma: PrismaService,
     private readonly support: SupportService,
     private readonly plans: PlansService,
+    private readonly audit: AuditService,
   ) {}
 
   @Get('tickets')
@@ -210,45 +218,86 @@ export class AdminController {
 
   @Post('tickets/:id/messages')
   @ApiZodBody(ticketReplySchema)
-  async reply(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body(zod(ticketReplySchema)) body: z.output<typeof ticketReplySchema>) {
-    return this.support.reply(await this.support.find({ id }), user.userId, body.body, undefined, true)
+  async reply(
+    @CurrentUser() user: AuthUser,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(zod(ticketReplySchema)) body: z.output<typeof ticketReplySchema>,
+  ) {
+    const t = await this.support.find({ id })
+    const result = await this.support.reply(t, user.userId, body.body, undefined, true)
+    await this.audit.record(user.userId, req, { action: 'ticket.reply', target: { type: 'ticket', id: t.id }, summary: `Replied to ${t.code} (${t.studio.name})` })
+    return result
   }
 
   @Patch('tickets/:id/status')
   @ApiZodBody(ticketStatusSchema)
-  async status(@Param('id', ParseUUIDPipe) id: string, @Body(zod(ticketStatusSchema)) body: z.output<typeof ticketStatusSchema>) {
-    return this.support.setStatus(await this.support.find({ id }), body.status)
+  async status(
+    @CurrentUser() user: AuthUser,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(zod(ticketStatusSchema)) body: z.output<typeof ticketStatusSchema>,
+  ) {
+    const t = await this.support.find({ id })
+    const result = await this.support.setStatus(t, body.status)
+    await this.audit.record(user.userId, req, { action: 'ticket.status', target: { type: 'ticket', id: t.id }, summary: `Set ${t.code} from ${t.status} to ${body.status}` })
+    return result
   }
 
   @Get('faqs')
-  faqs() {
-    return this.prisma.faq.findMany({ orderBy: [{ position: 'asc' }, { createdAt: 'asc' }] })
+  async faqs(): Promise<AdminFaqDto[]> {
+    const rows = await this.prisma.faq.findMany({ orderBy: [{ category: 'asc' }, { position: 'asc' }, { createdAt: 'asc' }] })
+    return rows.map(faqDto)
   }
 
   @Post('faqs')
   @ApiZodBody(faqSchema)
-  createFaq(@Body(zod(faqSchema)) body: z.output<typeof faqSchema>) {
-    return this.prisma.faq.create({ data: body })
+  async createFaq(@CurrentUser() user: AuthUser, @Req() req: Request, @Body(zod(faqSchema)) body: z.output<typeof faqSchema>) {
+    const faq = await this.prisma.faq.create({ data: body })
+    await this.audit.record(user.userId, req, { action: 'faq.create', target: { type: 'faq', id: faq.id }, summary: `Added FAQ "${faq.question}"` })
+    return faqDto(faq)
   }
 
   @Patch('faqs/:id')
   @ApiZodBody(faqSchema)
-  async updateFaq(@Param('id', ParseUUIDPipe) id: string, @Body(zod(faqSchema)) body: z.output<typeof faqSchema>) {
-    if (!(await this.prisma.faq.findUnique({ where: { id } }))) throw notFound('FAQ')
-    return this.prisma.faq.update({ where: { id }, data: body })
+  async updateFaq(
+    @CurrentUser() user: AuthUser,
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(zod(faqSchema)) body: z.output<typeof faqSchema>,
+  ) {
+    const before = await this.prisma.faq.findUnique({ where: { id } })
+    if (!before) throw notFound('FAQ')
+    const faq = await this.prisma.faq.update({ where: { id }, data: body })
+    const published = before.isPublished !== faq.isPublished ? (faq.isPublished ? ' (published)' : ' (unpublished)') : ''
+    await this.audit.record(user.userId, req, { action: 'faq.update', target: { type: 'faq', id }, summary: `Edited FAQ "${faq.question}"${published}` })
+    return faqDto(faq)
   }
 
   @Delete('faqs/:id')
-  async deleteFaq(@Param('id', ParseUUIDPipe) id: string) {
-    if (!(await this.prisma.faq.findUnique({ where: { id } }))) throw notFound('FAQ')
+  async deleteFaq(@CurrentUser() user: AuthUser, @Req() req: Request, @Param('id', ParseUUIDPipe) id: string) {
+    const faq = await this.prisma.faq.findUnique({ where: { id } })
+    if (!faq) throw notFound('FAQ')
     await this.prisma.faq.delete({ where: { id } })
+    await this.audit.record(user.userId, req, { action: 'faq.delete', target: { type: 'faq', id }, summary: `Deleted FAQ "${faq.question}"` })
     return { ok: true }
+  }
+
+  /** Every plan, hidden ones included. */
+  @Get('plans')
+  async planList(): Promise<AdminPlanDto[]> {
+    return (await this.plans.listAll()).map((p) => this.plans.toAdminDto(p))
   }
 
   @Patch('plans/:code')
   @HttpCode(200)
   @ApiZodBody(updatePlanSchema)
-  async updatePlan(@Param('code') code: string, @Body(zod(updatePlanSchema)) body: z.output<typeof updatePlanSchema>) {
+  async updatePlan(
+    @CurrentUser() user: AuthUser,
+    @Req() req: Request,
+    @Param('code') code: string,
+    @Body(zod(updatePlanSchema)) body: z.output<typeof updatePlanSchema>,
+  ): Promise<AdminPlanDto> {
     if (!(PLAN_CODES as readonly string[]).includes(code)) throw badRequest('Unknown plan code')
     const plan = await this.plans.byCode(code as (typeof PLAN_CODES)[number])
     const updated = await this.prisma.plan.update({
@@ -260,10 +309,42 @@ export class AdminController {
         yearlyPrice: toPaise(body.yearlyPrice),
         limits: body.limits,
         features: body.features,
+        comingSoon: body.comingSoon,
         popular: body.popular,
         isActive: body.isActive,
       },
     })
-    return this.plans.toDto(updated)
+    await this.audit.record(user.userId, req, { action: 'plan.update', target: { type: 'plan', id: plan.id }, summary: planChangeSummary(plan, updated) })
+    return this.plans.toAdminDto(updated)
   }
+}
+
+function faqDto(f: Faq): AdminFaqDto {
+  return {
+    id: f.id,
+    category: f.category,
+    question: f.question,
+    answer: f.answer,
+    position: f.position,
+    isPublished: f.isPublished,
+    helpfulYes: f.helpfulYes,
+    helpfulNo: f.helpfulNo,
+    updatedAt: f.updatedAt.toISOString(),
+  }
+}
+
+/** "Studio: yearly price ₹59,990 → ₹54,990; popular on" — what changed, for the audit log. */
+function planChangeSummary(before: Plan, after: Plan): string {
+  const rupees = (p: number | null) => (p === null ? 'none' : `₹${(p / 100).toLocaleString('en-IN')}`)
+  const changes: string[] = []
+  if (before.name !== after.name) changes.push(`name "${before.name}" → "${after.name}"`)
+  if (before.tagline !== after.tagline) changes.push('tagline')
+  if (before.monthlyPrice !== after.monthlyPrice) changes.push(`monthly price ${rupees(before.monthlyPrice)} → ${rupees(after.monthlyPrice)}`)
+  if (before.yearlyPrice !== after.yearlyPrice) changes.push(`yearly price ${rupees(before.yearlyPrice)} → ${rupees(after.yearlyPrice)}`)
+  if (JSON.stringify(before.limits) !== JSON.stringify(after.limits)) changes.push('limits')
+  if (JSON.stringify(before.features) !== JSON.stringify(after.features)) changes.push('features')
+  if (JSON.stringify(before.comingSoon) !== JSON.stringify(after.comingSoon)) changes.push(`coming soon: ${(after.comingSoon as string[]).join(', ') || 'none'}`)
+  if (before.popular !== after.popular) changes.push(`popular ${after.popular ? 'on' : 'off'}`)
+  if (before.isActive !== after.isActive) changes.push(after.isActive ? 'shown to studios' : 'hidden from studios')
+  return `${before.name}: ${changes.join('; ') || 'saved with no changes'}`
 }

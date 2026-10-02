@@ -230,7 +230,14 @@ export interface PlanDto {
   yearlyPricePaise: number
   limits: PlanLimits
   features: string[]
+  /** Features on this plan that are not built yet ("Coming soon" instead of a check mark). */
+  comingSoon: string[]
   popular: boolean
+}
+
+/** A plan as platform admins see it: hidden plans included. */
+export interface AdminPlanDto extends PlanDto {
+  isActive: boolean
 }
 
 export interface SubscriptionDto {
@@ -448,6 +455,19 @@ export interface FaqDto {
   question: string
   answer: string
   myVote: boolean | null
+}
+
+/** An FAQ as platform admins see it: drafts included, with the "Was this helpful?" counts. */
+export interface AdminFaqDto {
+  id: string
+  category: string
+  question: string
+  answer: string
+  position: number
+  isPublished: boolean
+  helpfulYes: number
+  helpfulNo: number
+  updatedAt: string
 }
 
 export interface TicketMessageDto {

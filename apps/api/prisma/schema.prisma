@@ -154,48 +154,48 @@ enum FileKind {
 }
 
 model Studio {
-  id             String    @id @default(uuid()) @db.Uuid
-  name           String
-  slug           String    @unique
-  email          String?
-  phone          String?
-  gstin          String?
-  pan            String?
-  addressLine1   String?   @map("address_line1")
-  addressLine2   String?   @map("address_line2")
-  city           String?
-  stateCode      String?   @map("state_code")
-  pincode        String?
-  website        String?
-  bio            String?
-  logoFileId     String?   @unique @map("logo_file_id") @db.Uuid
-  referralCode   String    @unique @map("referral_code")
-  walletBalance  Int       @default(0) @map("wallet_balance")
-  creditBalance  Int       @default(0) @map("credit_balance")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
+  id            String   @id @default(uuid()) @db.Uuid
+  name          String
+  slug          String   @unique
+  email         String?
+  phone         String?
+  gstin         String?
+  pan           String?
+  addressLine1  String?  @map("address_line1")
+  addressLine2  String?  @map("address_line2")
+  city          String?
+  stateCode     String?  @map("state_code")
+  pincode       String?
+  website       String?
+  bio           String?
+  logoFileId    String?  @unique @map("logo_file_id") @db.Uuid
+  referralCode  String   @unique @map("referral_code")
+  walletBalance Int      @default(0) @map("wallet_balance")
+  creditBalance Int      @default(0) @map("credit_balance")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
-  logo             StoredFile?        @relation("StudioLogo", fields: [logoFileId], references: [id])
-  users            User[]
-  clients          Client[]
-  events           Event[]
-  files            StoredFile[]       @relation("StudioFiles")
-  selections       Selection[]
-  albums           Album[]
-  subscription     Subscription?
-  payments         Payment[]
-  creditLedger     CreditLedger[]
-  messages         WhatsAppMessage[]
-  invoices         Invoice[]
-  referralsMade    Referral[]         @relation("Referrer")
-  referredBy       Referral?          @relation("Referred")
-  walletTxns       WalletTxn[]
-  websiteSettings  WebsiteSettings?
-  leads            Lead[]
-  banners          Banner[]
-  tickets          Ticket[]
-  notifications    Notification[]
-  counters         Counter[]
+  logo            StoredFile?       @relation("StudioLogo", fields: [logoFileId], references: [id])
+  users           User[]
+  clients         Client[]
+  events          Event[]
+  files           StoredFile[]      @relation("StudioFiles")
+  selections      Selection[]
+  albums          Album[]
+  subscription    Subscription?
+  payments        Payment[]
+  creditLedger    CreditLedger[]
+  messages        WhatsAppMessage[]
+  invoices        Invoice[]
+  referralsMade   Referral[]        @relation("Referrer")
+  referredBy      Referral?         @relation("Referred")
+  walletTxns      WalletTxn[]
+  websiteSettings WebsiteSettings?
+  leads           Lead[]
+  banners         Banner[]
+  tickets         Ticket[]
+  notifications   Notification[]
+  counters        Counter[]
 
   @@map("studios")
 }
@@ -217,18 +217,19 @@ model User {
   passwordResets PasswordReset[]
   faqVotes       FaqFeedback[]
   ticketMessages TicketMessage[]
+  adminActions   AdminAuditLog[]
 
   @@index([studioId])
   @@map("users")
 }
 
 model RefreshToken {
-  id         String    @id @default(uuid()) @db.Uuid
-  userId     String    @map("user_id") @db.Uuid
-  tokenHash  String    @unique @map("token_hash")
-  expiresAt  DateTime  @map("expires_at")
-  revokedAt  DateTime? @map("revoked_at")
-  createdAt  DateTime  @default(now()) @map("created_at")
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -273,8 +274,8 @@ model StoredFile {
   createdAt    DateTime  @default(now()) @map("created_at")
   deletedAt    DateTime? @map("deleted_at")
 
-  studio        Studio          @relation("StudioFiles", fields: [studioId], references: [id])
-  studioLogo    Studio?         @relation("StudioLogo")
+  studio        Studio         @relation("StudioFiles", fields: [studioId], references: [id])
+  studioLogo    Studio?        @relation("StudioLogo")
   photo         Photo?
   banner        Banner?
   ticket        Ticket?
@@ -502,6 +503,8 @@ model Plan {
   yearlyPrice  Int      @map("yearly_price")
   limits       Json
   features     Json
+  // Features listed on the plan that are not built yet: shown with a "Coming soon" tag.
+  comingSoon   Json     @default("[]") @map("coming_soon")
   popular      Boolean  @default(false)
   sortOrder    Int      @default(0) @map("sort_order")
   isActive     Boolean  @default(true) @map("is_active")
@@ -868,4 +871,22 @@ model Notification {
 
   @@index([studioId, readAt, createdAt])
   @@map("notifications")
+}
+
+/// Every platform-admin action (and admin sign-in), for accountability. Rows are never updated or deleted.
+model AdminAuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  actorUserId String   @map("actor_user_id") @db.Uuid
+  action      String
+  targetType  String?  @map("target_type")
+  targetId    String?  @map("target_id")
+  summary     String
+  ip          String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  actor User @relation(fields: [actorUserId], references: [id])
+
+  @@index([createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("admin_audit_log")
 }

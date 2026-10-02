@@ -642,3 +642,101 @@
   font-size: 13px;
   opacity: 0.85;
 }
+
+/* ---------- Platform admin area (/admin) ---------- */
+.admin-topbar {
+  gap: 12px;
+}
+.admin-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+}
+.admin-badge::before {
+  display: none;
+}
+.admin-session-note {
+  font-size: 13px;
+}
+.admin-who p {
+  display: grid;
+  gap: 2px;
+  padding: 0 12px 8px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.85);
+}
+.admin-who p span {
+  color: rgba(255, 255, 255, 0.72);
+  overflow-wrap: anywhere;
+}
+.admin-inline-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+}
+.admin-inline-field select {
+  width: auto;
+}
+.row-clickable {
+  cursor: pointer;
+}
+.row-clickable:hover td {
+  background: var(--surface-2);
+}
+.row-danger {
+  color: var(--danger) !important;
+}
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.check-row input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--wine-700);
+}
+.check-row.full,
+.admin-coming-soon {
+  grid-column: 1 / -1;
+}
+.admin-coming-soon {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.admin-coming-soon legend {
+  padding: 0 6px;
+  font-weight: 700;
+}
+.admin-plan-title {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.admin-plan-price {
+  margin-bottom: 12px;
+  font-size: 15px;
+}
+.admin-plan-limits {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 16px;
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+  font-size: 13.5px;
+  color: var(--text-2);
+}
+@media (max-width: 767px) {
+  .admin-session-note {
+    display: none;
+  }
+}
