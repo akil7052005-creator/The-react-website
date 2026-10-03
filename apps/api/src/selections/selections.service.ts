@@ -215,20 +215,30 @@ export class SelectionsService {
     const s = await this.find(studioId, id)
     if (s.status === 'SUBMITTED') throw readOnly('This selection was submitted — photos can no longer be added.')
     const { checksum } = await this.files.validate(studioId, 'PHOTO', file)
-    const dup = await this.prisma.photo.findFirst({
-      where: { selectionId: id, deletedAt: null, file: { checksum } },
-      include: { file: true },
-    })
-    if (dup) {
-      throw conflict(`${file!.originalname} is already in this selection (same file as ${dup.file.originalName})`, {
-        file: 'Duplicate photo — already uploaded',
-      })
-    }
-    const last = await this.prisma.photo.findFirst({ where: { selectionId: id }, orderBy: { position: 'desc' } })
-    const stored = await this.files.store(studioId, 'PHOTO', file)
-    const photo = await this.prisma.photo.create({
-      data: { studioId, eventId: s.eventId, selectionId: id, fileId: stored.id, position: (last?.position ?? -1) + 1 },
-    })
+    // The uploader sends several files at once (a whole folder, say). Locking the selection row makes
+    // uploads to one selection take turns between the duplicate check and the insert, so the same
+    // photo arriving twice in parallel is still caught, and positions never collide.
+    const { photo, stored } = await this.prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT id FROM selections WHERE id = ${id}::uuid FOR UPDATE`
+        const dup = await tx.photo.findFirst({
+          where: { selectionId: id, deletedAt: null, file: { checksum } },
+          include: { file: true },
+        })
+        if (dup) {
+          throw conflict(`${file!.originalname} is already in this selection (same file as ${dup.file.originalName})`, {
+            file: 'Duplicate photo — already uploaded',
+          })
+        }
+        const last = await tx.photo.findFirst({ where: { selectionId: id }, orderBy: { position: 'desc' } })
+        const stored = await this.files.store(studioId, 'PHOTO', file, 'file', tx)
+        const photo = await tx.photo.create({
+          data: { studioId, eventId: s.eventId, selectionId: id, fileId: stored.id, position: (last?.position ?? -1) + 1 },
+        })
+        return { photo, stored }
+      },
+      { timeout: 30_000, maxWait: 30_000 },
+    )
     return { id: photo.id, url: fileUrls.studio(stored.id), originalName: stored.originalName, size: stored.size, position: photo.position }
   }
 

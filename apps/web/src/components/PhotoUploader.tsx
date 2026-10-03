@@ -1,10 +1,63 @@
 import { useRef, useState } from 'react'
+import { toast } from 'sonner'
 import { upload, isApiError } from '../lib/api'
 import { toastError } from '../lib/query'
 import { formatBytes } from '../utils/format'
 
 const ACCEPT = ['image/jpeg', 'image/png', 'image/webp']
 const CONCURRENCY = 3
+
+/** System clutter that comes along with folders: .DS_Store and other dotfiles, Thumbs.db, desktop.ini. */
+function isJunk(name: string): boolean {
+  const n = name.toLowerCase()
+  return n.startsWith('.') || n === 'thumbs.db' || n === 'desktop.ini'
+}
+
+const fileOf = (entry: FileSystemFileEntry) => new Promise<File>((resolve, reject) => entry.file(resolve, reject))
+
+/** Every entry in a folder: readEntries returns batches of ~100, so read until it returns none. */
+async function readAll(dir: FileSystemDirectoryEntry): Promise<FileSystemEntry[]> {
+  const reader = dir.createReader()
+  const all: FileSystemEntry[] = []
+  for (;;) {
+    const batch = await new Promise<FileSystemEntry[]>((resolve, reject) => reader.readEntries(resolve, reject))
+    if (!batch.length) return all
+    all.push(...batch)
+  }
+}
+
+async function filesIn(entry: FileSystemEntry): Promise<File[]> {
+  try {
+    if (entry.isFile) return [await fileOf(entry as FileSystemFileEntry)]
+    if (entry.isDirectory) {
+      const children = await readAll(entry as FileSystemDirectoryEntry)
+      return (await Promise.all(children.map(filesIn))).flat()
+    }
+  } catch {
+    // An unreadable file or folder (permissions, removed meanwhile) is skipped, not fatal.
+  }
+  return []
+}
+
+/** Entries of a drop. Must run synchronously inside the drop event: the browser empties dataTransfer afterwards. */
+function dropEntries(dt: DataTransfer): FileSystemEntry[] {
+  return Array.from(dt.items)
+    .filter((i) => i.kind === 'file')
+    .map((i) => i.webkitGetAsEntry())
+    .filter((e): e is FileSystemEntry => e !== null)
+}
+
+/**
+ * Files from a drop, walking dropped folders and their subfolders. Reads the entries before its
+ * first await, so call it straight from the drop handler. Falls back to the plain file list when
+ * the browser gives no entries.
+ */
+export async function filesFromDrop(dt: DataTransfer): Promise<File[]> {
+  const entries = dropEntries(dt)
+  const loose = Array.from(dt.files)
+  if (!entries.length) return loose
+  return (await Promise.all(entries.map(filesIn))).flat()
+}
 
 interface Item {
   key: string
@@ -33,6 +86,7 @@ export function PhotoUploader({
   const [items, setItems] = useState<Item[]>([])
   const [dragging, setDragging] = useState(false)
   const input = useRef<HTMLInputElement>(null)
+  const folderInput = useRef<HTMLInputElement | null>(null)
   const counter = useRef(0)
 
   const patch = (key: string, p: Partial<Item>) => setItems((list) => list.map((i) => (i.key === key ? { ...i, ...p } : i)))
@@ -63,17 +117,34 @@ export function PhotoUploader({
     await Promise.all(Array.from({ length: Math.min(CONCURRENCY, queue.length) }, worker))
   }
 
-  const addFiles = (files: FileList | File[]) => {
+  /**
+   * Queues files for upload. From a folder, anything that isn't a JPEG/PNG/WebP (and system junk
+   * like .DS_Store) is skipped quietly; files picked one by one get an error instead.
+   */
+  const addFiles = (files: FileList | File[], fromFolder = false) => {
     const fresh: Item[] = []
     for (const file of Array.from(files)) {
+      if (fromFolder && (isJunk(file.name) || !ACCEPT.includes(file.type))) continue
       const key = `${++counter.current}-${file.name}`
       let error: string | undefined
       if (!ACCEPT.includes(file.type)) error = 'Only JPEG, PNG or WebP images'
       else if (file.size > maxMb * 1024 * 1024) error = `Larger than ${maxMb} MB`
       fresh.push({ key, file, progress: 0, state: error ? 'error' : 'queued', error })
     }
+    if (!fresh.length) {
+      // Quiet per file, but an empty result needs saying.
+      if (fromFolder) toast.info('No JPEG, PNG or WebP photos found in that folder')
+      return
+    }
     setItems((list) => [...fresh, ...list])
     void runQueue(fresh.filter((i) => i.state === 'queued'))
+  }
+
+  // React's types don't know webkitdirectory/directory, so they are set on the element directly.
+  const folderRef = (el: HTMLInputElement | null) => {
+    folderInput.current = el
+    el?.setAttribute('webkitdirectory', '')
+    el?.setAttribute('directory', '')
   }
 
   const retry = (item: Item) => void runQueue([item])
@@ -94,7 +165,12 @@ export function PhotoUploader({
         onDrop={(e) => {
           e.preventDefault()
           setDragging(false)
-          if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files)
+          // Everything is read from dataTransfer now, before any await: the browser clears it after this event.
+          const dt = e.dataTransfer
+          const hasDirectory = dropEntries(dt).some((entry) => entry.isDirectory)
+          void filesFromDrop(dt).then((files) => {
+            if (files.length) addFiles(files, hasDirectory)
+          })
         }}
       >
         <input
@@ -112,6 +188,24 @@ export function PhotoUploader({
         <strong>{label}</strong>
         <span className="muted">JPEG, PNG or WebP · up to {maxMb} MB each · duplicates are skipped</span>
       </label>
+
+      {/* Outside the <label>, so clicking it doesn't also open the file picker. */}
+      <div className="uploader-folder">
+        <button type="button" className="btn btn-light btn-sm" onClick={() => folderInput.current?.click()}>
+          <i className="bi bi-folder-plus" /> Select folder
+        </button>
+        <input
+          ref={folderRef}
+          type="file"
+          multiple
+          hidden
+          onChange={(e) => {
+            if (e.target.files?.length) addFiles(e.target.files, true)
+            e.target.value = ''
+          }}
+          aria-label="Choose a folder of photos to upload"
+        />
+      </div>
 
       {items.length > 0 && (
         <>

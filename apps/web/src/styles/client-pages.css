@@ -36,6 +36,24 @@
   border-color: var(--gold);
   background: var(--gold-50);
 }
+.uploader-folder {
+  display: flex;
+  justify-content: center;
+  margin-top: 10px;
+}
+/* Light secondary button (folder picker): quieter than btn-ghost on the dropzone's tinted background. */
+.btn-light {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+}
+.btn-light:hover {
+  border-color: var(--gold);
+  color: var(--text);
+}
+.btn-light i {
+  color: var(--gold);
+}
 .uploader-summary {
   margin: 12px 0 8px;
   font-size: 13px;

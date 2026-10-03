@@ -124,6 +124,23 @@ describe('Phase 2 — clients, events, selections, albums, dashboard', () => {
       await A.agent.get(photos.body[0].url).expect(200).expect('Content-Type', 'image/png')
     })
 
+    it('still skips a duplicate when copies upload at the same time (folder uploads send several at once)', async () => {
+      const before = (await A.agent.get(`/api/v1/selections/${selection.id}/photos`).expect(200)).body.length
+      const results = await Promise.all([
+        upload(A, selection.id, 200, 'IMG_200.png'),
+        upload(A, selection.id, 200, 'Reception/copy-of-IMG_200.png'),
+        upload(A, selection.id, 200, 'Candid/another-copy.png'),
+        upload(A, selection.id, 210, 'IMG_210.png'),
+      ])
+      const sameFile = results.slice(0, 3).map((r) => r.status).sort()
+      expect(sameFile).toEqual([201, 409, 409])
+      expect(results[3].status).toBe(201)
+      const photos = (await A.agent.get(`/api/v1/selections/${selection.id}/photos`).expect(200)).body as { position: number }[]
+      expect(photos).toHaveLength(before + 2)
+      // Parallel uploads never share a position.
+      expect(new Set(photos.map((p) => p.position)).size).toBe(photos.length)
+    })
+
     it("keeps selections and photos private to the studio", async () => {
       await B.agent.get(`/api/v1/selections/${selection.id}`).expect(404)
       await upload(B, selection.id, 120).expect(404)
