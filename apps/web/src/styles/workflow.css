@@ -789,3 +789,237 @@ a.ps-gear {
     max-height: none;
   }
 }
+
+/* ---------------------------------------------------------------- dashboard */
+.db-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.db-card {
+  padding: 20px 22px;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.db-card h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 17px;
+}
+.db-count {
+  font-size: 12px;
+  padding: 1px 8px;
+  border-radius: 99px;
+  background: var(--wine-50);
+  color: var(--wine-700);
+}
+.db-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.db-empty {
+  margin: 0;
+}
+.db-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.db-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  margin: 0 -10px;
+  border-radius: var(--radius-sm);
+  color: inherit;
+  text-decoration: none;
+  min-width: 0;
+}
+.db-row:hover,
+.db-row:focus-visible {
+  background: var(--surface-2);
+}
+.db-row-text {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+}
+.db-row-text strong,
+.db-row-text span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.db-row-text span {
+  font-size: 13px;
+}
+.db-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+.db-icon.done {
+  background: var(--success-bg);
+  color: var(--success);
+}
+.db-icon.warn {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.db-icon.money {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+.db-icon.client {
+  background: var(--wine-50);
+  color: var(--wine-700);
+}
+.db-tag {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 99px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.db-tag.done {
+  background: var(--success-bg);
+  color: var(--success);
+}
+.db-tag.warn {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.db-tag.money {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+.db-date {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  flex-shrink: 0;
+  padding: 4px 0;
+  border-radius: 10px;
+  background: var(--gold-50);
+  color: var(--text);
+  line-height: 1.1;
+}
+.db-date strong {
+  font-size: 17px;
+}
+.db-date small {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.db-when {
+  flex-shrink: 0;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.db-live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 4px var(--success-bg);
+}
+.db-month {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+.db-month div {
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  min-width: 0;
+}
+.db-month dt {
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.db-month dd {
+  margin: 4px 0 0;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.db-foot {
+  margin: 0;
+  font-size: 12px;
+}
+.db-checklist ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.db-checklist li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.db-step {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  font-weight: 700;
+  color: var(--text-2);
+}
+.db-checklist li.done .db-step {
+  background: var(--success);
+  border-color: var(--success);
+  color: #fff;
+}
+.db-checklist li.done strong {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+.db-step-text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+.db-step-text span {
+  font-size: 13px;
+}
+@media (max-width: 720px) {
+  .db-month {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .db-actions .btn {
+    flex: 1 1 auto;
+  }
+}
+@media (max-width: 420px) {
+  .db-checklist li {
+    flex-wrap: wrap;
+  }
+  .db-checklist li .btn {
+    margin-left: 42px;
+  }
+}

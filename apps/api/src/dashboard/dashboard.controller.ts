@@ -9,6 +9,7 @@ import { fileUrls } from '../core/files.service'
 import { eventDto } from '../core/mappers'
 import { NotificationsService } from '../core/notifications.service'
 import { PrismaService } from '../prisma/prisma.service'
+import { dashboardWorkflow } from './dashboard-workflow'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -157,6 +158,7 @@ export class DashboardController {
       pipeline,
       recentAlbums: recentAlbums.map((a) => this.albums.toDto(a)),
       activeBanner: banner ? bannerDto(banner) : null,
+      workflow: await dashboardWorkflow(this.prisma, studioId),
     }
   }
 }

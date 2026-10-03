@@ -377,8 +377,15 @@ export class SelectionsService {
     })
   }
 
+  /** Who a reminder goes to and its template values (for the automatic reminders). */
+  async reminderMessage(studioId: string, id: string) {
+    const s = await this.find(studioId, id)
+    const [dto] = await this.toDtos([s])
+    return { toName: s.event.client.name, toPhone: s.event.client.phone, vars: this.messageVars(s, dto.pickedCount) }
+  }
+
   /** Sends the selection link (invite) or a reminder through the messaging service. */
-  async send(studioId: string, id: string, kind: 'invite' | 'reminder', opts: { actor?: 'STUDIO' | 'SYSTEM' } = {}) {
+  async send(studioId: string, id: string, kind: 'invite' | 'reminder', opts: { actor?: 'STUDIO' | 'SYSTEM'; detail?: string } = {}) {
     const s = await this.find(studioId, id)
     const status = selectionStatus(s)
     if (isSelectionLocked(status)) throw readOnly('The client already submitted this selection.')
@@ -399,7 +406,7 @@ export class SelectionsService {
         ...(kind === 'reminder' ? { lastRemindedAt: new Date() } : {}),
       },
     })
-    await writeLog(this.prisma, id, opts.actor ?? 'STUDIO', kind === 'invite' ? 'Shared on WhatsApp' : 'Reminder sent', `To ${s.event.client.name}`)
+    await writeLog(this.prisma, id, opts.actor ?? 'STUDIO', kind === 'invite' ? 'Shared on WhatsApp' : 'Reminder sent', opts.detail ?? `To ${s.event.client.name}`)
     return result
   }
 

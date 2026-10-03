@@ -11,6 +11,7 @@ import { DashboardController } from './dashboard/dashboard.controller'
 import { ClientsController, EventsController } from './events/clients-events.controller'
 import { NotificationsController, SearchController } from './notifications/notifications.controller'
 import { PhotoPreviewService } from './selections/previews.service'
+import { SelectionRemindersService } from './selections/selection-reminders.service'
 import { SelectionWorkflowService } from './selections/selection-workflow.service'
 import { PublicSelectionsController, SelectionDefaultsController, SelectionsController } from './selections/selections.controller'
 import { SelectionsService } from './selections/selections.service'
@@ -54,6 +55,7 @@ import { WebhooksController } from './subscriptions/webhooks.controller'
     SelectionsService,
     UploadLimitsService,
     SelectionWorkflowService,
+    SelectionRemindersService,
     PhotoPreviewService,
     AlbumsService,
     SubscriptionsService,

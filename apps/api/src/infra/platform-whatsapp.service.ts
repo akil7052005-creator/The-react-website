@@ -64,6 +64,31 @@ export class PlatformWhatsAppService {
     return t ? render(t.body, msg.vars) : Object.values(msg.vars).join(' · ')
   }
 
+  /**
+   * Sends any approved template with positional body parameters (e.g. a studio's selection reminder).
+   * Throws when the Cloud API isn't set up or refuses the message.
+   */
+  async sendTemplate(toPhone: string, name: string, params: string[]): Promise<void> {
+    const c = config()
+    if (!this.isConfigured()) throw new Error('WhatsApp Cloud API is not configured')
+    const digits = toPhone.replace(/\D/g, '')
+    const res = await fetch(`${GRAPH_URL}/${c.WHATSAPP_PHONE_NUMBER_ID}/messages`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${c.WHATSAPP_CLOUD_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: digits.length === 10 ? `91${digits}` : digits,
+        type: 'template',
+        template: { name, language: { code: c.WHATSAPP_TEMPLATE_LANG }, components: [{ type: 'body', parameters: params.map((text) => ({ type: 'text', text })) }] },
+      }),
+      signal: AbortSignal.timeout(10_000),
+    })
+    if (!res.ok) {
+      const err = (await res.json().catch(() => null)) as { error?: { message?: string } } | null
+      throw new Error(`WhatsApp Cloud API responded ${res.status}: ${err?.error?.message ?? res.statusText}`)
+    }
+  }
+
   /** Sends through the WhatsApp Cloud API; throws (with the reason) when it can't. */
   async send(toPhone: string, msg: PlatformWhatsApp): Promise<PlatformSendResult> {
     const body = await this.renderMessage(msg)

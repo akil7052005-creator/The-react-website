@@ -644,6 +644,41 @@ export interface DashboardDto {
   pipeline: { name: string; progress: number; link: string }[]
   recentAlbums: AlbumDto[]
   activeBanner: BannerDto | null
+  /** The studio workflow home: what needs doing, what's next, what clients are up to. */
+  workflow?: DashboardWorkflowDto
+}
+
+export interface AttentionItemDto {
+  kind: 'SUBMITTED' | 'EXPIRING' | 'UNPAID'
+  id: string
+  title: string
+  detail: string
+  link: string
+  /** When it happened / is due, for ordering. */
+  at: string | null
+}
+
+export interface DashboardWorkflowDto {
+  needsAttention: AttentionItemDto[]
+  /** The next 5 events by date. */
+  upcoming: {
+    id: string
+    title: string
+    type: EventType
+    date: string
+    daysLeft: number
+    clientName: string
+    city: string
+    /** Its open selection, if any (for a direct link). */
+    selectionId: string | null
+  }[]
+  /** Latest things clients did in their galleries. */
+  activity: { id: string; selectionId: string; eventTitle: string; clientName: string; action: string; detail: string | null; at: string }[]
+  thisMonth: { events: number; photosUploaded: number; selectionsSubmitted: number; billedPaise: number }
+  /** Get-started steps, shown until the first selection is shared. */
+  checklist: { eventCreated: boolean; photosUploaded: boolean; selectionShared: boolean }
+  /** The latest open selection, for the "Upload photos" action. */
+  uploadTarget: { id: string; title: string } | null
 }
 
 // ------------------------------------------------------------------ platform admin: subscriptions
