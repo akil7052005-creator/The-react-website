@@ -60,6 +60,8 @@ interface RequestOptions {
   body?: unknown
   query?: Record<string, string | number | boolean | undefined | null>
   signal?: AbortSignal
+  /** Extra request headers (e.g. the gallery access key on public pages). */
+  headers?: Record<string, string>
 }
 
 function buildUrl(path: string, query?: RequestOptions['query']) {
@@ -81,7 +83,7 @@ export async function request<T>(method: string, path: string, opts: RequestOpti
       method,
       credentials: 'include',
       signal: opts.signal,
-      headers: opts.body !== undefined && !isForm ? { 'Content-Type': 'application/json' } : undefined,
+      headers: { ...(opts.body !== undefined && !isForm ? { 'Content-Type': 'application/json' } : {}), ...opts.headers },
       body: opts.body === undefined ? undefined : isForm ? (opts.body as FormData) : JSON.stringify(opts.body),
     })
   } catch (e) {

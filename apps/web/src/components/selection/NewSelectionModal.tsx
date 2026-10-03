@@ -1,17 +1,18 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { createSelectionSchema, todayIST, type EventDto, type SelectionDto, type SendResultDto } from '@weddyzone/shared'
-import { useState } from 'react'
-import { useFieldArray } from 'react-hook-form'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { createSelectionSchema, EVENT_TYPE_LABELS, todayIST, type EventDto, type SelectionDto } from '@weddyzone/shared'
+import { useEffect, useState } from 'react'
+import { useFieldArray, useWatch } from 'react-hook-form'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { api } from '../../lib/api'
-import { toastError } from '../../lib/query'
-import { copyText, publicLink, sendViaWhatsApp } from '../../lib/whatsapp'
+import { formatDate } from '../../utils/format'
 import { EventModal } from '../EventModal'
 import { EventSelectField } from '../EventSelect'
 import { applyApiErrors, SubmitButton, TextField, useGuardedClose, useZodForm } from '../form/form'
-import { Modal, useConfirm } from '../Modal'
-import { PhotoUploader } from '../PhotoUploader'
-import { useUploadGuard } from './useUploadGuard'
+import { Modal } from '../Modal'
+import { Toggle } from '../ui'
+import { refreshSelection, selectionPath } from './selectionUi'
+import { useSelectionDefaults } from './StudioDefaults'
 
 function inDays(n: number) {
   const d = new Date(`${todayIST()}T00:00:00`)
@@ -19,101 +20,67 @@ function inDays(n: number) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+/**
+ * New selection: the event (type and date shown, or create one here), the photo limit, when the
+ * gallery expires, and gallery access (studio defaults pre-filled). Creating it opens the event page,
+ * ready for the photos.
+ */
 export function NewSelectionModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const qc = useQueryClient()
-  const confirm = useConfirm()
-  const [created, setCreated] = useState<SelectionDto | null>(null)
-  const [uploaded, setUploaded] = useState(0)
-  const { setUploading, guard } = useUploadGuard()
-  // Creating the project's event right here, so a new client can be set up in one go.
+  const navigate = useNavigate()
+  const defaults = useSelectionDefaults()
   const [newEventOpen, setNewEventOpen] = useState(false)
   const [newEvent, setNewEvent] = useState<EventDto | null>(null)
   const form = useZodForm(createSelectionSchema, {
-    defaultValues: { eventId: '', quota: 100, deadline: inDays(14), members: [] },
+    defaultValues: { eventId: '', quota: 100, deadline: inDays(30), members: [], pin: '', watermark: false, allowDownload: false, notesAllowed: true },
   })
   const members = useFieldArray({ control: form.control, name: 'members' })
+  const [eventId, watermark, allowDownload, notesAllowed] = useWatch({ control: form.control, name: ['eventId', 'watermark', 'allowDownload', 'notesAllowed'] })
 
-  const refresh = () => {
-    qc.invalidateQueries({ queryKey: ['selections'] })
-    qc.invalidateQueries({ queryKey: ['selections-summary'] })
-    qc.invalidateQueries({ queryKey: ['dashboard'] })
-  }
+  // Studio defaults fill the form until the studio changes something.
+  useEffect(() => {
+    if (!open || !defaults.data || form.formState.isDirty) return
+    const d = defaults.data
+    form.reset({ ...form.getValues(), deadline: inDays(d.galleryDays), watermark: d.watermark, allowDownload: d.allowDownload, notesAllowed: d.notesAllowed })
+  }, [open, defaults.data, form])
+
+  const event = useQuery({
+    queryKey: ['event', eventId],
+    queryFn: () => api.get<EventDto>(`/events/${eventId}`),
+    enabled: Boolean(eventId),
+    initialData: newEvent && newEvent.id === eventId ? newEvent : undefined,
+  })
 
   const create = useMutation({
     mutationFn: (body: object) => api.post<SelectionDto>('/selections', body),
     onSuccess: (s) => {
       toast.success(`Selection ${s.code} created — now add the photos`)
-      setCreated(s)
-      refresh()
+      refreshSelection(qc)
+      reset()
+      navigate(`${selectionPath(s.id)}?upload=1`)
     },
     onError: (e) => applyApiErrors(form, e),
   })
 
   const reset = () => {
-    setCreated(null)
-    setUploaded(0)
     setNewEvent(null)
     form.reset()
     onClose()
   }
-  const guardedClose = useGuardedClose(!created && form.formState.isDirty, reset)
-
-  const sendInvite = () =>
-    confirm({
-      title: 'Send the selection link?',
-      message: (
-        <>
-          We'll open WhatsApp with a personalised message and the private link for <strong>{created!.client.name}</strong>. This uses <strong>1 credit</strong>.
-        </>
-      ),
-      confirmLabel: 'Send on WhatsApp',
-      icon: 'whatsapp',
-      onConfirm: () =>
-        sendViaWhatsApp(() => api.post<SendResultDto>(`/selections/${created!.id}/send`), qc, `Selection ${created!.code} sent to ${created!.client.name}`)
-          .then(() => {
-            refresh()
-            reset()
-          })
-          .catch((e) => {
-            toastError(e)
-            throw e
-          }),
-    })
-
-  const copyLink = async () => {
-    try {
-      await api.post(`/selections/${created!.id}/mark-shared`)
-      await copyText(publicLink('selection', created!.publicToken), 'Selection link')
-      refresh()
-    } catch (e) {
-      toastError(e)
-    }
-  }
+  const guardedClose = useGuardedClose(form.formState.isDirty, reset)
+  const set = (k: 'watermark' | 'allowDownload' | 'notesAllowed', v: boolean) => form.setValue(k, v, { shouldDirty: true })
 
   return (
     <>
-    <Modal
-      open={open}
-      onClose={created ? guard(reset) : guardedClose}
-      title={created ? `Add photos to ${created.code}` : 'New Selection'}
-      subtitle={created ? `${created.event.title} · quota ${created.quota} photos` : 'Share a private gallery where the couple picks their favourites'}
-      icon={created ? 'cloud-arrow-up' : 'images'}
-      size="lg"
-      busy={create.isPending}
-      footer={
-        created ? (
-          <>
-            <button className="btn btn-ghost" onClick={guard(reset)}>
-              {uploaded ? 'Done' : 'Skip for now'}
-            </button>
-            <button className="btn btn-ghost" onClick={copyLink} disabled={!uploaded}>
-              <i className="bi bi-link-45deg" /> Copy link
-            </button>
-            <button className="btn btn-primary" onClick={sendInvite} disabled={!uploaded}>
-              <i className="bi bi-whatsapp" /> Send to client
-            </button>
-          </>
-        ) : (
+      <Modal
+        open={open}
+        onClose={guardedClose}
+        title="New Selection"
+        subtitle="A private gallery where the couple picks their favourites"
+        icon="images"
+        size="lg"
+        busy={create.isPending}
+        footer={
           <>
             <button className="btn btn-ghost" onClick={guardedClose} disabled={create.isPending}>
               Cancel
@@ -122,19 +89,8 @@ export function NewSelectionModal({ open, onClose }: { open: boolean; onClose: (
               Create & add photos
             </SubmitButton>
           </>
-        )
-      }
-    >
-      {created ? (
-        <PhotoUploader
-          endpoint={`/selections/${created.id}/photos`}
-          onBusyChange={setUploading}
-          onUploaded={() => {
-            setUploaded((n) => n + 1)
-            qc.invalidateQueries({ queryKey: ['selections'] })
-          }}
-        />
-      ) : (
+        }
+      >
         <form id="selection-form" onSubmit={form.handleSubmit((v) => create.mutate(v))} noValidate data-testid="selection-form">
           <div className="form-grid">
             <EventSelectField
@@ -145,9 +101,30 @@ export function NewSelectionModal({ open, onClose }: { open: boolean; onClose: (
               initial={newEvent ? { id: newEvent.id, code: newEvent.code, title: newEvent.title, type: newEvent.type } : null}
               onCreateNew={() => setNewEventOpen(true)}
             />
-            <TextField form={form} name="quota" label="Selection quota (photos)" type="number" required min={1} inputMode="numeric" hint="The couple can pick up to this many photos" />
-            <TextField form={form} name="deadline" label="Deadline" type="date" required min={todayIST()} />
+            {event.data && (
+              <p className="sw-event-facts full" data-testid="event-facts">
+                <span>
+                  <i className="bi bi-tag" /> {EVENT_TYPE_LABELS[event.data.type]}
+                </span>
+                <span>
+                  <i className="bi bi-calendar-event" /> {formatDate(event.data.date)}
+                </span>
+                <span>
+                  <i className="bi bi-person" /> {event.data.client.name}
+                </span>
+              </p>
+            )}
+            <TextField form={form} name="quota" label="Photo limit" type="number" required min={1} inputMode="numeric" hint="The couple can pick up to this many photos" />
+            <TextField form={form} name="deadline" label="Gallery expires on" type="date" required min={todayIST()} hint="After this date the client can only view" />
           </div>
+
+          <fieldset className="sw-access">
+            <legend>Client gallery</legend>
+            <Toggle checked={!!watermark} onChange={() => set('watermark', !watermark)} label="Watermark previews" />
+            <Toggle checked={!!allowDownload} onChange={() => set('allowDownload', !allowDownload)} label="Client can download originals" />
+            <Toggle checked={!!notesAllowed} onChange={() => set('notesAllowed', !notesAllowed)} label="Notes on photos" />
+            <TextField form={form} name="pin" label="4-digit PIN (optional)" inputMode="numeric" maxLength={4} autoComplete="off" placeholder="Leave empty for no PIN" />
+          </fieldset>
 
           <div className="members-block">
             <div className="row-between" style={{ alignItems: 'center' }}>
@@ -155,12 +132,7 @@ export function NewSelectionModal({ open, onClose }: { open: boolean; onClose: (
                 <strong>Family members</strong>
                 <p className="muted">Each member gets their own hearts. Leave empty to use the client's name.</p>
               </div>
-              <button
-                type="button"
-                className="btn btn-sm btn-ghost"
-                onClick={() => members.append({ name: '', phone: '' })}
-                disabled={members.fields.length >= 10}
-              >
+              <button type="button" className="btn btn-sm btn-ghost" onClick={() => members.append({ name: '', phone: '' })} disabled={members.fields.length >= 10}>
                 <i className="bi bi-person-plus" /> Add member
               </button>
             </div>
@@ -175,16 +147,15 @@ export function NewSelectionModal({ open, onClose }: { open: boolean; onClose: (
             ))}
           </div>
         </form>
-      )}
-    </Modal>
-    <EventModal
-      open={newEventOpen}
-      onClose={() => setNewEventOpen(false)}
-      onCreated={(e) => {
-        setNewEvent(e)
-        form.setValue('eventId', e.id, { shouldDirty: true, shouldValidate: true })
-      }}
-    />
+      </Modal>
+      <EventModal
+        open={newEventOpen}
+        onClose={() => setNewEventOpen(false)}
+        onCreated={(e) => {
+          setNewEvent(e)
+          form.setValue('eventId', e.id, { shouldDirty: true, shouldValidate: true })
+        }}
+      />
     </>
   )
 }

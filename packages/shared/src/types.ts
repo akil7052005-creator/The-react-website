@@ -140,6 +140,49 @@ export interface SelectionDto {
   submittedAt: string | null
   lastRemindedAt: string | null
   createdAt: string
+  /** Event date (YYYY-MM-DD). */
+  eventDate?: string
+  sharedAt?: string | null
+  deliveredAt?: string | null
+  lastClientVisitAt?: string | null
+  clientVisits?: number
+  /** Gallery access settings. */
+  hasPin?: boolean
+  allowDownload?: boolean
+  watermark?: boolean
+  notesAllowed?: boolean
+}
+
+export interface SelectionFolderDto {
+  id: string
+  name: string
+  position: number
+  photoCount: number
+  pickedCount: number
+}
+
+export interface SelectionLogDto {
+  id: string
+  actor: 'STUDIO' | 'CLIENT' | 'SYSTEM'
+  action: string
+  detail: string | null
+  createdAt: string
+}
+
+/** Everything the event page needs in one call. */
+export interface SelectionOverviewDto {
+  selection: SelectionDto
+  folders: SelectionFolderDto[]
+  noteCount: number
+  log: SelectionLogDto[]
+}
+
+/** Studio-wide defaults for new selections. */
+export interface SelectionDefaultsDto {
+  watermark: boolean
+  allowDownload: boolean
+  galleryDays: number
+  notesAllowed: boolean
 }
 
 export interface PhotoDto {
@@ -153,6 +196,10 @@ export interface PhotoDto {
 export interface StudioSelectionPhotoDto extends PhotoDto {
   /** Folder the photo was uploaded from, e.g. "Haldi" or "Wedding/Stage" (null for single files). */
   folder?: string | null
+  /** The selection folder (Haldi, Wedding…) it is filed under. */
+  folderId?: string | null
+  /** Small, fast preview for the studio grid (the original stays at url). */
+  previewUrl?: string
   pickedBy: string[]
   comments: { memberName: string; text: string; createdAt: string }[]
 }
@@ -171,7 +218,22 @@ export interface PublicSelectionDto {
   photos: (PhotoDto & {
     pickedBy: string[]
     comments: { memberId: string; memberName: string; text: string; createdAt: string }[]
+    folderId?: string | null
+    /** Present only when the studio allows downloads. */
+    downloadUrl?: string | null
   })[]
+  folders?: { id: string; name: string; photoCount: number }[]
+  notesAllowed?: boolean
+  allowDownload?: boolean
+}
+
+/** What the client sees before entering the PIN. */
+export interface PublicSelectionLockedDto {
+  pinRequired: true
+  code: string
+  studio: { name: string; logoUrl: string | null; phone: string | null }
+  eventTitle: string
+  clientName: string
 }
 
 export interface AlbumDto {

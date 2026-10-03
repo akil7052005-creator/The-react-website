@@ -1,22 +1,26 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   EVENT_TYPE_LABELS,
+  isSelectionLocked,
+  isSelectionUnshared,
   SELECTION_STATUS_LABELS,
   type Paginated,
   type SelectionDto,
-  type SelectionEffectiveStatus,
   type SendResultDto,
 } from '@weddyzone/shared'
+import { useEffect } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useConfirm } from '../components/Modal'
 import { NewSelectionModal } from '../components/selection/NewSelectionModal'
-import { SelectionManageModal, type SelectionManageTab } from '../components/selection/SelectionManageModal'
+import { SELECTION_TONE, selectionPath } from '../components/selection/selectionUi'
+import { StudioDefaultsCard } from '../components/selection/StudioDefaults'
 import { EmptyState, ErrorState, Skeleton, TableSkeleton } from '../components/ui'
 import { useDebouncedUrlSearch, useUrlState } from '../hooks/useUrlState'
 import { api } from '../lib/api'
 import { toastError } from '../lib/query'
 import { sendViaWhatsApp } from '../lib/whatsapp'
-import { formatDate, formatNumber } from '../utils/format'
+import { formatDate, formatNumber, timeAgo } from '../utils/format'
 
 const PAGE_SIZES = ['10', '25', '50', '100']
 
@@ -29,20 +33,13 @@ interface Summary {
   avgTurnaroundDays: number | null
 }
 
-/** Colour of the status badge, Weddifly-style: orange while waiting, green when done. */
-const statusTone: Record<SelectionEffectiveStatus, string> = {
-  DRAFT: 'muted',
-  SENT: 'pending',
-  IN_PROGRESS: 'pending',
-  SUBMITTED: 'done',
-  EXPIRED: 'expired',
-}
-
 const statusFilterLabel: Record<string, string> = {
-  SUBMITTED: 'Completed selections',
+  SUBMITTED: 'Submitted selections',
+  DELIVERED: 'Delivered',
   active: 'Active selections',
   DRAFT: 'Drafts',
-  SENT: 'Awaiting selection',
+  UPLOADING: 'Uploading',
+  SENT: 'Shared, waiting for the client',
   IN_PROGRESS: 'In progress',
   EXPIRED: 'Expired',
 }
@@ -75,6 +72,7 @@ function OverviewTile({ icon, label, value }: { icon: string; label: string; val
 function PhotoSelection() {
   const qc = useQueryClient()
   const confirm = useConfirm()
+  const navigate = useNavigate()
   const [url, setUrl] = useUrlState({ search: '', status: '', page: '1', sort: '', limit: '10', selection: '', tab: '', new: '' })
   const [search, setSearch] = useDebouncedUrlSearch(url.search, (v) => setUrl({ search: v }))
   const page = Math.max(1, Number(url.page) || 1)
@@ -93,13 +91,10 @@ function PhotoSelection() {
   const from = total === 0 ? 0 : (page - 1) * limit + 1
   const to = Math.min(page * limit, total)
 
-  const managed = rows.find((s) => s.id === url.selection) ?? null
-  const managedQ = useQuery({
-    queryKey: ['selection', url.selection],
-    queryFn: () => api.get<SelectionDto>(`/selections/${url.selection}`),
-    enabled: Boolean(url.selection) && !managed,
-  })
-  const openManage = (s: SelectionDto, tab: SelectionManageTab) => setUrl({ selection: s.id, tab: tab === 'photos' ? '' : tab })
+  // Old links (?selection=<id>&tab=…) open the selection's event page.
+  useEffect(() => {
+    if (url.selection) navigate(`${selectionPath(url.selection)}${url.tab === 'settings' ? '?tab=settings' : url.tab === 'share' ? '?tab=share' : ''}`, { replace: true })
+  }, [url.selection, url.tab, navigate])
 
   /** "Send": the first time it shares the selection link, after that it sends a reminder. */
   const send = (s: SelectionDto) => {
@@ -107,7 +102,7 @@ function PhotoSelection() {
       toast.error('Upload photos first', { description: 'Use “Upload & Download” to add the event photos, then send the link.' })
       return
     }
-    const invite = s.status === 'DRAFT'
+    const invite = isSelectionUnshared(s.status)
     void confirm({
       title: invite ? `Send ${s.code} to ${s.client.name}?` : `Remind ${s.client.name}?`,
       message: (
@@ -143,6 +138,8 @@ function PhotoSelection() {
           <i className="bi bi-plus-lg" /> Add Photo Selection
         </button>
       </div>
+
+      <StudioDefaultsCard />
 
       <section className="card ps-card" aria-labelledby="ps-overview">
         <h2 id="ps-overview" className="ps-section-title">
@@ -227,15 +224,18 @@ function PhotoSelection() {
               </thead>
               <tbody>
                 {rows.map((s, i) => {
-                  const closed = s.status === 'SUBMITTED' || s.status === 'EXPIRED'
+                  const closed = isSelectionLocked(s.status) || s.status === 'EXPIRED'
                   return (
                     <tr key={s.id}>
                       <td className="ps-sno">{from + i}</td>
                       <td>
-                        <div className="cell-main" title={s.event.title}>
+                        <Link to={selectionPath(s.id)} className="cell-main ps-project-link" title={`Open ${s.event.title}`}>
                           {s.client.name}
+                        </Link>
+                        <div className="cell-sub ps-type">
+                          {EVENT_TYPE_LABELS[s.event.type]}
+                          {s.lastClientVisitAt ? ` · visited ${timeAgo(s.lastClientVisitAt)}` : ''}
                         </div>
-                        <div className="cell-sub ps-type">{EVENT_TYPE_LABELS[s.event.type]}</div>
                       </td>
                       <td>
                         <div className="ps-chips">
@@ -256,7 +256,7 @@ function PhotoSelection() {
                             type="button"
                             onClick={() => send(s)}
                             disabled={closed}
-                            title={closed ? 'This selection is closed' : s.status === 'DRAFT' ? 'Send the selection link on WhatsApp' : 'Send a reminder on WhatsApp'}
+                            title={closed ? 'This selection is closed' : isSelectionUnshared(s.status) ? 'Send the selection link on WhatsApp' : 'Send a reminder on WhatsApp'}
                             aria-label={`Send ${s.code} to ${s.client.name}`}
                           >
                             Send
@@ -264,16 +264,16 @@ function PhotoSelection() {
                         </div>
                       </td>
                       <td>
-                        <span className={`ps-status ${statusTone[s.status]}`}>{SELECTION_STATUS_LABELS[s.status]}</span>
+                        <span className={`ps-status ${SELECTION_TONE[s.status]}`}>{SELECTION_STATUS_LABELS[s.status]}</span>
                       </td>
                       <td>
                         <div className="ps-actions">
-                          <button type="button" className="ps-upload" onClick={() => openManage(s, 'photos')}>
-                            <i className="bi bi-cloud-arrow-up" /> Upload &amp; Download
-                          </button>
-                          <button type="button" className="ps-gear" onClick={() => openManage(s, 'settings')} aria-label={`Settings for ${s.code}`} title="Quota, deadline, delete">
+                          <Link className="ps-upload" to={selectionPath(s.id)}>
+                            <i className="bi bi-folder2-open" /> Open
+                          </Link>
+                          <Link className="ps-gear" to={`${selectionPath(s.id)}?tab=settings`} aria-label={`Settings for ${s.code}`} title="Limit, expiry, gallery access">
                             <i className="bi bi-gear" />
-                          </button>
+                          </Link>
                         </div>
                       </td>
                     </tr>
@@ -312,14 +312,6 @@ function PhotoSelection() {
       </section>
 
       <NewSelectionModal open={url.new === '1'} onClose={() => setUrl({ new: '' })} />
-      {url.selection && (managed ?? managedQ.data) && (
-        <SelectionManageModal
-          key={`${url.selection}-${url.tab}`}
-          selection={(managed ?? managedQ.data)!}
-          initialTab={url.tab === 'settings' ? 'settings' : 'photos'}
-          onClose={() => setUrl({ selection: '', tab: '' })}
-        />
-      )}
     </div>
   )
 }

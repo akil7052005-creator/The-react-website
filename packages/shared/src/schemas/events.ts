@@ -46,11 +46,20 @@ const quotaSchema = z.coerce
   .min(1, 'Quota must be at least 1 photo')
   .max(10_000, 'Quota can be at most 10,000 photos')
 
+/** A 4-digit gallery PIN. Blank or null removes it. */
+export const galleryPinSchema = z.string().trim().regex(/^\d{4}$/, 'The PIN must be 4 digits')
+const optionalPin = z.preprocess((v) => (typeof v === 'string' && v.trim() === '' ? null : v), galleryPinSchema.nullable().optional())
+
 export const createSelectionSchema = z.object({
   eventId: requiredId('an event'),
   quota: quotaSchema,
   deadline: dateSchema.refine((v) => v >= todayIST(), 'Deadline cannot be in the past'),
   members: z.array(selectionMemberSchema).max(10, 'Up to 10 family members').default([]),
+  // Optional: left out, the studio defaults apply.
+  pin: optionalPin,
+  allowDownload: z.boolean().optional(),
+  watermark: z.boolean().optional(),
+  notesAllowed: z.boolean().optional(),
 })
 export type CreateSelectionInput = z.input<typeof createSelectionSchema>
 
@@ -59,6 +68,27 @@ export const updateSelectionSchema = z.object({
   deadline: dateSchema,
 })
 export type UpdateSelectionInput = z.input<typeof updateSelectionSchema>
+
+/** Gallery access: PIN, client downloads, watermark on previews, notes per photo. */
+export const selectionAccessSchema = z.object({
+  pin: optionalPin,
+  allowDownload: z.boolean().optional(),
+  watermark: z.boolean().optional(),
+  notesAllowed: z.boolean().optional(),
+})
+export type SelectionAccessInput = z.input<typeof selectionAccessSchema>
+
+export const selectionFolderSchema = z.object({ name: requiredText('Folder name', 60) })
+export const unlockSelectionSchema = z.object({ reason: optionalText(200) })
+export const selectionPinSchema = z.object({ pin: galleryPinSchema })
+
+export const selectionDefaultsSchema = z.object({
+  watermark: z.boolean(),
+  allowDownload: z.boolean(),
+  galleryDays: z.coerce.number({ error: 'Enter the number of days' }).int('Whole days only').min(1, 'At least 1 day').max(365, 'At most 365 days'),
+  notesAllowed: z.boolean(),
+})
+export type SelectionDefaultsInput = z.input<typeof selectionDefaultsSchema>
 
 // Public selection page (no login). memberId identifies which family member is picking.
 export const pickSchema = z.object({ photoId: uuidSchema, memberId: uuidSchema })

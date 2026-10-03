@@ -40,9 +40,9 @@ export class UploadLimitsService {
     private readonly settings: SettingsService,
   ) {}
 
-  /** Same sum as My Subscription → Storage (all the studio's files that aren't deleted). */
+  /** Same sum as My Subscription → Storage (the studio's files that aren't deleted; client previews don't count). */
   async storageUsed(studioId: string, db: Tx | PrismaService = this.prisma): Promise<number> {
-    const r = await db.storedFile.aggregate({ where: { studioId, deletedAt: null }, _sum: { size: true } })
+    const r = await db.storedFile.aggregate({ where: { studioId, deletedAt: null, photoPreview: { is: null } }, _sum: { size: true } })
     return r._sum.size ?? 0
   }
 

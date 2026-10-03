@@ -36,15 +36,20 @@ enum EventStatus {
 
 enum SelectionStatus {
   DRAFT
+  UPLOADING
   SENT
   IN_PROGRESS
   SUBMITTED
+  DELIVERED
 }
 
 enum AlbumStatus {
   DRAFT
   IN_REVIEW
+  CHANGES_REQUESTED
+  APPROVED
   PUBLISHED
+  SENT_TO_PRINT
 }
 
 enum FeedbackKind {
@@ -193,26 +198,28 @@ enum FileKind {
 }
 
 model Studio {
-  id            String   @id @default(uuid()) @db.Uuid
-  name          String
-  slug          String   @unique
-  email         String?
-  phone         String?
-  gstin         String?
-  pan           String?
-  addressLine1  String?  @map("address_line1")
-  addressLine2  String?  @map("address_line2")
-  city          String?
-  stateCode     String?  @map("state_code")
-  pincode       String?
-  website       String?
-  bio           String?
-  logoFileId    String?  @unique @map("logo_file_id") @db.Uuid
-  referralCode  String   @unique @map("referral_code")
-  walletBalance Int      @default(0) @map("wallet_balance")
-  creditBalance Int      @default(0) @map("credit_balance")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id                String   @id @default(uuid()) @db.Uuid
+  name              String
+  slug              String   @unique
+  email             String?
+  phone             String?
+  gstin             String?
+  pan               String?
+  addressLine1      String?  @map("address_line1")
+  addressLine2      String?  @map("address_line2")
+  city              String?
+  stateCode         String?  @map("state_code")
+  pincode           String?
+  website           String?
+  bio               String?
+  logoFileId        String?  @unique @map("logo_file_id") @db.Uuid
+  referralCode      String   @unique @map("referral_code")
+  walletBalance     Int      @default(0) @map("wallet_balance")
+  creditBalance     Int      @default(0) @map("credit_balance")
+  // Defaults for new selections: { watermark, allowDownload, galleryDays, notesAllowed }.
+  selectionDefaults Json?    @map("selection_defaults")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
 
   logo            StoredFile?       @relation("StudioLogo", fields: [logoFileId], references: [id])
   users           User[]
@@ -320,6 +327,7 @@ model StoredFile {
   studio        Studio         @relation("StudioFiles", fields: [studioId], references: [id])
   studioLogo    Studio?        @relation("StudioLogo")
   photo         Photo?
+  photoPreview  Photo?         @relation("PhotoPreview")
   banner        Banner?
   ticket        Ticket?
   ticketMessage TicketMessage?
@@ -383,43 +391,60 @@ model Event {
 }
 
 model Photo {
-  id          String    @id @default(uuid()) @db.Uuid
-  studioId    String    @map("studio_id") @db.Uuid
-  eventId     String    @map("event_id") @db.Uuid
-  selectionId String?   @map("selection_id") @db.Uuid
-  fileId      String    @unique @map("file_id") @db.Uuid
-  position    Int       @default(0)
+  id            String    @id @default(uuid()) @db.Uuid
+  studioId      String    @map("studio_id") @db.Uuid
+  eventId       String    @map("event_id") @db.Uuid
+  selectionId   String?   @map("selection_id") @db.Uuid
+  fileId        String    @unique @map("file_id") @db.Uuid
+  position      Int       @default(0)
   // Folder the photo was uploaded from (e.g. "Haldi" or "Wedding/Stage"); null for single files.
-  folder      String?
-  createdAt   DateTime  @default(now()) @map("created_at")
-  deletedAt   DateTime? @map("deleted_at")
+  folder        String?
+  folderId      String?   @map("folder_id") @db.Uuid
+  // Client-facing copy: resized, watermarked when the selection asks for it. Made on demand.
+  previewFileId String?   @unique @map("preview_file_id") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at")
+  deletedAt     DateTime? @map("deleted_at")
 
-  event      Event          @relation(fields: [eventId], references: [id])
-  selection  Selection?     @relation(fields: [selectionId], references: [id])
-  file       StoredFile     @relation(fields: [fileId], references: [id])
+  event      Event            @relation(fields: [eventId], references: [id])
+  selection  Selection?       @relation(fields: [selectionId], references: [id])
+  file       StoredFile       @relation(fields: [fileId], references: [id])
+  folderRef  SelectionFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  preview    StoredFile?      @relation("PhotoPreview", fields: [previewFileId], references: [id], onDelete: SetNull)
   picks      PhotoPick[]
   comments   PhotoComment[]
   albumPages AlbumPage[]
 
   @@index([selectionId, position])
   @@index([eventId])
+  @@index([folderId])
   @@map("photos")
 }
 
 model Selection {
-  id             String          @id @default(uuid()) @db.Uuid
-  studioId       String          @map("studio_id") @db.Uuid
-  code           String
-  eventId        String          @map("event_id") @db.Uuid
-  quota          Int
-  deadline       DateTime        @db.Date
-  status         SelectionStatus @default(DRAFT)
-  publicToken    String          @unique @map("public_token")
-  submittedAt    DateTime?       @map("submitted_at")
-  lastRemindedAt DateTime?       @map("last_reminded_at")
-  createdAt      DateTime        @default(now()) @map("created_at")
-  updatedAt      DateTime        @updatedAt @map("updated_at")
-  deletedAt      DateTime?       @map("deleted_at")
+  id                String          @id @default(uuid()) @db.Uuid
+  studioId          String          @map("studio_id") @db.Uuid
+  code              String
+  eventId           String          @map("event_id") @db.Uuid
+  quota             Int
+  deadline          DateTime        @db.Date
+  status            SelectionStatus @default(DRAFT)
+  publicToken       String          @unique @map("public_token")
+  submittedAt       DateTime?       @map("submitted_at")
+  lastRemindedAt    DateTime?       @map("last_reminded_at")
+  pinHash           String?         @map("pin_hash")
+  pinFailures       Int             @default(0) @map("pin_failures")
+  pinLockedUntil    DateTime?       @map("pin_locked_until")
+  allowDownload     Boolean         @default(false) @map("allow_download")
+  watermark         Boolean         @default(false)
+  notesAllowed      Boolean         @default(true) @map("notes_allowed")
+  sharedAt          DateTime?       @map("shared_at")
+  deliveredAt       DateTime?       @map("delivered_at")
+  lastClientVisitAt DateTime?       @map("last_client_visit_at")
+  clientVisits      Int             @default(0) @map("client_visits")
+  autoReminders     Int             @default(0) @map("auto_reminders")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+  deletedAt         DateTime?       @map("deleted_at")
 
   studio   Studio            @relation(fields: [studioId], references: [id])
   event    Event             @relation(fields: [eventId], references: [id])
@@ -427,11 +452,43 @@ model Selection {
   members  SelectionMember[]
   picks    PhotoPick[]
   comments PhotoComment[]
+  folders  SelectionFolder[]
+  log      SelectionLog[]
+  albums   Album[]
 
   @@unique([studioId, code])
   @@index([studioId, deadline])
   @@index([studioId, status])
   @@map("selections")
+}
+
+model SelectionFolder {
+  id          String   @id @default(uuid()) @db.Uuid
+  selectionId String   @map("selection_id") @db.Uuid
+  name        String
+  position    Int      @default(0)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  selection Selection @relation(fields: [selectionId], references: [id], onDelete: Cascade)
+  photos    Photo[]
+
+  @@unique([selectionId, name])
+  @@map("selection_folders")
+}
+
+/// What happened to a selection and who did it (STUDIO, CLIENT or SYSTEM): unlock, reset, delivered...
+model SelectionLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  selectionId String   @map("selection_id") @db.Uuid
+  actor       String
+  action      String
+  detail      String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  selection Selection @relation(fields: [selectionId], references: [id], onDelete: Cascade)
+
+  @@index([selectionId, createdAt])
+  @@map("selection_log")
 }
 
 model SelectionMember {
@@ -482,26 +539,40 @@ model PhotoComment {
 }
 
 model Album {
-  id           String      @id @default(uuid()) @db.Uuid
-  studioId     String      @map("studio_id") @db.Uuid
-  code         String
-  eventId      String      @map("event_id") @db.Uuid
-  title        String
-  subtitle     String?
-  location     String?
-  status       AlbumStatus @default(DRAFT)
-  hue          Int         @default(345)
-  publicToken  String      @unique @map("public_token")
-  coverPhotoId String?     @map("cover_photo_id") @db.Uuid
-  publishedAt  DateTime?   @map("published_at")
-  createdAt    DateTime    @default(now()) @map("created_at")
-  updatedAt    DateTime    @updatedAt @map("updated_at")
-  deletedAt    DateTime?   @map("deleted_at")
+  id               String      @id @default(uuid()) @db.Uuid
+  studioId         String      @map("studio_id") @db.Uuid
+  code             String
+  eventId          String      @map("event_id") @db.Uuid
+  title            String
+  subtitle         String?
+  location         String?
+  status           AlbumStatus @default(DRAFT)
+  hue              Int         @default(345)
+  publicToken      String      @unique @map("public_token")
+  coverPhotoId     String?     @map("cover_photo_id") @db.Uuid
+  publishedAt      DateTime?   @map("published_at")
+  selectionId      String?     @map("selection_id") @db.Uuid
+  // Cover design: CLASSIC | MODERN | MINIMAL, colours as #rrggbb, details = which lines show.
+  coverStyle       String      @default("CLASSIC") @map("cover_style")
+  coverColor       String?     @map("cover_color")
+  textColor        String?     @map("text_color")
+  accentColor      String?     @map("accent_color")
+  coverDetails     Json?       @map("cover_details")
+  songUrl          String?     @map("song_url")
+  videoUrl         String?     @map("video_url")
+  backCoverPhotoId String?     @map("back_cover_photo_id") @db.Uuid
+  viewCount        Int         @default(0) @map("view_count")
+  approvedAt       DateTime?   @map("approved_at")
+  sentToPrintAt    DateTime?   @map("sent_to_print_at")
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
+  deletedAt        DateTime?   @map("deleted_at")
 
-  studio   Studio          @relation(fields: [studioId], references: [id])
-  event    Event           @relation(fields: [eventId], references: [id])
-  pages    AlbumPage[]
-  feedback AlbumFeedback[]
+  studio    Studio          @relation(fields: [studioId], references: [id])
+  event     Event           @relation(fields: [eventId], references: [id])
+  selection Selection?      @relation(fields: [selectionId], references: [id], onDelete: SetNull)
+  pages     AlbumPage[]
+  feedback  AlbumFeedback[]
 
   @@unique([studioId, code])
   @@index([studioId, updatedAt])

@@ -72,6 +72,8 @@ interface Item {
   name: string
   size: number
   folder: string | null
+  /** The extra form fields when the file was added. */
+  fields?: Record<string, string>
   /** Dropped once the photo is uploaded (or already there), so big folders don't hold every file in memory. */
   file?: File
   progress: number
@@ -93,6 +95,7 @@ export function PhotoUploader({
   onUploaded,
   onBusyChange,
   label = 'Drop wedding photos here, or click to browse',
+  fields,
 }: {
   endpoint: string
   /** No longer used: the studio's plan decides the size limit. Kept so existing callers still compile. */
@@ -101,7 +104,13 @@ export function PhotoUploader({
   /** Told when uploads start and finish, e.g. to confirm before a dialog closes mid-upload. */
   onBusyChange?: (busy: boolean) => void
   label?: string
+  /** Extra form fields sent with the photos added from now on (e.g. the folder to file them in). */
+  fields?: Record<string, string>
 }) {
+  const fieldsRef = useRef(fields)
+  useEffect(() => {
+    fieldsRef.current = fields
+  }, [fields])
   const qc = useQueryClient()
   const navigate = useNavigate()
   const limitsQ = useQuery({ queryKey: UPLOAD_LIMITS_KEY, queryFn: () => api.get<UploadLimitsDto>('/me/upload-limits') })
@@ -163,6 +172,7 @@ export function PhotoUploader({
         patch(item.key, { state: 'uploading', progress: 0, error: undefined, planError: false })
         const fd = new FormData()
         if (item.folder) fd.append('folder', item.folder)
+        for (const [k, v] of Object.entries(item.fields ?? {})) fd.append(k, v)
         fd.append('file', item.file)
         try {
           await withRetries(
@@ -228,6 +238,7 @@ export function PhotoUploader({
       name: c.file.name,
       size: c.file.size,
       folder: c.folder,
+      fields: fieldsRef.current,
       file: c.file,
       progress: 0,
       state,

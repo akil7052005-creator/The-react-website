@@ -1,7 +1,7 @@
 import { lazy, StrictMode, Suspense, type ComponentType } from 'react'
 import { createRoot } from 'react-dom/client'
 import { QueryClientProvider } from '@tanstack/react-query'
-import { createBrowserRouter, Outlet, RouterProvider, type RouteObject } from 'react-router-dom'
+import { createBrowserRouter, Navigate, Outlet, RouterProvider, type RouteObject } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import './index.css'
 import './additions.css'
@@ -9,6 +9,7 @@ import './styles/client-pages.css'
 import './styles/billing.css'
 import './styles/business.css'
 import './styles/admin.css'
+import './styles/workflow.css'
 import { queryClient } from './lib/query'
 import { features } from './lib/env'
 import { RedirectIfAuthed, RequireAdmin, RequireAuth } from './auth/AuthProvider'
@@ -27,7 +28,7 @@ const ForgotPassword = page(() => import('./pages/auth/Passwords').then((m) => (
 const ResetPassword = page(() => import('./pages/auth/Passwords').then((m) => ({ default: m.ResetPassword })))
 const Dashboard = page(() => import('./pages/Dashboard'))
 const PhotoSelection = page(() => import('./pages/PhotoSelection'))
-const DigitalAlbum = page(() => import('./pages/DigitalAlbum'))
+const SelectionEvent = page(() => import('./pages/SelectionEvent'))
 const FaceRecognition = page(() => import('./pages/FaceRecognition'))
 const AllSubscription = page(() => import('./pages/AllSubscription'))
 const MySubscription = page(() => import('./pages/MySubscription'))
@@ -71,7 +72,9 @@ function Root() {
 const studioRoutes: RouteObject[] = [
   { index: true, element: <Dashboard /> },
   { path: 'photo-selection', element: <PhotoSelection /> },
-  { path: 'digital-album', element: <DigitalAlbum /> },
+  { path: 'photo-selection/:selectionId', element: <SelectionEvent /> },
+  // Digital Album was removed from the studio app; old bookmarks land on the dashboard.
+  { path: 'digital-album', element: <Navigate to="/" replace /> },
   // AI Face Recognition is out of scope for v1 — kept in the code, hidden behind FEATURE_FACE_RECOGNITION.
   ...(features.faceRecognition ? [{ path: 'face-recognition', element: <FaceRecognition /> }] : []),
   { path: 'subscriptions', element: <AllSubscription /> },

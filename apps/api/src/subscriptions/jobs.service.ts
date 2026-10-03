@@ -310,7 +310,7 @@ export class SubscriptionJobsService implements OnApplicationBootstrap, OnModule
     if (!live.length) return 0
     const [events, storage] = await Promise.all([
       this.prisma.event.groupBy({ by: ['studioId'], where: { deletedAt: null, createdAt: { gte: monthStart } }, _count: { _all: true } }),
-      this.prisma.storedFile.groupBy({ by: ['studioId'], where: { deletedAt: null }, _sum: { size: true } }),
+      this.prisma.storedFile.groupBy({ by: ['studioId'], where: { deletedAt: null, photoPreview: { is: null } }, _sum: { size: true } }),
     ])
     const eventsBy = new Map(events.map((e) => [e.studioId, e._count._all]))
     const storageBy = new Map(storage.map((s) => [s.studioId, s._sum.size ?? 0]))

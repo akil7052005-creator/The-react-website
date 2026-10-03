@@ -42,9 +42,9 @@ export const eventDto = (e: Event & { client: Client }): EventDto => ({
   createdAt: e.createdAt.toISOString(),
 })
 
-/** EXPIRED is derived on read: the deadline passed before the client submitted. */
+/** EXPIRED is derived on read: the gallery expiry passed before the client submitted. */
 export function selectionStatus(s: Pick<Selection, 'status' | 'deadline'>, today = todayIST()): SelectionEffectiveStatus {
-  if (s.status !== 'SUBMITTED' && toIso(s.deadline) < today) return 'EXPIRED'
+  if (s.status !== 'SUBMITTED' && s.status !== 'DELIVERED' && toIso(s.deadline) < today) return 'EXPIRED'
   return s.status
 }
 
@@ -74,6 +74,15 @@ export function selectionDto(
     submittedAt: s.submittedAt?.toISOString() ?? null,
     lastRemindedAt: s.lastRemindedAt?.toISOString() ?? null,
     createdAt: s.createdAt.toISOString(),
+    eventDate: toIso(s.event.date),
+    sharedAt: s.sharedAt?.toISOString() ?? null,
+    deliveredAt: s.deliveredAt?.toISOString() ?? null,
+    lastClientVisitAt: s.lastClientVisitAt?.toISOString() ?? null,
+    clientVisits: s.clientVisits,
+    hasPin: !!s.pinHash,
+    allowDownload: s.allowDownload,
+    watermark: s.watermark,
+    notesAllowed: s.notesAllowed,
   }
 }
 

@@ -31,6 +31,7 @@
     "@nestjs/throttler": "6.7.1",
     "@prisma/client": "6.19.3",
     "@weddyzone/shared": "workspace:*",
+    "archiver": "^7.0.1",
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
     "dotenv": "^17.2.3",
@@ -39,11 +40,13 @@
     "nodemailer": "^7.0.10",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
+    "sharp": "^0.35.5",
     "zod": "^4.1.12"
   },
   "devDependencies": {
     "@nestjs/cli": "11.0.24",
     "@nestjs/testing": "11.2.7",
+    "@types/archiver": "^6.0.4",
     "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",

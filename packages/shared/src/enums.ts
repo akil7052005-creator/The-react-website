@@ -22,25 +22,44 @@ export const EVENT_STATUS_LABELS: Record<EventStatus, string> = {
   CANCELLED: 'Cancelled',
 }
 
-export const SELECTION_STATUSES = ['DRAFT', 'SENT', 'IN_PROGRESS', 'SUBMITTED'] as const
+/**
+ * Selection workflow: Draft (no photos) → Uploading (photos added, not shared yet) → Shared (SENT:
+ * the link went out) → In progress (the client started picking) → Submitted (locked) → Delivered.
+ */
+export const SELECTION_STATUSES = ['DRAFT', 'UPLOADING', 'SENT', 'IN_PROGRESS', 'SUBMITTED', 'DELIVERED'] as const
 export type SelectionStatus = (typeof SELECTION_STATUSES)[number]
-/** EXPIRED is never stored: it is derived when the deadline has passed before submission. */
+/** EXPIRED is never stored: it is derived when the gallery expiry has passed before submission. */
 export type SelectionEffectiveStatus = SelectionStatus | 'EXPIRED'
 export const SELECTION_STATUS_LABELS: Record<SelectionEffectiveStatus, string> = {
   DRAFT: 'Draft',
-  SENT: 'Awaiting Selection',
-  IN_PROGRESS: 'In Progress',
-  SUBMITTED: 'Completed',
+  UPLOADING: 'Uploading',
+  SENT: 'Shared',
+  IN_PROGRESS: 'In progress',
+  SUBMITTED: 'Submitted',
+  DELIVERED: 'Delivered',
   EXPIRED: 'Expired',
 }
+/** Picks are final: the client submitted (or the studio already delivered). */
+export const isSelectionLocked = (s: SelectionEffectiveStatus | SelectionStatus) => s === 'SUBMITTED' || s === 'DELIVERED'
+/** Not shared with the client yet. */
+export const isSelectionUnshared = (s: SelectionEffectiveStatus | SelectionStatus) => s === 'DRAFT' || s === 'UPLOADING'
 
-export const ALBUM_STATUSES = ['DRAFT', 'IN_REVIEW', 'PUBLISHED'] as const
+/**
+ * Album workflow: Draft → In review (shared with the client) → Changes requested → Approved → Sent to
+ * print. PUBLISHED is the older name for a finished album and is shown as Approved.
+ */
+export const ALBUM_STATUSES = ['DRAFT', 'IN_REVIEW', 'CHANGES_REQUESTED', 'APPROVED', 'PUBLISHED', 'SENT_TO_PRINT'] as const
 export type AlbumStatus = (typeof ALBUM_STATUSES)[number]
 export const ALBUM_STATUS_LABELS: Record<AlbumStatus, string> = {
   DRAFT: 'Draft',
-  IN_REVIEW: 'In Review',
-  PUBLISHED: 'Published',
+  IN_REVIEW: 'In review',
+  CHANGES_REQUESTED: 'Changes requested',
+  APPROVED: 'Approved',
+  PUBLISHED: 'Approved',
+  SENT_TO_PRINT: 'Sent to print',
 }
+/** Finished albums: shown on the studio website and counted as published. */
+export const FINISHED_ALBUM_STATUSES: AlbumStatus[] = ['APPROVED', 'PUBLISHED', 'SENT_TO_PRINT']
 
 export const PLAN_CODES = ['STARTER', 'PRO', 'STUDIO', 'ALL_ACCESS'] as const
 export type PlanCode = (typeof PLAN_CODES)[number]

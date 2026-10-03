@@ -18,7 +18,6 @@ const allSections: { label: string; items: NavItem[] }[] = [
     items: [
       { to: '/', label: 'Dashboard', icon: 'grid-1x2', featureKey: 'dashboard' },
       { to: '/photo-selection', label: 'Photo Selection', icon: 'images', featureKey: 'photoSelection' },
-      { to: '/digital-album', label: 'Digital Album', icon: 'journal-album', featureKey: 'digitalAlbum' },
       { to: '/face-recognition', label: 'AI Face Recognition', icon: 'person-bounding-box', featureKey: 'faceRecognition', flag: 'faceRecognition' },
     ],
   },

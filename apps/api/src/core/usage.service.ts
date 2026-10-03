@@ -33,7 +33,7 @@ export class UsageService {
     const [eventsThisMonth, albums, storage, spent, studio] = await Promise.all([
       db.event.count({ where: { studioId, deletedAt: null, createdAt: { gte: monthStart } } }),
       db.album.count({ where: { studioId, deletedAt: null } }),
-      db.storedFile.aggregate({ where: { studioId, deletedAt: null }, _sum: { size: true } }),
+      db.storedFile.aggregate({ where: { studioId, deletedAt: null, photoPreview: { is: null } }, _sum: { size: true } }),
       db.creditLedger.aggregate({
         where: { studioId, reason: 'MESSAGE', createdAt: { gte: monthStart } },
         _sum: { delta: true },

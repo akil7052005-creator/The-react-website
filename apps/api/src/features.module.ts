@@ -10,7 +10,9 @@ import { AdminController, SupportController, SupportService } from './business/s
 import { DashboardController } from './dashboard/dashboard.controller'
 import { ClientsController, EventsController } from './events/clients-events.controller'
 import { NotificationsController, SearchController } from './notifications/notifications.controller'
-import { PublicSelectionsController, SelectionsController } from './selections/selections.controller'
+import { PhotoPreviewService } from './selections/previews.service'
+import { SelectionWorkflowService } from './selections/selection-workflow.service'
+import { PublicSelectionsController, SelectionDefaultsController, SelectionsController } from './selections/selections.controller'
 import { SelectionsService } from './selections/selections.service'
 import { UploadLimitsController, UploadLimitsService } from './selections/upload-limits'
 import { PlatformWhatsAppService } from './infra/platform-whatsapp.service'
@@ -31,6 +33,7 @@ import { WebhooksController } from './subscriptions/webhooks.controller'
     DashboardController,
     SelectionsController,
     PublicSelectionsController,
+    SelectionDefaultsController,
     UploadLimitsController,
     AlbumsController,
     PublicAlbumsController,
@@ -50,6 +53,8 @@ import { WebhooksController } from './subscriptions/webhooks.controller'
   providers: [
     SelectionsService,
     UploadLimitsService,
+    SelectionWorkflowService,
+    PhotoPreviewService,
     AlbumsService,
     SubscriptionsService,
     InvoicesService,
