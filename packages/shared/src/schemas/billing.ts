@@ -105,6 +105,10 @@ export const planLimitsSchema = z.object({
   storageGb: z.number().int().min(1).nullable(),
   teamSeats: z.number().int().min(1),
   includedCredits: z.number().int().min(0),
+  // Photo upload limits (optional: a plan without them uses the Starter values).
+  maxPhotoMb: z.number().int().min(1, 'At least 1 MB').max(100, 'At most 100 MB').optional(),
+  maxFilesPerUpload: z.number().int().min(1).max(10_000, 'At most 10,000').optional(),
+  uploadConcurrency: z.number().int().min(1).max(8, 'At most 8').optional(),
 })
 export type PlanLimits = z.output<typeof planLimitsSchema>
 

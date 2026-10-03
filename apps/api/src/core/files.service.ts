@@ -17,6 +17,18 @@ export interface UploadedFile {
 
 const MB = 1024 * 1024
 
+/**
+ * Optional overrides for one upload. Leave out for the standard rules. Photo Selection uses them to
+ * apply the studio's plan size limit and to run its own storage check under its upload lock.
+ */
+export interface FileCheckOverrides {
+  maxBytes?: number
+  /** Shown in the "too large" / "not supported" messages, e.g. "JPEG, PNG or WebP up to 50 MB". */
+  label?: string
+  /** false = the caller has already checked the storage quota. Default true. */
+  checkStorage?: boolean
+}
+
 // URL builders — the web app prefixes them with the API origin.
 export const fileUrls = {
   studio: (fileId: string) => `/api/v1/files/${fileId}`,
@@ -48,9 +60,10 @@ export class FilesService {
   }
 
   /** Validates bytes (type by content, not extension), size and storage quota, then stores the file. */
-  async validate(studioId: string, kind: FileKind, file: UploadedFile | undefined, field = 'file') {
+  async validate(studioId: string, kind: FileKind, file: UploadedFile | undefined, field = 'file', overrides: FileCheckOverrides = {}) {
     if (!file || !file.buffer?.length) throw fileInvalid('Please choose a file to upload', field)
-    const rules = this.rules(kind)
+    const base = this.rules(kind)
+    const rules = { ...base, maxBytes: overrides.maxBytes ?? base.maxBytes, label: overrides.label ?? base.label }
     if (file.size > rules.maxBytes) {
       throw fileInvalid(`${file.originalname} is too large — upload ${rules.label}`, field)
     }
@@ -59,7 +72,7 @@ export class FilesService {
       throw fileInvalid(`${file.originalname} is not a supported file — upload ${rules.label}`, field)
     }
     // A read-only (expired) studio can still update its logo and write to support.
-    await this.usage.assertStorage(studioId, file.size, kind === 'PHOTO' || kind === 'BANNER')
+    if (overrides.checkStorage !== false) await this.usage.assertStorage(studioId, file.size, kind === 'PHOTO' || kind === 'BANNER')
     return { type, checksum: sha256(file.buffer) }
   }
 
@@ -69,8 +82,9 @@ export class FilesService {
     file: UploadedFile | undefined,
     field = 'file',
     db: Tx | PrismaService = this.prisma,
+    overrides: FileCheckOverrides = {},
   ): Promise<StoredFile> {
-    const { type, checksum } = await this.validate(studioId, kind, file, field)
+    const { type, checksum } = await this.validate(studioId, kind, file, field, overrides)
     const key = await this.storage.save(file!.buffer, type.ext, type.mime)
     return db.storedFile.create({
       data: {

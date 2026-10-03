@@ -18,6 +18,7 @@ import { formatDate } from '../../utils/format'
 import { applyApiErrors, SubmitButton, TextField, useZodForm } from '../form/form'
 import { Modal, useConfirm } from '../Modal'
 import { PhotoUploader } from '../PhotoUploader'
+import { useUploadGuard } from './useUploadGuard'
 import { EmptyState, ErrorState, Progress, Skeleton, StatusPill } from '../ui'
 import WhatsAppPreviewModal from '../WhatsAppPreviewModal'
 
@@ -119,6 +120,7 @@ export function SelectionManageModal({
   const confirm = useConfirm()
   const [tab, setTab] = useState<Tab>(initialTab)
   const [preview, setPreview] = useState(false)
+  const { setUploading, guard } = useUploadGuard()
   const id = selection?.id ?? ''
 
   const live = useQuery({
@@ -213,7 +215,7 @@ export function SelectionManageModal({
     <>
       <Modal
         open
-        onClose={onClose}
+        onClose={guard(onClose)}
         title={`${s.code} · ${s.event.title}`}
         subtitle={`${s.client.name} · deadline ${formatDate(s.deadline)}`}
         icon="images"
@@ -240,7 +242,7 @@ export function SelectionManageModal({
 
         {tab === 'photos' && (
           <div className="stack" style={{ gap: 16 }}>
-            {s.status !== 'SUBMITTED' && <PhotoUploader endpoint={`/selections/${s.id}/photos`} onUploaded={() => refreshAll(qc, s.id)} label="Add more photos" />}
+            {s.status !== 'SUBMITTED' && <PhotoUploader endpoint={`/selections/${s.id}/photos`} onUploaded={() => refreshAll(qc, s.id)} onBusyChange={setUploading} label="Add more photos" />}
             <div className="download-bar">
               <span>
                 <i className="bi bi-download" /> Download the client's picks ({s.pickedCount})

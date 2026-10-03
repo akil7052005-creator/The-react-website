@@ -9,6 +9,7 @@ import {
   type SelectionDto,
   type StudioSelectionPhotoDto,
   type updateSelectionSchema,
+  type UploadLimitsDto,
 } from '@weddyzone/shared'
 import type { z } from 'zod'
 import { AppError, badRequest, conflict, notFound } from '../common/errors'
@@ -19,6 +20,10 @@ import { selectionDto, selectionStatus, type SelectionWithRelations } from '../c
 import { MessagingService } from '../core/messaging.service'
 import { NotificationsService } from '../core/notifications.service'
 import { PrismaService, type Tx } from '../prisma/prisma.service'
+import { fileTooLarge, renewToUpload, storageFull, UploadLimitsService } from './upload-limits'
+
+const MB = 1024 * 1024
+const GB = 1024 ** 3
 
 const include = {
   event: { include: { client: true } },
@@ -39,6 +44,7 @@ export class SelectionsService {
     private readonly files: FilesService,
     private readonly messaging: MessagingService,
     private readonly notifications: NotificationsService,
+    private readonly uploadLimits: UploadLimitsService,
   ) {}
 
   publicUrl(token: string) {
@@ -206,15 +212,25 @@ export class SelectionsService {
       originalName: p.file.originalName,
       size: p.file.size,
       position: p.position,
+      folder: p.folder,
       pickedBy: p.picks.map((k) => k.member.name),
       comments: p.comments.map((c) => ({ memberName: c.member.name, text: c.text, createdAt: c.createdAt.toISOString() })),
     }))
   }
 
-  async addPhoto(studioId: string, id: string, file: UploadedFile | undefined) {
+  /**
+   * Adds one photo. With `limits` (the upload route always passes them) the studio's plan decides
+   * the largest photo, storage is checked under the selection lock, and a read-only plan is refused.
+   * `folder` is the folder the photo came from, if any.
+   */
+  async addPhoto(studioId: string, id: string, file: UploadedFile | undefined, opts: { limits?: UploadLimitsDto; folder?: string | null } = {}) {
     const s = await this.find(studioId, id)
     if (s.status === 'SUBMITTED') throw readOnly('This selection was submitted — photos can no longer be added.')
-    const { checksum } = await this.files.validate(studioId, 'PHOTO', file)
+    const { limits } = opts
+    if (limits?.readOnly) throw renewToUpload(limits)
+    if (limits && file && file.size > limits.maxPhotoMb * MB) throw fileTooLarge(limits)
+    const overrides = limits ? { maxBytes: limits.maxPhotoMb * MB, label: `JPEG, PNG or WebP up to ${limits.maxPhotoMb} MB`, checkStorage: false } : {}
+    const { checksum } = await this.files.validate(studioId, 'PHOTO', file, 'file', overrides)
     // The uploader sends several files at once (a whole folder, say). Locking the selection row makes
     // uploads to one selection take turns between the duplicate check and the insert, so the same
     // photo arriving twice in parallel is still caught, and positions never collide.
@@ -230,16 +246,21 @@ export class SelectionsService {
             file: 'Duplicate photo — already uploaded',
           })
         }
+        // Storage is counted inside the lock too, so parallel uploads can't overshoot the plan together.
+        if (limits && limits.storageGb !== null) {
+          const used = await this.uploadLimits.storageUsed(studioId, tx)
+          if (used + file!.size > limits.storageGb * GB) throw storageFull(used, limits)
+        }
         const last = await tx.photo.findFirst({ where: { selectionId: id }, orderBy: { position: 'desc' } })
-        const stored = await this.files.store(studioId, 'PHOTO', file, 'file', tx)
+        const stored = await this.files.store(studioId, 'PHOTO', file, 'file', tx, overrides)
         const photo = await tx.photo.create({
-          data: { studioId, eventId: s.eventId, selectionId: id, fileId: stored.id, position: (last?.position ?? -1) + 1 },
+          data: { studioId, eventId: s.eventId, selectionId: id, fileId: stored.id, position: (last?.position ?? -1) + 1, folder: opts.folder ?? null },
         })
         return { photo, stored }
       },
       { timeout: 30_000, maxWait: 30_000 },
     )
-    return { id: photo.id, url: fileUrls.studio(stored.id), originalName: stored.originalName, size: stored.size, position: photo.position }
+    return { id: photo.id, url: fileUrls.studio(stored.id), originalName: stored.originalName, size: stored.size, position: photo.position, folder: photo.folder }
   }
 
   async removePhoto(studioId: string, id: string, photoId: string) {

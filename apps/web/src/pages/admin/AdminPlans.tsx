@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { AdminPlanDto, PlanLimits } from '@weddyzone/shared'
+import { resolveUploadLimits, STARTER_UPLOAD_LIMITS, type AdminPlanDto, type PlanLimits } from '@weddyzone/shared'
 import { Fragment, useState, type FormEvent, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { FieldShell, SubmitButton, useGuardedClose } from '../../components/form/form'
@@ -13,13 +13,19 @@ import { formatMoney, formatNumber } from '../../utils/format'
 
 const PLANS_KEY = ['admin', 'plans'] as const
 
-/** Limits that may be "unlimited" (blank field = null). */
-const LIMIT_FIELDS: { key: keyof PlanLimits; label: string; unit?: string; unlimited: boolean }[] = [
+/**
+ * Limits that may be "unlimited" (blank field = null). `optional` ones (photo uploads) may be left
+ * blank to use the Starter value instead.
+ */
+const LIMIT_FIELDS: { key: keyof PlanLimits; label: string; unit?: string; unlimited: boolean; optional?: boolean }[] = [
   { key: 'eventsPerMonth', label: 'Events per month', unlimited: true },
   { key: 'albums', label: 'Digital albums', unlimited: true },
   { key: 'storageGb', label: 'Storage', unit: 'GB', unlimited: true },
   { key: 'teamSeats', label: 'Team seats', unlimited: false },
   { key: 'includedCredits', label: 'WhatsApp credits included', unlimited: false },
+  { key: 'maxPhotoMb', label: 'Largest photo', unit: 'MB', unlimited: false, optional: true },
+  { key: 'maxFilesPerUpload', label: 'Photos per upload', unlimited: false, optional: true },
+  { key: 'uploadConcurrency', label: 'Uploads at a time', unlimited: false, optional: true },
 ]
 
 interface Draft {
@@ -39,7 +45,7 @@ const toDraft = (p: AdminPlanDto): Draft => ({
   tagline: p.tagline,
   monthlyPrice: p.monthlyPricePaise === null ? '' : String(p.monthlyPricePaise / 100),
   yearlyPrice: String(p.yearlyPricePaise / 100),
-  limits: Object.fromEntries(LIMIT_FIELDS.map((f) => [f.key, p.limits[f.key] === null ? '' : String(p.limits[f.key])])) as Draft['limits'],
+  limits: Object.fromEntries(LIMIT_FIELDS.map((f) => [f.key, p.limits[f.key] === null || p.limits[f.key] === undefined ? '' : String(p.limits[f.key])])) as Draft['limits'],
   features: p.features.join('\n'),
   comingSoon: p.comingSoon,
   popular: p.popular,
@@ -84,7 +90,8 @@ function PlanEditor({ plan, onClose }: { plan: AdminPlanDto; onClose: () => void
       tagline: draft.tagline,
       monthlyPrice: num(draft.monthlyPrice),
       yearlyPrice: num(draft.yearlyPrice),
-      limits: Object.fromEntries(LIMIT_FIELDS.map((f) => [f.key, num(draft.limits[f.key])])),
+      // A blank optional limit is left out, so the Starter value applies.
+      limits: Object.fromEntries(LIMIT_FIELDS.filter((f) => !(f.optional && draft.limits[f.key].trim() === '')).map((f) => [f.key, num(draft.limits[f.key])])),
       features,
       // Only features still on the list can be "coming soon".
       comingSoon: draft.comingSoon.filter((f) => features.includes(f)),
@@ -143,7 +150,7 @@ function PlanEditor({ plan, onClose }: { plan: AdminPlanDto; onClose: () => void
               placeholder={f.unlimited ? 'Unlimited' : undefined}
               onChange={(e) => set('limits', { ...draft.limits, [f.key]: e.target.value })}
             />,
-            f.unlimited ? 'Leave empty for unlimited' : undefined,
+            f.unlimited ? 'Leave empty for unlimited' : f.optional ? `Leave empty for the Starter value (${STARTER_UPLOAD_LIMITS[f.key as keyof typeof STARTER_UPLOAD_LIMITS]})` : undefined,
             )}
           </Fragment>
         ))}
@@ -238,6 +245,9 @@ export default function AdminPlans() {
                   </li>
                 ))}
               </ul>
+              <p className="muted" style={{ margin: '0 0 12px', fontSize: 13.5 }}>
+                Uploads: up to {resolveUploadLimits(p.limits).maxPhotoMb} MB per photo · {formatNumber(resolveUploadLimits(p.limits).maxFilesPerUpload)} per upload · {resolveUploadLimits(p.limits).uploadConcurrency} at a time
+              </p>
               <ul className="checklist">
                 {p.features.filter((f) => !limitFeature(f)).map((f) => (
                   <li key={f} className={p.comingSoon.includes(f) ? 'is-coming-soon' : ''}>

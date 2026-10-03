@@ -12,6 +12,7 @@ import { ClientsController, EventsController } from './events/clients-events.con
 import { NotificationsController, SearchController } from './notifications/notifications.controller'
 import { PublicSelectionsController, SelectionsController } from './selections/selections.controller'
 import { SelectionsService } from './selections/selections.service'
+import { UploadLimitsController, UploadLimitsService } from './selections/upload-limits'
 import { PlatformWhatsAppService } from './infra/platform-whatsapp.service'
 import { AdminSubscriptionsController } from './subscriptions/admin-subscriptions.controller'
 import { AdminSubscriptionsService } from './subscriptions/admin-subscriptions.service'
@@ -30,6 +31,7 @@ import { WebhooksController } from './subscriptions/webhooks.controller'
     DashboardController,
     SelectionsController,
     PublicSelectionsController,
+    UploadLimitsController,
     AlbumsController,
     PublicAlbumsController,
     PlansController,
@@ -47,6 +49,7 @@ import { WebhooksController } from './subscriptions/webhooks.controller'
   ],
   providers: [
     SelectionsService,
+    UploadLimitsService,
     AlbumsService,
     SubscriptionsService,
     InvoicesService,

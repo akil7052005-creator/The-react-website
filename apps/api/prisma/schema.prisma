@@ -389,6 +389,8 @@ model Photo {
   selectionId String?   @map("selection_id") @db.Uuid
   fileId      String    @unique @map("file_id") @db.Uuid
   position    Int       @default(0)
+  // Folder the photo was uploaded from (e.g. "Haldi" or "Wedding/Stage"); null for single files.
+  folder      String?
   createdAt   DateTime  @default(now()) @map("created_at")
   deletedAt   DateTime? @map("deleted_at")
 

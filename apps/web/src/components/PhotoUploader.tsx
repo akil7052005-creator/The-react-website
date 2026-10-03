@@ -1,17 +1,18 @@
-import { useRef, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import type { UploadLimitsDto } from '@weddyzone/shared'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import { upload, isApiError } from '../lib/api'
+import { api, upload, isApiError } from '../lib/api'
 import { toastError } from '../lib/query'
 import { formatBytes } from '../utils/format'
+import { fitBatch, folderLabel, folderOf, folderSummary, photoType, PICKER_ACCEPT, sortByPath, triage, withRetries, type Candidate } from './photoUpload'
 
-const ACCEPT = ['image/jpeg', 'image/png', 'image/webp']
-const CONCURRENCY = 3
+export { photoType } from './photoUpload'
 
-/** System clutter that comes along with folders: .DS_Store and other dotfiles, Thumbs.db, desktop.ini. */
-function isJunk(name: string): boolean {
-  const n = name.toLowerCase()
-  return n.startsWith('.') || n === 'thumbs.db' || n === 'desktop.ini'
-}
+export const UPLOAD_LIMITS_KEY = ['upload-limits'] as const
+/** Rows rendered before "Show all" (big folders can have thousands). */
+const ROWS_SHOWN = 50
 
 const fileOf = (entry: FileSystemFileEntry) => new Promise<File>((resolve, reject) => entry.file(resolve, reject))
 
@@ -26,12 +27,12 @@ async function readAll(dir: FileSystemDirectoryEntry): Promise<FileSystemEntry[]
   }
 }
 
-async function filesIn(entry: FileSystemEntry): Promise<File[]> {
+async function candidatesIn(entry: FileSystemEntry): Promise<Candidate[]> {
   try {
-    if (entry.isFile) return [await fileOf(entry as FileSystemFileEntry)]
+    if (entry.isFile) return [{ file: await fileOf(entry as FileSystemFileEntry), folder: folderOf(entry.fullPath) }]
     if (entry.isDirectory) {
       const children = await readAll(entry as FileSystemDirectoryEntry)
-      return (await Promise.all(children.map(filesIn))).flat()
+      return (await Promise.all(children.map(candidatesIn))).flat()
     }
   } catch {
     // An unreadable file or folder (permissions, removed meanwhile) is skipped, not fatal.
@@ -48,96 +49,196 @@ function dropEntries(dt: DataTransfer): FileSystemEntry[] {
 }
 
 /**
- * Files from a drop, walking dropped folders and their subfolders. Reads the entries before its
- * first await, so call it straight from the drop handler. Falls back to the plain file list when
- * the browser gives no entries.
+ * Files from a drop with the folder each came from, walking dropped folders and their subfolders.
+ * Reads the entries before its first await, so call it straight from the drop handler. Falls back
+ * to the plain file list when the browser gives no entries.
  */
-export async function filesFromDrop(dt: DataTransfer): Promise<File[]> {
+export async function candidatesFromDrop(dt: DataTransfer): Promise<Candidate[]> {
   const entries = dropEntries(dt)
   const loose = Array.from(dt.files)
-  if (!entries.length) return loose
-  return (await Promise.all(entries.map(filesIn))).flat()
+  if (!entries.length) return loose.map((file) => ({ file, folder: null }))
+  return (await Promise.all(entries.map(candidatesIn))).flat()
 }
+
+/** Files from a drop (folders walked recursively). */
+export async function filesFromDrop(dt: DataTransfer): Promise<File[]> {
+  return (await candidatesFromDrop(dt)).map((c) => c.file)
+}
+
+type State = 'queued' | 'uploading' | 'done' | 'error' | 'duplicate'
 
 interface Item {
   key: string
-  file: File
+  name: string
+  size: number
+  folder: string | null
+  /** Dropped once the photo is uploaded (or already there), so big folders don't hold every file in memory. */
+  file?: File
   progress: number
-  state: 'queued' | 'uploading' | 'done' | 'error'
+  state: State
   error?: string
+  /** Error about the plan (size, storage, renewal): shown with an upgrade link. */
+  planError?: boolean
 }
 
+const isPlanMessage = (m?: string) => !!m && /plan|storage full|renew|upgrade/i.test(m)
+
 /**
- * Multi-file photo upload with per-file progress and per-file errors.
- * Files are checked in the browser first (type/size) and again on the server
- * (real content type, size, duplicate by checksum).
+ * Photo upload with per-file progress, errors and retries. Every limit comes from the studio's plan
+ * (GET /me/upload-limits): photo size, photos per upload, uploads at a time and storage left. The
+ * server checks all of it again (type by content, size, storage, duplicates, read-only plans).
  */
 export function PhotoUploader({
   endpoint,
-  maxMb = 20,
   onUploaded,
+  onBusyChange,
   label = 'Drop wedding photos here, or click to browse',
 }: {
   endpoint: string
+  /** No longer used: the studio's plan decides the size limit. Kept so existing callers still compile. */
   maxMb?: number
   onUploaded?: () => void
+  /** Told when uploads start and finish, e.g. to confirm before a dialog closes mid-upload. */
+  onBusyChange?: (busy: boolean) => void
   label?: string
 }) {
+  const qc = useQueryClient()
+  const navigate = useNavigate()
+  const limitsQ = useQuery({ queryKey: UPLOAD_LIMITS_KEY, queryFn: () => api.get<UploadLimitsDto>('/me/upload-limits') })
+  const limits = limitsQ.data
   const [items, setItems] = useState<Item[]>([])
+  const [showAll, setShowAll] = useState(false)
   const [dragging, setDragging] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
   const input = useRef<HTMLInputElement>(null)
   const folderInput = useRef<HTMLInputElement | null>(null)
+  const zone = useRef<HTMLDivElement>(null)
+  const menu = useRef<HTMLDivElement>(null)
   const counter = useRef(0)
+  // Set when the uploader goes away (dialog closed): queued files are not started.
+  const stopped = useRef(false)
+  const busyCallback = useRef(onBusyChange)
+  useEffect(() => {
+    busyCallback.current = onBusyChange
+  }, [onBusyChange])
+
+  const blocked = limits?.readOnly === true
+  const active = items.filter((i) => i.state === 'uploading' || i.state === 'queued').length
 
   const patch = (key: string, p: Partial<Item>) => setItems((list) => list.map((i) => (i.key === key ? { ...i, ...p } : i)))
 
-  const runQueue = async (queue: Item[]) => {
+  useEffect(() => {
+    stopped.current = false
+    return () => {
+      stopped.current = true
+    }
+  }, [])
+
+  // While uploads run: warn before leaving the page, and tell the parent (it confirms before closing).
+  const busy = active > 0
+  useEffect(() => {
+    busyCallback.current?.(busy)
+    if (!busy) return
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [busy])
+
+  const getLimits = () => qc.fetchQuery({ queryKey: UPLOAD_LIMITS_KEY, queryFn: () => api.get<UploadLimitsDto>('/me/upload-limits'), staleTime: 30_000 })
+
+  const runQueue = async (queue: Item[], concurrency: number) => {
     let next = 0
+    let halted: string | null = null
     const worker = async () => {
-      while (next < queue.length) {
+      while (next < queue.length && !stopped.current) {
         const item = queue[next++]
-        patch(item.key, { state: 'uploading', progress: 0, error: undefined })
+        if (halted) {
+          patch(item.key, { state: 'error', error: halted, planError: true })
+          continue
+        }
+        if (!item.file) continue
+        patch(item.key, { state: 'uploading', progress: 0, error: undefined, planError: false })
         const fd = new FormData()
+        if (item.folder) fd.append('folder', item.folder)
         fd.append('file', item.file)
         try {
-          await upload(endpoint, fd, (pct) => patch(item.key, { progress: pct }))
-          patch(item.key, { state: 'done', progress: 100 })
+          await withRetries(
+            () => upload(endpoint, fd, (pct) => patch(item.key, { progress: pct })),
+            undefined,
+            (n) => patch(item.key, { progress: 0, error: `Connection problem, retrying (${n} of 2)…` }),
+          )
+          patch(item.key, { state: 'done', progress: 100, error: undefined, file: undefined })
           onUploaded?.()
         } catch (e) {
+          if (isApiError(e) && e.status === 409 && /Duplicate/i.test(e.fields?.file ?? '')) {
+            patch(item.key, { state: 'duplicate', error: undefined, file: undefined })
+            continue
+          }
           const msg = isApiError(e) ? (e.fields?.file ?? e.message) : 'Upload failed'
-          patch(item.key, { state: 'error', error: msg })
-          // Plan limit / session problems: stop the rest of the queue.
+          patch(item.key, { state: 'error', error: msg, planError: isPlanMessage(msg) })
+          // Plan limit (storage full, renew) or session problems: stop the rest of the queue.
           if (isApiError(e) && (e.code === 'PLAN_LIMIT' || e.status === 401)) {
             if (e.code === 'PLAN_LIMIT') toastError(e) // opens the upgrade dialog
-            next = queue.length
+            halted = e.code === 'PLAN_LIMIT' ? `Not uploaded: ${e.message}` : 'Not uploaded: please sign in again'
           }
         }
       }
     }
-    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, queue.length) }, worker))
+    await Promise.all(Array.from({ length: Math.min(concurrency, queue.length) }, worker))
+    void qc.invalidateQueries({ queryKey: UPLOAD_LIMITS_KEY })
   }
 
+  const upgradeAction = { label: 'Upgrade', onClick: () => navigate('/subscriptions') }
+
   /**
-   * Queues files for upload. From a folder, anything that isn't a JPEG/PNG/WebP (and system junk
-   * like .DS_Store) is skipped quietly; files picked one by one get an error instead.
+   * Queues files under the plan's limits. From a folder, junk, non-photos and oversize photos are
+   * skipped quietly and summed up in one message; picked one by one, they show as error rows.
    */
-  const addFiles = (files: FileList | File[], fromFolder = false) => {
-    const fresh: Item[] = []
-    for (const file of Array.from(files)) {
-      if (fromFolder && (isJunk(file.name) || !ACCEPT.includes(file.type))) continue
-      const key = `${++counter.current}-${file.name}`
-      let error: string | undefined
-      if (!ACCEPT.includes(file.type)) error = 'Only JPEG, PNG or WebP images'
-      else if (file.size > maxMb * 1024 * 1024) error = `Larger than ${maxMb} MB`
-      fresh.push({ key, file, progress: 0, state: error ? 'error' : 'queued', error })
-    }
-    if (!fresh.length) {
-      // Quiet per file, but an empty result needs saying.
-      if (fromFolder) toast.info('No JPEG, PNG or WebP photos found in that folder')
+  const addFiles = async (candidates: Candidate[], fromFolder = false) => {
+    let l: UploadLimitsDto
+    try {
+      l = await getLimits()
+    } catch (e) {
+      toastError(e)
       return
     }
-    setItems((list) => [...fresh, ...list])
-    void runQueue(fresh.filter((i) => i.state === 'queued'))
+    if (l.readOnly) {
+      toast.error('Renew your plan to upload', { action: { label: 'Renew', onClick: () => navigate(l.renewLink) } })
+      return
+    }
+    const sorted = fromFolder ? sortByPath(candidates) : candidates
+    const t = triage(sorted, l, fromFolder)
+    const fit = fitBatch(t.photos, l)
+    if (fit.overCap) {
+      toast.warning(`Your ${l.planName} plan allows ${l.maxFilesPerUpload.toLocaleString('en-IN')} photos per upload. Upload the rest in another batch, or upgrade.`, { action: upgradeAction, duration: 10_000 })
+    }
+    if (fit.noRoom) {
+      toast.warning(`Only ${fit.queued.length} photo${fit.queued.length === 1 ? '' : 's'} fit in your remaining storage. Upgrade for more space.`, { action: upgradeAction, duration: 10_000 })
+    }
+    if (fromFolder) {
+      if (!fit.queued.length && !t.skippedLarge && !t.skippedNotPhoto) toast.info('No JPEG, PNG or WebP photos found in that folder')
+      else toast.success(folderSummary(fit.queued.length, folderLabel(sorted), t, l), { duration: 8000 })
+    }
+
+    const make = (c: Candidate, state: State, error?: string): Item => ({
+      key: `${++counter.current}-${c.file.name}`,
+      name: c.file.name,
+      size: c.file.size,
+      folder: c.folder,
+      file: c.file,
+      progress: 0,
+      state,
+      error,
+      planError: isPlanMessage(error),
+    })
+    const queued = fit.queued.map((c) => make(c, 'queued'))
+    const rejected = t.rejected.map((r) => make(r.candidate, 'error', r.error))
+    if (!queued.length && !rejected.length) return
+    setItems((list) => [...queued, ...rejected, ...list])
+    if (queued.length) await runQueue(queued, l.uploadConcurrency)
   }
 
   // React's types don't know webkitdirectory/directory, so they are set on the element directly.
@@ -147,100 +248,240 @@ export function PhotoUploader({
     el?.setAttribute('directory', '')
   }
 
-  const retry = (item: Item) => void runQueue([item])
+  const retry = (list: Item[]) => {
+    const again = list.filter((i) => i.file)
+    if (!again.length) return
+    again.forEach((i) => patch(i.key, { state: 'queued', error: undefined, planError: false, progress: 0 }))
+    void getLimits().then((l) => runQueue(again, l.uploadConcurrency))
+  }
+  const canRetry = (i: Item) => i.state === 'error' && !!i.file && !!photoType(i.file) && (!limits || i.size <= limits.maxPhotoMb * 1024 * 1024)
+
+  // The box opens a small "Photos / Folder" menu. Focus goes to its first item; Escape or a click
+  // anywhere else closes it.
+  useEffect(() => {
+    if (!menuOpen) return
+    menu.current?.querySelector<HTMLButtonElement>('button')?.focus()
+    const onDown = (e: MouseEvent) => {
+      if (!menu.current?.contains(e.target as Node) && !zone.current?.contains(e.target as Node)) setMenuOpen(false)
+    }
+    // The uploader often sits in a dialog, which closes on Escape from a document-level listener.
+    // Catching Escape first (window, capture phase) and marking it handled closes just this menu.
+    const onEscape = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      setMenuOpen(false)
+      zone.current?.focus()
+    }
+    document.addEventListener('mousedown', onDown)
+    window.addEventListener('keydown', onEscape, true)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      window.removeEventListener('keydown', onEscape, true)
+    }
+  }, [menuOpen])
+
+  const pick = (which: 'photos' | 'folder') => {
+    setMenuOpen(false)
+    ;(which === 'photos' ? input.current : folderInput.current)?.click()
+  }
+  const onMenuKeyDown = (e: React.KeyboardEvent) => {
+    const buttons = [...(menu.current?.querySelectorAll('button') ?? [])]
+    const i = buttons.indexOf(document.activeElement as HTMLButtonElement)
+    if (e.key === 'Tab') {
+      setMenuOpen(false)
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      buttons[(i + 1) % buttons.length]?.focus()
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      buttons[(i - 1 + buttons.length) % buttons.length]?.focus()
+    }
+  }
 
   const done = items.filter((i) => i.state === 'done').length
-  const failed = items.filter((i) => i.state === 'error').length
-  const active = items.filter((i) => i.state === 'uploading' || i.state === 'queued').length
+  const failed = items.filter((i) => i.state === 'error')
+  const duplicates = items.filter((i) => i.state === 'duplicate').length
+  const started = items.length - items.filter((i) => i.state === 'queued').length
+  const shown = showAll ? items : items.slice(0, ROWS_SHOWN)
+  const graceDate = limits?.graceEndsAt ? new Date(limits.graceEndsAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }) : null
+  const help = limits
+    ? `JPEG, PNG or WebP · up to ${limits.maxPhotoMb} MB each · ${limits.storageLeftBytes === null ? 'unlimited storage' : `${formatBytes(limits.storageLeftBytes)} left`} on ${limits.planName}`
+    : 'JPEG, PNG or WebP · duplicates are skipped'
 
   return (
     <div className="uploader">
-      <label
-        className={`dropzone dropzone-catchy${dragging ? ' is-dragging' : ''}`}
-        onDragOver={(e) => {
-          e.preventDefault()
-          setDragging(true)
-        }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={(e) => {
-          e.preventDefault()
-          setDragging(false)
-          // Everything is read from dataTransfer now, before any await: the browser clears it after this event.
-          const dt = e.dataTransfer
-          const hasDirectory = dropEntries(dt).some((entry) => entry.isDirectory)
-          void filesFromDrop(dt).then((files) => {
-            if (files.length) addFiles(files, hasDirectory)
-          })
-        }}
-      >
-        <input
-          ref={input}
-          type="file"
-          accept={ACCEPT.join(',')}
-          multiple
-          onChange={(e) => {
-            if (e.target.files?.length) addFiles(e.target.files)
-            e.target.value = ''
-          }}
-          aria-label="Choose photos to upload"
-        />
-        <i className="bi bi-cloud-arrow-up" />
-        <strong>{label}</strong>
-        <span className="muted">JPEG, PNG or WebP · up to {maxMb} MB each · duplicates are skipped</span>
-      </label>
+      {limits?.status === 'GRACE' && graceDate && (
+        <p className="field-hint" role="status" style={{ margin: '0 0 8px', color: 'var(--warning)' }}>
+          <i className="bi bi-exclamation-triangle" aria-hidden="true" /> Your plan expired, renew by {graceDate}.{' '}
+          <Link to={limits.renewLink} className="link">
+            Renew
+          </Link>
+        </p>
+      )}
 
-      {/* Outside the <label>, so clicking it doesn't also open the file picker. */}
-      <div className="uploader-folder">
-        <button type="button" className="btn btn-light btn-sm" onClick={() => folderInput.current?.click()}>
-          <i className="bi bi-folder-plus" /> Select folder
-        </button>
-        <input
-          ref={folderRef}
-          type="file"
-          multiple
-          hidden
-          onChange={(e) => {
-            if (e.target.files?.length) addFiles(e.target.files, true)
-            e.target.value = ''
-          }}
-          aria-label="Choose a folder of photos to upload"
-        />
-      </div>
+      {blocked ? (
+        <div className="dropzone dropzone-catchy" role="status" style={{ cursor: 'default' }}>
+          <i className="bi bi-lock" />
+          <strong>Renew your plan to upload</strong>
+          <span className="muted">Your photos and albums are safe; renew to add new ones.</span>
+          <Link to={limits!.renewLink} className="btn btn-primary btn-sm" style={{ marginTop: 6 }}>
+            Renew
+          </Link>
+        </div>
+      ) : (
+        <div style={{ position: 'relative' }}>
+          <div
+            ref={zone}
+            role="button"
+            tabIndex={0}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            className={`dropzone dropzone-catchy${dragging ? ' is-dragging' : ''}`}
+            onClick={() => setMenuOpen((open) => !open)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault() // Space would otherwise scroll the page
+                setMenuOpen(true)
+              }
+            }}
+            onDragOver={(e) => {
+              e.preventDefault()
+              setDragging(true)
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => {
+              e.preventDefault()
+              setDragging(false)
+              setMenuOpen(false)
+              // Everything is read from dataTransfer now, before any await: the browser clears it after this event.
+              const dt = e.dataTransfer
+              const hasDirectory = dropEntries(dt).some((entry) => entry.isDirectory)
+              void candidatesFromDrop(dt).then((list) => {
+                if (list.length) void addFiles(list, hasDirectory)
+              })
+            }}
+          >
+            <i className="bi bi-cloud-arrow-up" />
+            <strong>{label}</strong>
+            <span className="muted">{help}</span>
+          </div>
+
+          {menuOpen && (
+            <div
+              ref={menu}
+              role="menu"
+              aria-label="Upload"
+              className="menu"
+              onKeyDown={onMenuKeyDown}
+              style={{ left: '50%', right: 'auto', top: 'calc(100% - 18px)', width: 200, transform: 'translateX(-50%)', zIndex: 20 }}
+            >
+              <button type="button" role="menuitem" className="row-menu-item" onClick={() => pick('photos')}>
+                <i className="bi bi-images" aria-hidden="true" /> Photos
+              </button>
+              <button type="button" role="menuitem" className="row-menu-item" onClick={() => pick('folder')}>
+                <i className="bi bi-folder2-open" aria-hidden="true" /> Folder
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Both pickers are hidden and live outside the box; the menu opens them. */}
+      <input
+        ref={input}
+        type="file"
+        accept={PICKER_ACCEPT}
+        multiple
+        hidden
+        onChange={(e) => {
+          const files = Array.from(e.target.files ?? [])
+          e.target.value = ''
+          if (files.length) void addFiles(files.map((file) => ({ file, folder: null })))
+        }}
+        aria-label="Choose photos to upload"
+      />
+      <input
+        ref={folderRef}
+        type="file"
+        multiple
+        hidden
+        onChange={(e) => {
+          // The folder picker gives each file's path inside the picked folder (webkitRelativePath).
+          const files = Array.from(e.target.files ?? [])
+          e.target.value = ''
+          if (files.length) void addFiles(files.map((file) => ({ file, folder: folderOf(file.webkitRelativePath) })), true)
+        }}
+        aria-label="Choose a folder of photos to upload"
+      />
 
       {items.length > 0 && (
         <>
-          <p className="uploader-summary" aria-live="polite">
-            {active > 0 ? `Uploading ${active} file${active > 1 ? 's' : ''}… ` : ''}
-            {done} uploaded{failed ? ` · ${failed} failed` : ''}
-          </p>
+          <div className="row-between" style={{ alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <p className="uploader-summary" aria-live="polite">
+              {busy ? `Uploading ${started} of ${items.length} · ` : ''}
+              {done} done{failed.length ? ` · ${failed.length} failed` : ''}
+              {duplicates ? ` · ${duplicates} already uploaded` : ''}
+            </p>
+            {!busy && failed.some(canRetry) && (
+              <button type="button" className="btn btn-sm btn-ghost" onClick={() => retry(failed.filter(canRetry))}>
+                <i className="bi bi-arrow-clockwise" /> Retry all failed
+              </button>
+            )}
+          </div>
           <ul className="upload-list">
-            {items.map((i) => (
-              <li key={i.key} className={`upload-item is-${i.state}`}>
+            {shown.map((i) => (
+              <li key={i.key} className={`upload-item is-${i.state === 'duplicate' ? 'done' : i.state}`} style={i.state === 'duplicate' ? { opacity: 0.6 } : undefined}>
                 <i
-                  className={`bi bi-${i.state === 'done' ? 'check-circle-fill' : i.state === 'error' ? 'exclamation-circle-fill' : 'image'}`}
+                  className={`bi bi-${i.state === 'done' ? 'check-circle-fill' : i.state === 'duplicate' ? 'dash-circle' : i.state === 'error' ? 'exclamation-circle-fill' : 'image'}`}
                   aria-hidden="true"
                 />
                 <div className="upload-meta">
                   <div className="upload-name">
-                    <span title={i.file.name}>{i.file.name}</span>
-                    <small>{formatBytes(i.file.size)}</small>
+                    <span title={i.folder ? `${i.folder}/${i.name}` : i.name}>{i.name}</span>
+                    <small>
+                      {i.folder ? `${i.folder} · ` : ''}
+                      {formatBytes(i.size)}
+                    </small>
                   </div>
-                  {i.state === 'error' ? (
-                    <p className="field-error">{i.error}</p>
+                  {i.state === 'duplicate' ? (
+                    <p className="muted" style={{ margin: 0, fontSize: 12.5 }}>
+                      Already uploaded
+                    </p>
+                  ) : i.state === 'error' ? (
+                    <p className="field-error">
+                      {i.error}{' '}
+                      {i.planError && (
+                        <Link to="/subscriptions" className="link">
+                          Upgrade
+                        </Link>
+                      )}
+                    </p>
                   ) : (
-                    <div className="progress" role="progressbar" aria-valuenow={i.progress} aria-valuemin={0} aria-valuemax={100} aria-label={`${i.file.name} upload`}>
-                      <span style={{ width: `${i.progress}%` }} />
-                    </div>
+                    <>
+                      <div className="progress" role="progressbar" aria-valuenow={i.progress} aria-valuemin={0} aria-valuemax={100} aria-label={`${i.name} upload`}>
+                        <span style={{ width: `${i.progress}%` }} />
+                      </div>
+                      {i.error && (
+                        <p className="muted" style={{ margin: '4px 0 0', fontSize: 12 }}>
+                          {i.error}
+                        </p>
+                      )}
+                    </>
                   )}
                 </div>
-                {i.state === 'error' && ACCEPT.includes(i.file.type) && i.file.size <= maxMb * 1024 * 1024 && !/Duplicate/i.test(i.error ?? '') && (
-                  <button type="button" className="btn btn-sm btn-ghost" onClick={() => retry(i)}>
+                {canRetry(i) && (
+                  <button type="button" className="btn btn-sm btn-ghost" onClick={() => retry([i])}>
                     Retry
                   </button>
                 )}
               </li>
             ))}
           </ul>
+          {items.length > ROWS_SHOWN && (
+            <button type="button" className="link" onClick={() => setShowAll((v) => !v)}>
+              {showAll ? `Show first ${ROWS_SHOWN}` : `Show all ${items.length.toLocaleString('en-IN')}`}
+            </button>
+          )}
         </>
       )}
     </div>

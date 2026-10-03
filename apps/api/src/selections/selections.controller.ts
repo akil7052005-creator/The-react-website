@@ -9,12 +9,13 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   Res,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common'
-import { FileInterceptor } from '@nestjs/platform-express'
 import { ApiConsumes, ApiQuery, ApiTags } from '@nestjs/swagger'
+import { Throttle } from '@nestjs/throttler'
 import {
   commentSchema,
   createSelectionSchema,
@@ -31,8 +32,8 @@ import { PublicThrottle } from '../common/throttle'
 import { ApiListQuery, ApiZodBody, zod } from '../common/zod'
 import { config } from '../config'
 import { FilesService, type UploadedFile as Upload } from '../core/files.service'
-import { uploadOptions } from '../studio/upload-options'
 import { SelectionsService } from './selections.service'
+import { cleanFolder, PlanUploadInterceptor, type UploadRequest } from './upload-limits'
 
 const kindQuery = z.object({ type: z.enum(['invite', 'reminder']).default('reminder') })
 const exportQuery = z.object({ format: z.enum(['csv', 'txt']).default('csv') })
@@ -85,11 +86,18 @@ export class SelectionsController {
     return this.selections.photos(studioId, id)
   }
 
+  /** One photo per request. Size, storage and read-only limits come from the studio's plan. */
+  @Throttle({ default: { limit: config().RATE_LIMIT_UPLOADS_PER_MIN, ttl: 60_000 } })
   @Post(':id/photos')
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('file', uploadOptions(config().MAX_PHOTO_MB)))
-  addPhoto(@StudioId() studioId: string, @Param('id', ParseUUIDPipe) id: string, @UploadedFile() file: Upload | undefined) {
-    return this.selections.addPhoto(studioId, id, file)
+  @UseInterceptors(PlanUploadInterceptor)
+  addPhoto(
+    @StudioId() studioId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() file: Upload | undefined,
+    @Req() req: UploadRequest,
+  ) {
+    return this.selections.addPhoto(studioId, id, file, { limits: req.uploadLimits, folder: cleanFolder((req.body as Record<string, unknown> | undefined)?.folder) })
   }
 
   @Delete(':id/photos/:photoId')

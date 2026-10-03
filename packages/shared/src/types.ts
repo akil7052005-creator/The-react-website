@@ -151,6 +151,8 @@ export interface PhotoDto {
 }
 
 export interface StudioSelectionPhotoDto extends PhotoDto {
+  /** Folder the photo was uploaded from, e.g. "Haldi" or "Wedding/Stage" (null for single files). */
+  folder?: string | null
   pickedBy: string[]
   comments: { memberName: string; text: string; createdAt: string }[]
 }

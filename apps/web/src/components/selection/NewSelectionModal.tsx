@@ -11,6 +11,7 @@ import { EventSelectField } from '../EventSelect'
 import { applyApiErrors, SubmitButton, TextField, useGuardedClose, useZodForm } from '../form/form'
 import { Modal, useConfirm } from '../Modal'
 import { PhotoUploader } from '../PhotoUploader'
+import { useUploadGuard } from './useUploadGuard'
 
 function inDays(n: number) {
   const d = new Date(`${todayIST()}T00:00:00`)
@@ -23,6 +24,7 @@ export function NewSelectionModal({ open, onClose }: { open: boolean; onClose: (
   const confirm = useConfirm()
   const [created, setCreated] = useState<SelectionDto | null>(null)
   const [uploaded, setUploaded] = useState(0)
+  const { setUploading, guard } = useUploadGuard()
   // Creating the project's event right here, so a new client can be set up in one go.
   const [newEventOpen, setNewEventOpen] = useState(false)
   const [newEvent, setNewEvent] = useState<EventDto | null>(null)
@@ -92,7 +94,7 @@ export function NewSelectionModal({ open, onClose }: { open: boolean; onClose: (
     <>
     <Modal
       open={open}
-      onClose={created ? reset : guardedClose}
+      onClose={created ? guard(reset) : guardedClose}
       title={created ? `Add photos to ${created.code}` : 'New Selection'}
       subtitle={created ? `${created.event.title} · quota ${created.quota} photos` : 'Share a private gallery where the couple picks their favourites'}
       icon={created ? 'cloud-arrow-up' : 'images'}
@@ -101,7 +103,7 @@ export function NewSelectionModal({ open, onClose }: { open: boolean; onClose: (
       footer={
         created ? (
           <>
-            <button className="btn btn-ghost" onClick={reset}>
+            <button className="btn btn-ghost" onClick={guard(reset)}>
               {uploaded ? 'Done' : 'Skip for now'}
             </button>
             <button className="btn btn-ghost" onClick={copyLink} disabled={!uploaded}>
@@ -126,6 +128,7 @@ export function NewSelectionModal({ open, onClose }: { open: boolean; onClose: (
       {created ? (
         <PhotoUploader
           endpoint={`/selections/${created.id}/photos`}
+          onBusyChange={setUploading}
           onUploaded={() => {
             setUploaded((n) => n + 1)
             qc.invalidateQueries({ queryKey: ['selections'] })

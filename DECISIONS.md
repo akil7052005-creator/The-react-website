@@ -129,3 +129,14 @@ Choices made where the build brief was ambiguous or where the environment forced
 | **Admin amounts exclude GST everywhere**, labelled once in the admin top bar | Revenue view: the subscriptions table, CSV, detail page, MRR/ARR and admin alerts all show the price before GST ("₹24,990 + GST" in alerts, which are also emailed). Studio-facing pages and invoices still show GST in full. |
 | **MRR = paid billing periods covering that moment** (one per subscription, monthly-equivalent, excl. GST) | The dashboard card and every point of the trend use the same function, so the card always equals the trend's current month. A plan in grace or with no payment adds nothing; an admin cancellation stops it immediately. |
 | **"Needs attention"** = in grace, payment failed, or deadline within 7 days | One KPI and one list tab (`?tab=attention`), each subscription counted once. |
+
+## Photo uploads
+
+| Decision | Why |
+| --- | --- |
+| **Upload limits come from the plan** (`maxPhotoMb`, `maxFilesPerUpload`, `uploadConcurrency` in each plan's `limits`; missing → Starter values) | Starter 25 MB / 300 / 3 · Pro 50 / 1,000 / 4 · Studio 80 / 3,000 / 5 · All-Access 100 / 5,000 / 6. Editable in Admin → Plans. `GET /me/upload-limits` tells the uploader; the server enforces all of it again. |
+| **The size limit is applied while the file is read** (a per-request multer limit from the plan) | An oversize photo is cut off at the plan limit instead of being buffered in full; 413 FILE_TOO_LARGE. |
+| **Storage is checked under the selection lock** | Parallel uploads can't overshoot the plan together. Usage is the live sum of the studio's files, so My Subscription → Storage needs no separate counter. |
+| **Uploads have their own rate-limit bucket** (`RATE_LIMIT_UPLOADS_PER_MIN`, default 6,000) | A 600+ photo folder hit the general 600/min limit and the rest failed with 429. 429s are also retried by the uploader. |
+| **Folders keep their path** (`photos.folder`, e.g. "Wedding/Stage") | Relative to the folder that was picked or dropped. |
+| **Production body size** | No nginx in this repo and the Vite dev proxy has no body limit. Uploads in production go Vercel → Render via the `/api` rewrite: check a 100 MB upload there, or point `VITE_API_URL` straight at the API if the rewrite limits bodies. |

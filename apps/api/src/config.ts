@@ -53,6 +53,9 @@ const schema = z.object({
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(1),
   FEATURE_FACE_RECOGNITION: bool,
   RATE_LIMIT_ADMIN_PER_MIN: z.coerce.number().int().default(120),
+  // Photo uploads have their own bucket: a 1,000-photo folder is 1,000 requests within a minute or
+  // two, far past the general limit. Login-only, and plan limits still apply.
+  RATE_LIMIT_UPLOADS_PER_MIN: z.coerce.number().int().min(1).default(6000),
   // Hourly subscription job (deadline reminders, grace/expiry, admin digest). On unless set to false;
   // the test suite turns it off and runs the job by hand.
   JOBS_ENABLED: z
