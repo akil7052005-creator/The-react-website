@@ -62,9 +62,12 @@ test('sign up a new studio', async ({ page }) => {
   await page.getByRole('textbox', { name: 'Password', exact: true }).fill('Lotus2026')
   await page.getByRole('button', { name: 'Create studio' }).click()
   await expect(page).toHaveURL(/\/$/)
-  // Lands on the (minimal) dashboard, on the Starter trial (plan tag in the sidebar).
+  // Lands on the dashboard, on the Starter trial (plan tag in the sidebar), with the action bar and
+  // the get-started checklist (nothing shared yet).
   await expect(page.getByRole('heading', { name: /^Good (morning|afternoon|evening), Meena$/ })).toBeVisible()
-  await expect(page.getByRole('link', { name: /New Selection/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'New event' }).first()).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Create bill' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Get started in 3 steps' })).toBeVisible()
   await expect(page.locator('.brand-pro-tag')).toHaveText('STARTER')
 
   // The 50 trial credits are not flagged as a low balance.

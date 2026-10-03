@@ -140,3 +140,19 @@ Choices made where the build brief was ambiguous or where the environment forced
 | **Uploads have their own rate-limit bucket** (`RATE_LIMIT_UPLOADS_PER_MIN`, default 6,000) | A 600+ photo folder hit the general 600/min limit and the rest failed with 429. 429s are also retried by the uploader. |
 | **Folders keep their path** (`photos.folder`, e.g. "Wedding/Stage") | Relative to the folder that was picked or dropped. |
 | **Production body size** | No nginx in this repo and the Vite dev proxy has no body limit. Uploads in production go Vercel → Render via the `/api` rewrite: check a 100 MB upload there, or point `VITE_API_URL` straight at the API if the rewrite limits bodies. |
+
+## Studio workflow (selections, dashboard)
+
+| Decision | Why |
+| --- | --- |
+| **One event page per selection** (`/photo-selection/:id`, data from `GET /selections/:id/overview`) | Replaces the Upload & Download dialog. Old `?selection=<id>` links redirect to it. |
+| **Statuses: Draft → Uploading → Shared (`SENT`) → In progress → Submitted → Delivered**, Expired derived | New enum values only; old rows keep theirs. Uploading starts with the first photo, Shared with the first link copy or WhatsApp send. Expired never overrides Submitted/Delivered. |
+| **Folders are rows** (`selection_folders`, `photos.folder_id`) | A dropped folder's top folder becomes the selection folder; a folder chosen on the page wins; otherwise General. The migration filed existing photos the same way. Deleting a folder moves its photos to General. |
+| **PIN = 4 digits, HMAC-hashed per selection; 5 wrong tries lock it for 15 minutes**, plus 10 tries/min per IP | The right PIN returns an access key (HMAC of the selection + PIN hash) sent as `X-Gallery-Key` or `?k=` on photo URLs; changing or removing the PIN kills every key. PIN errors are 403 so the web app doesn't try a studio login refresh. The studio sees the PIN only when setting it. |
+| **Clients only ever get server-made previews** (≤ 2048 px JPEG, studio name tiled when watermarking) | Made with sharp right after upload (2 at a time) or on first view; stored as files linked from `photos.preview_file_id` and not counted as studio storage. Toggling the watermark drops them so they are remade. Originals only via `/photos/:id/download`, and only when downloads are on. |
+| **ZIP export streams the originals** (archiver, stored not compressed, one file open at a time) | Works for big events without holding the ZIP in memory. Picked only by default; `scope=all`; optional `folderId`. |
+| **Unlock, reset picks, delivered and access changes are logged** (`selection_log`, actor STUDIO/CLIENT/SYSTEM) | Shown on the event page; client entries feed the dashboard's activity list. A visit is counted once per 30 minutes. |
+| **Automatic reminders after 3 and 7 quiet days, at most two per selection** | Quiet = since the share or the client's last visit; a manual reminder in the last 2 days holds them back. They only run with the WhatsApp Cloud API configured (template `selection_reminder`, 7 body parameters), because a wa.me link can't be sent by a job. Delivered first, then charged 1 credit and logged like a manual reminder; failures cost nothing. |
+| **Studio defaults** (`studios.selection_defaults`: watermark, downloads, gallery days, notes) | Pre-fill the New Selection form; the API applies them when a field is left out. |
+| **Dashboard data is a new optional `workflow` field** on `GET /dashboard` | Older fields stay for compatibility. |
+| **Digital Album removed from the studio app** | On request: sidebar entry, page and its dialogs are gone; `/digital-album` redirects to the dashboard. Album data, the albums API and clients' `/a/:token` links are kept. The album cover/review columns from the workflow migration are unused for now. |
