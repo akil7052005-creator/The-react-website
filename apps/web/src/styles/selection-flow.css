@@ -1,0 +1,932 @@
+/* Photo Selection flow: status pills (psx-status; the list page is in selection-list.css), Send/Share (sh-*), Download Selected (dl-*), Selected Photos
+   (sp-*), upload progress (uf-live), settings additions (ss-*), customer verification (sv-*) and
+   the client's Selection tab (cp-tabs, cp-counter, cp-sel-*). Same crimson as the event page. */
+
+.ps-page,
+.ef-page,
+.sh-modal,
+.dl-modal,
+.ss-page {
+  --flow-red: #e8174a;
+  --flow-grad: linear-gradient(135deg, #f0426b, #d30c3d);
+  /* Download Selected: brand maroon + gold. */
+  --flow-maroon: var(--wine-700);
+  --flow-maroon-grad: linear-gradient(135deg, #7a1a3a, var(--wine-700));
+}
+
+/* ---------------------------------------------------------------- status pills (event page) */
+.psx-status {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.psx-status.pending {
+  background: #fdf1d8;
+  color: #92560b;
+}
+.psx-status.shared {
+  background: #e3edfd;
+  color: #1d4ed8;
+}
+.psx-status.progress {
+  background: #efe7fd;
+  color: #6d28d9;
+}
+.psx-status.submitted {
+  background: #e2f5ea;
+  color: #1f7a4a;
+}
+.psx-status.downloaded {
+  background: #eceef1;
+  color: #4b5563;
+}
+/* "Selected" is a button: click it to reopen the selection (Reset Selection). */
+.psx-status.is-action {
+  border: 0;
+  font-family: inherit;
+  cursor: pointer;
+}
+.psx-status.is-action:hover,
+.psx-status.is-action:focus-visible {
+  box-shadow: 0 0 0 3px rgba(31, 122, 74, 0.25);
+}
+
+/* ---------------------------------------------------------------- event page */
+.ef-tip-wrap {
+  display: inline-flex;
+}
+.ef-tip-wrap .ef-btn:disabled {
+  pointer-events: none;
+}
+.ef-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+.ef-info-end {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+.ef-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--flow-red);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.ef-link:hover {
+  text-decoration: underline;
+}
+
+/* ---------------------------------------------------------------- Send/Share */
+.sh-code {
+  margin: 0 0 16px;
+  text-align: center;
+  color: var(--text-2);
+}
+.sh-code strong {
+  margin-left: 8px;
+  padding: 4px 12px;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px dashed var(--flow-red);
+  color: var(--text);
+  font-size: 20px;
+  letter-spacing: 0.15em;
+}
+.sh-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.sh-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 18px 16px;
+  border: 1px solid #ececec;
+  border-radius: 14px;
+  background: #fff;
+  text-align: center;
+}
+.sh-card h3 {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 800;
+}
+.sh-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: #fde7ee;
+  color: var(--flow-red);
+  font-size: 20px;
+}
+.sh-text {
+  flex: 1;
+  max-width: 100%;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.sh-btn {
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--flow-grad);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.sh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.sh-card .sw-qr {
+  margin: 0;
+}
+/* Copy Link card: "Copy link only" and "Copy WhatsApp link" under the main button, smaller. */
+.sh-card-more {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+}
+.sh-card-more .sh-mini {
+  flex: 1 1 auto;
+  justify-content: center;
+  font-size: 12px;
+}
+.sh-preview {
+  margin-top: 16px;
+  font-size: 13px;
+}
+.sh-preview summary {
+  cursor: pointer;
+  color: var(--text-2);
+  font-weight: 600;
+}
+.sh-preview pre {
+  margin: 8px 0 0;
+  padding: 12px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid #ececec;
+  white-space: pre-wrap;
+  font-family: inherit;
+}
+@media (max-width: 560px) {
+  .sh-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---------------------------------------------------------------- Download Selected */
+.dl-choices {
+  display: grid;
+  gap: 12px;
+}
+.dl-choice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  padding: 16px;
+  border: 0;
+  border-radius: 12px;
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.15s var(--ease), filter 0.15s;
+}
+.dl-choice:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+}
+.dl-choice .bi {
+  font-size: 22px;
+}
+.dl-choice span {
+  display: grid;
+  text-align: left;
+}
+.dl-choice strong {
+  font-size: 16px;
+}
+.dl-choice small {
+  opacity: 0.9;
+}
+/* Primary: maroon with a gold edge and gold icon. */
+.dl-choice.primary {
+  background: var(--flow-maroon-grad);
+  box-shadow: inset 0 0 0 2px var(--gold);
+}
+.dl-choice.primary .bi {
+  color: var(--gold-light);
+}
+/* Secondary: outlined maroon (inset border keeps the same size). */
+.dl-choice.outline {
+  background: var(--surface);
+  color: var(--flow-maroon);
+  box-shadow: inset 0 0 0 2px var(--flow-maroon);
+}
+.dl-choice.outline:hover {
+  background: var(--wine-50);
+  filter: none;
+}
+.dl-count {
+  margin: 4px 0 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.dl-note {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--info-bg);
+  color: var(--info);
+  font-size: 14px;
+}
+.dl-local {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+}
+.dl-sub {
+  margin: 0;
+  color: var(--text-2);
+  font-weight: 600;
+}
+.dl-back,
+.dl-text-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.dl-hint {
+  margin: 0;
+  color: var(--flow-maroon);
+  font-weight: 700;
+}
+.dl-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--flow-grad);
+  color: #fff;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+.dl-fine {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.dl-progress,
+.dl-summary {
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+  text-align: center;
+}
+.dl-progress p {
+  margin: 0;
+  font-weight: 600;
+}
+.dl-progress .uf-track {
+  width: 100%;
+}
+.dl-summary > .bi {
+  font-size: 40px;
+}
+.dl-summary .ok {
+  color: #2f7d5b;
+}
+.dl-summary .warn {
+  color: #b7791f;
+}
+.dl-result {
+  margin: 0;
+  font-size: 17px;
+}
+/* "Saved in the folder “Selected - …”": one line, a long name cut with "…" (full name in the title). */
+.dl-saved {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  max-width: 100%;
+  min-width: 0;
+}
+.dl-folder-name {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dl-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+.uf-track span.indeterminate {
+  animation: dl-slide 1.2s ease-in-out infinite;
+}
+@keyframes dl-slide {
+  0% {
+    margin-left: -40%;
+  }
+  100% {
+    margin-left: 100%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .uf-track span.indeterminate {
+    animation: none;
+  }
+}
+
+/* ---------------------------------------------------------------- Selected Photos (studio) */
+.sp-view {
+  display: grid;
+  gap: 14px;
+}
+.sp-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.sp-head h2 {
+  margin: 0;
+  font-size: 20px;
+}
+.sp-head .sw-back {
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+.sp-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.sp-tabs button {
+  flex: none;
+  padding: 7px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 99px;
+  background: var(--surface);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+/* Album chips: at most 220px, one line; a long name is cut with "…" (full name in the title), the count stays. */
+.sp-tabs button.sp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 220px;
+  min-width: 0;
+}
+.sp-tab-name {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sp-tab-count {
+  flex: none;
+}
+.sp-tabs button.on {
+  border-color: var(--flow-red);
+  background: var(--flow-red);
+  color: #fff;
+}
+.sp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sp-tile {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.sp-tile img,
+.sp-tile video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+}
+.sp-name {
+  position: absolute;
+  inset: auto 0 0;
+  padding: 16px 8px 6px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.65));
+  color: #fff;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sp-more {
+  justify-self: center;
+}
+
+/* ---------------------------------------------------------------- upload progress */
+.uf-live {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #fff5f7;
+  border: 1px solid #fbd0db;
+}
+.uf-live-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.uf-live-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.uf-track.big {
+  height: 10px;
+}
+.uf-pill.danger {
+  color: var(--danger);
+}
+
+/* ---------------------------------------------------------------- settings additions */
+.ss-limit {
+  gap: 10px;
+}
+.ss-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+.ss-num {
+  width: 84px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  font: inherit;
+}
+.ss-num:disabled {
+  opacity: 0.5;
+}
+.ss-date {
+  padding: 6px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  font: inherit;
+}
+
+/* ---------------------------------------------------------------- customer verification (/select/:token) */
+.sv-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 32px 16px;
+  background: linear-gradient(160deg, #d30c3d, #a10a33);
+}
+.sv-card {
+  width: 100%;
+  max-width: 400px;
+  padding: 32px 24px;
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: 0 30px 80px -20px rgba(40, 0, 15, 0.55);
+  text-align: center;
+}
+.sv-card[data-shake] {
+  animation: ca-shake 0.4s;
+}
+.sv-logo {
+  display: block;
+  width: auto;
+  max-width: 140px;
+  height: 64px;
+  margin: 0 auto 8px;
+  object-fit: contain;
+}
+.sv-mark {
+  display: grid;
+  place-items: center;
+  width: 64px;
+}
+.sv-studio {
+  margin: 0;
+  color: #6b7280;
+  font-weight: 700;
+}
+.sv-welcome {
+  margin: 12px 0 2px;
+  font-size: 28px;
+}
+.sv-title {
+  margin: 0 0 8px;
+  color: #d30c3d;
+  font-family: var(--font-body);
+  font-size: 17px;
+  font-weight: 800;
+}
+.sv-sub {
+  margin: 0 0 18px;
+  color: #4b5563;
+  font-size: 14px;
+}
+.sv-boxes {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  max-width: 320px;
+  margin: 0 auto;
+}
+.sv-box {
+  width: 100%;
+  min-width: 0;
+  aspect-ratio: 5 / 6;
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f9fafb;
+  color: #111827;
+  font: inherit;
+  font-size: 24px;
+  font-weight: 800;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.sv-box:focus {
+  outline: none;
+  border-color: #d30c3d;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(211, 12, 61, 0.15);
+}
+.sv-box[aria-invalid] {
+  border-color: #dc2626;
+}
+.sv-box:disabled {
+  opacity: 0.6;
+}
+.sv-error {
+  min-height: 20px;
+  margin: 10px 0;
+  color: #dc2626;
+  font-size: 14px;
+  font-weight: 600;
+}
+.sv-submit {
+  width: 100%;
+  padding: 14px;
+  border: 0;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f0426b, #d30c3d);
+  color: #fff;
+  font: inherit;
+  font-weight: 800;
+  font-size: 16px;
+  cursor: pointer;
+}
+.sv-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.sv-submit:focus-visible {
+  outline: 2px solid #1f2937;
+  outline-offset: 3px;
+}
+.sv-foot {
+  margin: 18px 0 0;
+  color: #9ca3af;
+  font-size: 12px;
+}
+
+/* ---------------------------------------------------------------- client: tabs, counter, Selection tab */
+.cp-studio-logo {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #fff;
+  font-size: 13px;
+}
+.cp-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 18px 0 4px;
+}
+.cp-tabs a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px;
+  border-radius: 99px;
+  background: #fff;
+  color: #374151;
+  font-weight: 700;
+  font-size: 14px;
+  text-decoration: none;
+  box-shadow: 0 4px 12px -8px rgba(15, 23, 42, 0.4);
+}
+.cp-tabs a.on {
+  background: var(--cp-red);
+  color: #fff;
+}
+.cp-counter {
+  position: fixed;
+  left: 50%;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-radius: 99px;
+  background: var(--cp-navy);
+  color: #fff;
+  font-weight: 800;
+  text-decoration: none;
+  box-shadow: 0 14px 30px -12px rgba(15, 23, 42, 0.6);
+  transform: translateX(-50%);
+  font-variant-numeric: tabular-nums;
+}
+.cp-counter .bi {
+  color: var(--cp-teal);
+}
+.cp-counter span {
+  opacity: 0.75;
+}
+.cp-folder-page .cp-foot {
+  padding-bottom: 80px;
+}
+.cp-hint {
+  margin: 0 0 12px;
+  color: #6b7280;
+  font-size: 14px;
+}
+.cp-sel-group h3 {
+  margin: 20px 0 10px;
+  font-size: 17px;
+  overflow-wrap: anywhere;
+}
+.cp-sel-group h3 span {
+  color: #6b7280;
+  font-weight: 600;
+}
+.cp-sel-tile {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+}
+.cp-sel-tile:disabled {
+  cursor: default;
+}
+.cp-sel-x {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(17, 24, 39, 0.7);
+  color: #fff;
+}
+
+/* ---------------------------------------------------------------- compressed uploads */
+.uf-saving {
+  margin: 0;
+  color: #1f7a4a;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.uf-mode {
+  margin-top: -4px;
+}
+.uf-skipped {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fff8e6;
+  color: #7a5200;
+  font-size: 13px;
+}
+.uf-skipped summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+.uf-skipped ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  max-height: 160px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+.ss-help {
+  margin: 8px 0 0;
+  max-width: 640px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+/* ---------------------------------------------------------------- Send options (Send/Share) */
+.sh-no-domain {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #fff4e5;
+  color: #8a4b00;
+  font-size: 13.5px;
+}
+.sh-no-domain code {
+  font-size: 12.5px;
+}
+.sh-options {
+  margin-top: 18px;
+}
+.sh-options h3 {
+  margin: 0 0 8px;
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 800;
+}
+.sh-options ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid #ececec;
+  border-radius: 12px;
+  background: #fff;
+}
+.sh-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+}
+.sh-option + .sh-option {
+  border-top: 1px solid #f0f0f2;
+}
+.sh-option-text {
+  display: grid;
+  min-width: 0;
+}
+.sh-option-text span {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sh-option-actions {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+.sh-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.sh-mini.solid {
+  border-color: #1fa855;
+  background: #1fa855;
+  color: #fff;
+}
+.sh-mini:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+@media (max-width: 560px) {
+  .sh-option {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .sh-option-actions > * {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
+/* ---------------------------------------------------------------- Reset Selection */
+.rs-options {
+  display: grid;
+  gap: 10px;
+}
+.rs-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: #fff;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.rs-option:hover {
+  border-color: #e8174a;
+  background: #fff5f7;
+}
+.rs-option > .bi {
+  font-size: 22px;
+}
+.rs-option.shortlist > .bi {
+  color: #2563eb;
+}
+.rs-option.reject > .bi {
+  color: #c81e3a;
+}
+.rs-option span {
+  display: grid;
+  gap: 2px;
+}
+.rs-option small {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.rs-confirm p {
+  margin: 0 0 16px;
+}
+.rs-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.dl-note-online {
+  margin: -4px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+}

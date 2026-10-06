@@ -11,7 +11,7 @@ export const PLANS = [
     yearlyPrice: 999_000,
     popular: false,
     sortOrder: 1,
-    limits: { eventsPerMonth: 10, albums: 10, storageGb: 100, teamSeats: 1, includedCredits: 0 },
+    limits: { eventsPerMonth: 10, albums: 10, storageGb: 100, teamSeats: 1, includedCredits: 0, maxPhotoMb: 25, maxFilesPerUpload: 300, uploadConcurrency: 3 },
     features: ['10 events / month', '100 GB storage', 'Photo selection', 'Digital albums', 'Basic website'],
     comingSoon: [],
   },
@@ -23,7 +23,7 @@ export const PLANS = [
     yearlyPrice: 2_499_000,
     popular: true,
     sortOrder: 2,
-    limits: { eventsPerMonth: 30, albums: 50, storageGb: 500, teamSeats: 1, includedCredits: 0 },
+    limits: { eventsPerMonth: 30, albums: 50, storageGb: 500, teamSeats: 1, includedCredits: 0, maxPhotoMb: 50, maxFilesPerUpload: 1000, uploadConcurrency: 4 },
     features: ['30 events / month', '500 GB storage', 'Photo selection', 'Digital albums', 'Custom domain'],
     comingSoon: ['Custom domain'],
   },
@@ -35,7 +35,7 @@ export const PLANS = [
     yearlyPrice: 5_999_000,
     popular: false,
     sortOrder: 3,
-    limits: { eventsPerMonth: null, albums: null, storageGb: 2048, teamSeats: 5, includedCredits: 1000 },
+    limits: { eventsPerMonth: null, albums: null, storageGb: 2048, teamSeats: 5, includedCredits: 1000, maxPhotoMb: 80, maxFilesPerUpload: 3000, uploadConcurrency: 5 },
     features: ['Unlimited events', '2 TB storage', 'Digital albums', '5 team seats', 'Priority support'],
     comingSoon: ['5 team seats', 'Priority support'],
   },
@@ -47,7 +47,7 @@ export const PLANS = [
     yearlyPrice: 4_999_900,
     popular: false,
     sortOrder: 4,
-    limits: { eventsPerMonth: null, albums: null, storageGb: 5120, teamSeats: 10, includedCredits: 10000 },
+    limits: { eventsPerMonth: null, albums: null, storageGb: 5120, teamSeats: 10, includedCredits: 10000, maxPhotoMb: 100, maxFilesPerUpload: 5000, uploadConcurrency: 6 },
     features: [
       'Unlimited events',
       '5 TB storage',
@@ -66,14 +66,14 @@ export const TEMPLATES = [
     name: 'Selection link',
     body:
       'Hi {{clientName}}! 💕\n\nYour private photo selection gallery for *{{eventTitle}}* from {{studioName}} is ready.\n' +
-      'Please pick up to {{quota}} favourite photos before {{deadline}}:\n{{link}}',
+      'Please pick up to {{quota}} favourite photos before {{deadline}}:\n{{link}}\n\nYour selection code: {{code}}',
   },
   {
     key: 'SELECTION_REMINDER',
     name: 'Selection reminder',
     body:
       'Hi {{clientName}}! 💕\n\nA gentle reminder from {{studioName}}: you have picked {{picked}} of {{quota}} photos for *{{eventTitle}}*.\n' +
-      '⏳ Selection deadline: {{deadline}}\n\nContinue here: {{link}}',
+      '⏳ Selection deadline: {{deadline}}\n\nContinue here: {{link}}\n\nYour selection code: {{code}}',
   },
   {
     key: 'ALBUM_SHARE',
@@ -98,6 +98,51 @@ export const TEMPLATES = [
     body:
       'I run my studio on Weddyzone Studio — selections, flipbook albums and GST invoices in one place. ' +
       'Sign up with my code {{code}} and we both get ₹1,500: {{link}}',
+  },
+  // Weddyzone's own messages to studios (plan alerts). Sent from the platform's number: they cost the
+  // studio no credits. With the WhatsApp Cloud API, each must exist as an approved template named
+  // after its key in lower case, with its variables in the order of PLATFORM_TEMPLATE_PARAMS.
+  {
+    key: 'PLAN_EXPIRY_REMINDER',
+    name: 'Plan expiry reminder',
+    creditCost: 0,
+    body: 'Hi {{studioName}}, your Weddyzone {{planName}} plan expires on {{date}}. Renew in one click to keep working without a break: {{link}}',
+  },
+  {
+    key: 'PLAN_EXPIRED_GRACE',
+    name: 'Plan expired (grace)',
+    creditCost: 0,
+    body: 'Hi {{studioName}}, your Weddyzone {{planName}} plan expired on {{date}}. Renew within {{graceDays}} days to keep adding events and uploads: {{link}}',
+  },
+  {
+    key: 'PLAN_READ_ONLY',
+    name: 'Account read-only',
+    creditCost: 0,
+    body: 'Hi {{studioName}}, your Weddyzone {{planName}} plan has ended and your account is now read-only. Your photos and albums are safe and your clients can still view them. Renew any time: {{link}}',
+  },
+  {
+    key: 'PLAN_PAYMENT_FAILED',
+    name: 'Plan payment failed',
+    creditCost: 0,
+    body: "Hi {{studioName}}, your payment for the Weddyzone {{planName}} plan didn't go through. Please retry here: {{link}}",
+  },
+  {
+    key: 'PLAN_RENEWED',
+    name: 'Plan renewed',
+    creditCost: 0,
+    body: 'Hi {{studioName}}, your Weddyzone {{planName}} plan renewed successfully. Next renewal: {{date}}. Thank you!',
+  },
+  {
+    key: 'PLAN_PURCHASED',
+    name: 'Plan purchased',
+    creditCost: 0,
+    body: 'Hi {{studioName}}, your Weddyzone {{planName}} plan is active until {{date}}. Invoice {{invoiceNumber}} is in My Subscription.',
+  },
+  {
+    key: 'PLAN_WINBACK',
+    name: 'Win-back offer',
+    creditCost: 0,
+    body: 'Hi {{studioName}}, we miss you at Weddyzone! Come back with {{percent}}% off using code {{code}}, valid until {{date}}: {{link}}',
   },
 ]
 

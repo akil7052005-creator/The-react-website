@@ -1,0 +1,548 @@
+/* Photo Selection list page (/photo-selection): header, Overview card, table card (pl-*). */
+
+.pl-page {
+  --pl-red: #e8174a;
+  --pl-pink: #fdecef;
+  --pl-pink-line: #f6cdd5;
+  --pl-hover: #fff5f7;
+  min-width: 0;
+  max-width: 100%;
+}
+.pl-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.pl-head h1 {
+  margin: 0;
+}
+.pl-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--pl-red);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 10px 22px -12px rgba(232, 23, 74, 0.7);
+  transition: background 0.15s, transform 0.15s var(--ease);
+}
+.pl-add:hover {
+  background: #d30c3d;
+  transform: translateY(-1px);
+}
+.pl-add:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+.pl-card {
+  min-width: 0;
+  padding: 24px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(46, 10, 25, 0.04), 0 10px 28px -14px rgba(46, 10, 25, 0.16);
+}
+.pl-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 16px;
+  font-family: var(--font-body);
+  font-size: 18px;
+  font-weight: 800;
+}
+.pl-title::before {
+  content: '';
+  width: 4px;
+  height: 22px;
+  border-radius: 4px;
+  background: var(--pl-red);
+}
+
+/* ---------------------------------------------------------------- Overview tiles */
+.pl-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+.pl-tile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 15px 16px;
+  border: 1px solid var(--pl-pink-line);
+  border-radius: 6px;
+  background: var(--pl-pink);
+}
+.pl-tile > .bi {
+  flex: none;
+  color: var(--pl-red);
+  font-size: 24px;
+}
+.pl-tile div {
+  display: grid;
+  min-width: 0;
+}
+.pl-tile span {
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 600;
+}
+.pl-tile strong {
+  color: #1f2937;
+  font-size: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 767px) {
+  .pl-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 399px) {
+  .pl-tiles {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---------------------------------------------------------------- table card: controls */
+.pl-table-card {
+  padding: 22px 18px 18px;
+}
+.pl-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.pl-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #6b7280;
+  font-size: 14px;
+}
+.pl-size select {
+  padding: 7px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+}
+.pl-search {
+  position: relative;
+  flex: 0 1 280px;
+  min-width: 0;
+}
+.pl-search .bi {
+  position: absolute;
+  top: 50%;
+  left: 14px;
+  color: #9ca3af;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.pl-search input {
+  width: 100%;
+  padding: 9px 14px 9px 38px;
+  border: 1px solid var(--border-strong);
+  border-radius: 99px;
+  background: #fff;
+  font: inherit;
+}
+.pl-size select:focus-visible,
+.pl-search input:focus-visible {
+  outline: none;
+  border-color: var(--pl-red);
+  box-shadow: 0 0 0 3px rgba(232, 23, 74, 0.15);
+}
+.pl-filter {
+  margin: -6px 0 12px;
+  color: #6b7280;
+  font-size: 14px;
+}
+.pl-filter .link {
+  margin-left: 8px;
+}
+
+/* ---------------------------------------------------------------- table (scrolls inside the card, never the page) */
+.pl-scroll {
+  /* Containing block for the chips' screen-reader labels, so they scroll (and clip) with the table. */
+  position: relative;
+  max-width: 100%;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: #f2a5b7 transparent;
+}
+.pl-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+.pl-scroll::-webkit-scrollbar-thumb {
+  border-radius: 99px;
+  background: #f2a5b7;
+}
+.pl-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.pl-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 14px;
+}
+.pl-table th {
+  padding: 12px 8px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fff;
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.pl-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+.pl-sort .bi {
+  color: #c4c8cf;
+  font-size: 12px;
+}
+.pl-sort:hover .bi,
+th[aria-sort='ascending'] .pl-sort .bi,
+th[aria-sort='descending'] .pl-sort .bi {
+  color: var(--pl-red);
+}
+.pl-table td {
+  height: 64px;
+  padding: 8px;
+  border-bottom: 1px solid #f0f0f2;
+  background: #fff;
+  vertical-align: middle;
+  transition: background 0.12s;
+}
+.pl-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.pl-table tbody tr:hover td {
+  background: var(--pl-hover);
+}
+.pl-c-sno {
+  width: 60px;
+  min-width: 60px;
+  color: #6b7280;
+  font-variant-numeric: tabular-nums;
+}
+.pl-c-project {
+  max-width: 210px;
+}
+.pl-name,
+.pl-event {
+  display: block;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pl-name {
+  color: #1f2937;
+  font-weight: 700;
+}
+.pl-event {
+  margin-top: 2px;
+  color: #6b7280;
+  font-size: 12.5px;
+}
+
+/* CONTENT chips */
+.pl-chips {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 5px;
+}
+.pl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border: 1px solid;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: default;
+}
+.pl-chip.folders,
+.pl-chip.videos {
+  border-color: #f8c4cf;
+  background: #fff1f3;
+  color: #d0103f;
+}
+.pl-chip.images {
+  border-color: #c7d7fb;
+  background: #eff4ff;
+  color: #2559c9;
+}
+.pl-chip.selected {
+  border-color: #bfe5cd;
+  background: #ecf8f0;
+  color: #1c7a43;
+}
+
+/* CODE: the code (click to copy) joined to Send */
+.pl-code {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+.pl-code button {
+  padding: 7px 10px;
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+}
+.pl-code-num {
+  background: #f3f4f6;
+  color: #111827;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+.pl-code-num:hover {
+  background: #e9eaee;
+}
+.pl-code-send {
+  background: var(--pl-red);
+  color: #fff;
+  font-weight: 700;
+}
+.pl-code-send:hover {
+  background: #d30c3d;
+}
+.pl-code button:focus-visible,
+.pl-act:focus-visible,
+.pl-pager button:focus-visible,
+.pl-sort:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: -2px;
+}
+
+/* STATUS: solid pills */
+.pl-status {
+  display: inline-block;
+  padding: 5px 11px;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.pl-status.pending {
+  background: #ffa000;
+  color: #2b1d00;
+}
+.pl-status.shared {
+  background: #2563eb;
+}
+.pl-status.progress {
+  background: #7c3aed;
+}
+.pl-status.submitted {
+  background: #16a34a;
+}
+.pl-status.downloaded {
+  background: #6b7280;
+}
+/* "Selected" is a button: click it to reopen the selection (Reset Selection). */
+.pl-status.is-action {
+  border: 0;
+  font-family: inherit;
+  cursor: pointer;
+}
+.pl-status.is-action:hover,
+.pl-status.is-action:focus-visible {
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.3);
+}
+
+/* ACTION: three buttons on one line */
+.pl-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+.pl-act {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 9px;
+  border: 1px solid;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: filter 0.12s;
+}
+.pl-act:hover {
+  filter: brightness(0.96);
+}
+.pl-act.upload {
+  border-color: #9fd8b4;
+  background: #ecf8f0;
+  color: #1c7a43;
+}
+.pl-act.manage {
+  border-color: #e5e7eb;
+  background: #f3f4f6;
+  color: #4b5563;
+}
+.pl-act.delete {
+  border-color: #f8c4cf;
+  background: #fff1f3;
+  color: #c81e3a;
+}
+
+/* S.NO and PROJECT stay in view while the table scrolls sideways on smaller screens. */
+@media (max-width: 1100px) {
+  /* Columns keep these widths while the table scrolls sideways. */
+  .pl-c-project {
+    min-width: 180px;
+  }
+  .pl-c-data {
+    min-width: 230px;
+  }
+  .pl-c-code {
+    min-width: 150px;
+  }
+  .pl-c-status {
+    min-width: 120px;
+  }
+  .pl-c-action {
+    min-width: 360px;
+  }
+  .pl-table .pl-c-sno {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+  }
+  .pl-table .pl-c-project {
+    position: sticky;
+    left: 60px;
+    z-index: 2;
+    box-shadow: 6px 0 8px -6px rgba(15, 23, 42, 0.15);
+  }
+}
+
+/* ---------------------------------------------------------------- footer: entries + pagination */
+.pl-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+  color: #6b7280;
+  font-size: 14px;
+}
+.pl-pager {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.pl-pager-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.pl-pager button {
+  min-width: 34px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #fff;
+  color: #374151;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pl-pager button:hover:not(:disabled):not(.on) {
+  border-color: var(--pl-red);
+  color: var(--pl-red);
+}
+.pl-pager button.on {
+  border-color: var(--pl-red);
+  background: var(--pl-red);
+  color: #fff;
+}
+.pl-pager button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.pl-gap {
+  color: #9ca3af;
+}
+
+/* ---------------------------------------------------------------- empty state */
+.pl-empty {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 32px 16px;
+  text-align: center;
+}
+.pl-empty-art {
+  width: 160px;
+  height: auto;
+}
+.pl-empty p {
+  margin: 0;
+  color: #374151;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+@media (max-width: 560px) {
+  .pl-card {
+    padding: 18px 16px;
+  }
+  .pl-search {
+    flex-basis: 100%;
+  }
+  /* Keep the pinned PROJECT column at its minimum so more of the table shows beside it. */
+  .pl-c-project {
+    max-width: 180px;
+  }
+  .pl-name,
+  .pl-event {
+    max-width: 164px;
+  }
+}

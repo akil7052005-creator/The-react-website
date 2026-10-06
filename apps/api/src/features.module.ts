@@ -10,8 +10,22 @@ import { AdminController, SupportController, SupportService } from './business/s
 import { DashboardController } from './dashboard/dashboard.controller'
 import { ClientsController, EventsController } from './events/clients-events.controller'
 import { NotificationsController, SearchController } from './notifications/notifications.controller'
-import { PublicSelectionsController, SelectionsController } from './selections/selections.controller'
+import { PhotoPreviewService } from './selections/previews.service'
+import { EventSettingsService } from './selections/event-settings.service'
+import { SelectionRemindersService } from './selections/selection-reminders.service'
+import { SelectionWorkflowService } from './selections/selection-workflow.service'
+import { ClientSelectionController, PublicSelectionsController, SelectionDefaultsController, SelectionsController } from './selections/selections.controller'
+import { ClientSelectionService } from './selections/client-selection.service'
 import { SelectionsService } from './selections/selections.service'
+import { SharePreviewController, SharePreviewService } from './selections/share-preview'
+import { UploadLimitsController, UploadLimitsService } from './selections/upload-limits'
+import { PlatformWhatsAppService } from './infra/platform-whatsapp.service'
+import { AdminSubscriptionsController } from './subscriptions/admin-subscriptions.controller'
+import { AdminSubscriptionsService } from './subscriptions/admin-subscriptions.service'
+import { AlertsService } from './subscriptions/alerts.service'
+import { SubscriptionJobsService } from './subscriptions/jobs.service'
+import { SubscriptionLifecycleService } from './subscriptions/lifecycle.service'
+import { WebhooksController } from './subscriptions/webhooks.controller'
 
 // Feature controllers/services are registered here as each phase lands.
 @Module({
@@ -23,6 +37,10 @@ import { SelectionsService } from './selections/selections.service'
     DashboardController,
     SelectionsController,
     PublicSelectionsController,
+    ClientSelectionController,
+    SharePreviewController,
+    SelectionDefaultsController,
+    UploadLimitsController,
     AlbumsController,
     PublicAlbumsController,
     PlansController,
@@ -35,7 +53,28 @@ import { SelectionsService } from './selections/selections.service'
     HelpController,
     SupportController,
     AdminController,
+    AdminSubscriptionsController,
+    WebhooksController,
   ],
-  providers: [SelectionsService, AlbumsService, SubscriptionsService, InvoicesService, SupportService],
+  providers: [
+    SelectionsService,
+    UploadLimitsService,
+    SelectionWorkflowService,
+    SelectionRemindersService,
+    EventSettingsService,
+    ClientSelectionService,
+    PhotoPreviewService,
+    SharePreviewService,
+    AlbumsService,
+    SubscriptionsService,
+    InvoicesService,
+    SupportService,
+    PlatformWhatsAppService,
+    AlertsService,
+    SubscriptionLifecycleService,
+    SubscriptionJobsService,
+    AdminSubscriptionsService,
+  ],
+  exports: [SubscriptionJobsService, SubscriptionLifecycleService],
 })
 export class FeatureModules {}

@@ -1,10 +1,11 @@
-import type { BillingCycle } from '@weddyzone/shared'
-import { Link } from 'react-router-dom'
+import { PLAN_CODES, type BillingCycle } from '@weddyzone/shared'
+import { useEffect, useRef } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { PageHeader, ComingSoonTag, FeatureTooltip, ErrorState, Skeleton, type FeatureInfo } from '../components/ui'
 import { formatMoney } from '../utils/format'
 import { featureInfo } from '../data/featureInfo'
 import { useUrlState } from '../hooks/useUrlState'
-import { priceFor, usePlanActions, usePlans, useSubscription } from '../lib/billing'
+import { isRenewal, priceFor, usePlanActions, usePlans, useSubscription } from '../lib/billing'
 
 function AllSubscription() {
   const [url, setUrl] = useUrlState({ cycle: 'monthly' })
@@ -15,6 +16,28 @@ function AllSubscription() {
   const { change } = usePlanActions()
   const current = sub.data?.subscription
   const gridPlans = (plans.data ?? []).filter((p) => p.code !== 'ALL_ACCESS')
+
+  // One-click renewal links from reminders: /subscriptions?renew=PRO&cycle=YEARLY[&coupon=CODE]
+  const [params, setParams] = useSearchParams()
+  const handled = useRef(false)
+  useEffect(() => {
+    const code = params.get('renew')
+    if (handled.current || !code || !plans.data || !current) return
+    handled.current = true
+    const plan = plans.data.find((p) => p.code === code && (PLAN_CODES as readonly string[]).includes(code))
+    const c: BillingCycle = params.get('cycle') === 'YEARLY' ? 'YEARLY' : 'MONTHLY'
+    const coupon = params.get('coupon') ?? undefined
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        ;['renew', 'cycle', 'coupon'].forEach((k) => next.delete(k))
+        if (c === 'YEARLY') next.set('cycle', 'yearly')
+        return next
+      },
+      { replace: true },
+    )
+    if (plan) void change(plan, plan.monthlyPricePaise === null ? 'YEARLY' : c, current, coupon)
+  }, [params, plans.data, current, change, setParams])
 
   return (
     <div className="stack">
@@ -53,8 +76,9 @@ function AllSubscription() {
           {plans.isPending
             ? Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} height={420} radius={22} />)
             : gridPlans.map((p) => {
-                const isCurrent = Boolean(current && current.plan.code === p.code && current.status === 'ACTIVE' && !current.isTrial)
-                const onThisCycle = isCurrent && current!.cycle === cycle
+                const isCurrent = Boolean(current && current.plan.code === p.code && !current.isTrial && current.status !== 'CANCELLED')
+                const renew = isRenewal(current, p, cycle)
+                const onThisCycle = isCurrent && current!.cycle === cycle && !renew
                 const price = priceFor(p, cycle)
                 return (
                   <div key={p.code} className={`plan plan-catchy ${p.popular ? 'popular' : ''} ${isCurrent ? 'is-current-plan' : ''}`}>
@@ -101,7 +125,7 @@ function AllSubscription() {
                       disabled={onThisCycle || !current}
                       onClick={() => change(p, cycle, current)}
                     >
-                      {onThisCycle ? 'Active Studio Plan' : isCurrent ? `Switch to ${yearly ? 'yearly' : 'monthly'}` : `Choose ${p.name}`}
+                      {onThisCycle ? 'Active Studio Plan' : renew ? `Renew ${p.name}` : isCurrent ? `Switch to ${yearly ? 'yearly' : 'monthly'}` : `Choose ${p.name}`}
                     </button>
                   </div>
                 )

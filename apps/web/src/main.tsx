@@ -4,10 +4,17 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { createBrowserRouter, Navigate, Outlet, RouterProvider, type RouteObject } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import './index.css'
+import './styles/tokens.css'
 import './additions.css'
 import './styles/client-pages.css'
 import './styles/billing.css'
 import './styles/business.css'
+import './styles/admin.css'
+import './styles/workflow.css'
+import './styles/client-portal.css'
+import './styles/selection-flow.css'
+import './styles/selection-list.css'
+import './styles/dashboard-layout.css'
 import { queryClient } from './lib/query'
 import { features } from './lib/env'
 import { RedirectIfAuthed, RequireAdmin, RequireAuth } from './auth/AuthProvider'
@@ -26,7 +33,8 @@ const ForgotPassword = page(() => import('./pages/auth/Passwords').then((m) => (
 const ResetPassword = page(() => import('./pages/auth/Passwords').then((m) => ({ default: m.ResetPassword })))
 const Dashboard = page(() => import('./pages/Dashboard'))
 const PhotoSelection = page(() => import('./pages/PhotoSelection'))
-const DigitalAlbum = page(() => import('./pages/DigitalAlbum'))
+const SelectionEvent = page(() => import('./pages/SelectionEvent'))
+const SelectionSettings = page(() => import('./pages/SelectionSettings'))
 const FaceRecognition = page(() => import('./pages/FaceRecognition'))
 const AllSubscription = page(() => import('./pages/AllSubscription'))
 const MySubscription = page(() => import('./pages/MySubscription'))
@@ -43,11 +51,23 @@ const Logout = page(() => import('./pages/Logout'))
 const NotFound = page(() => import('./pages/NotFound'))
 const PublicSelection = page(() => import('./pages/public/PublicSelection'))
 const PublicAlbum = page(() => import('./pages/public/PublicAlbum'))
+const ClientAuth = page(() => import('./pages/public/client/ClientAuth'))
+const ClientEvent = page(() => import('./pages/public/client/ClientEvent'))
+const ClientFolder = page(() => import('./pages/public/client/ClientFolder'))
+const ClientSelected = page(() => import('./pages/public/client/ClientSelected'))
+const SelectVerify = page(() => import('./pages/public/client/SelectVerify'))
 const InvoicePrint = page(() => import('./pages/InvoicePrint'))
 const PublicSite = page(() => import('./pages/public/PublicSite'))
 const AdminTickets = page(() => import('./pages/admin/AdminTickets'))
 const AdminFaqs = page(() => import('./pages/admin/AdminFaqs'))
 const AdminPlans = page(() => import('./pages/admin/AdminPlans'))
+const AdminDashboard = page(() => import('./pages/admin/AdminDashboard'))
+const AdminSubscriptions = page(() => import('./pages/admin/AdminSubscriptions'))
+const AdminSubscriptionDetail = page(() => import('./pages/admin/AdminSubscriptionDetail'))
+const AdminAlerts = page(() => import('./pages/admin/AdminAlerts'))
+const AdminSettings = page(() => import('./pages/admin/AdminSettings'))
+const PlanInvoice = page(() => import('./pages/PlanInvoice'))
+const AdminPlanInvoice = page(() => import('./pages/PlanInvoice').then((m) => ({ default: m.AdminPlanInvoice })))
 
 // Root element: things every route needs (confirm dialogs use the router for "leave page?" prompts).
 function Root() {
@@ -63,7 +83,10 @@ function Root() {
 const studioRoutes: RouteObject[] = [
   { index: true, element: <Dashboard /> },
   { path: 'photo-selection', element: <PhotoSelection /> },
-  { path: 'digital-album', element: <DigitalAlbum /> },
+  { path: 'photo-selection/:selectionId', element: <SelectionEvent /> },
+  { path: 'photo-selection/:selectionId/settings', element: <SelectionSettings /> },
+  // Digital Album was removed from the studio app; old bookmarks land on the dashboard.
+  { path: 'digital-album', element: <Navigate to="/" replace /> },
   // AI Face Recognition is out of scope for v1 — kept in the code, hidden behind FEATURE_FACE_RECOGNITION.
   ...(features.faceRecognition ? [{ path: 'face-recognition', element: <FaceRecognition /> }] : []),
   { path: 'subscriptions', element: <AllSubscription /> },
@@ -94,8 +117,31 @@ const router = createBrowserRouter([
       { path: '/reset-password', element: <ResetPassword /> },
       // Client-facing pages: no login, access by unguessable token.
       { path: '/s/:token', element: <PublicSelection /> },
+      // Customer portal: the share link (/select/<token>) and its 6-digit Customer Code, then that selection only.
+      { path: '/select/:shareToken', element: <SelectVerify /> },
+      { path: '/selection/auth', element: <ClientAuth /> },
+      { path: '/selection/:eventId', element: <ClientEvent /> },
+      { path: '/selection/:eventId/selected', element: <ClientSelected /> },
+      { path: '/selection/:eventId/folders/:folderId', element: <ClientFolder /> },
       { path: '/a/:token', element: <PublicAlbum /> },
       { path: '/w/:slug', element: <PublicSite /> },
+      {
+        path: '/my-subscription/invoices/:id',
+        element: (
+          <RequireAuth>
+            <PlanInvoice />
+          </RequireAuth>
+        ),
+      },
+      {
+        // Printable, so outside the admin layout; still SUPER_ADMIN only.
+        path: '/admin/invoices/:id',
+        element: (
+          <RequireAdmin>
+            <AdminPlanInvoice />
+          </RequireAdmin>
+        ),
+      },
       {
         path: '/invoices/:id/print',
         element: (
@@ -113,7 +159,11 @@ const router = createBrowserRouter([
           </RequireAdmin>
         ),
         children: [
-          { index: true, element: <Navigate to="/admin/tickets" replace /> },
+          { index: true, element: <AdminDashboard /> },
+          { path: 'subscriptions', element: <AdminSubscriptions /> },
+          { path: 'subscriptions/:id', element: <AdminSubscriptionDetail /> },
+          { path: 'alerts', element: <AdminAlerts /> },
+          { path: 'settings', element: <AdminSettings /> },
           { path: 'tickets', element: <AdminTickets /> },
           { path: 'help', element: <AdminFaqs /> },
           { path: 'plans', element: <AdminPlans /> },

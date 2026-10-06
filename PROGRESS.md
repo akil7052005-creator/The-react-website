@@ -68,3 +68,17 @@ Done
 
 Tests
 - API +11 (`business.e2e-spec.ts`), E2E +5 (`phase4-business.spec.ts`).
+
+## Phase 6 — Admin subscriptions & plan-deadline alerts ✅
+
+Done
+- Migration `20261002150000_subscription_alerts`: subscription status lifecycle (TRIAL…PAYMENT_FAILED), grace/auto-renew/amount/GST/gateway fields, `subscription_events`, payment invoice numbers and periods, notification recipient/channel/dedupe key, platform settings/counters, webhook events, coupons, admin TOTP. Existing payments backfilled.
+- Signed, idempotent payment webhook; checkout → webhook → subscription + GST invoice + instant admin alert (in-app + email) + studio confirmation.
+- Hourly IST job: T-7/3/1 reminders, GRACE, EXPIRED (read-only), auto-renew, win-back coupons, 80% usage alerts, daily digest; exactly-once via dedupe keys.
+- Admin: dashboard with charts, subscriptions table (tabs, filters, search, server-side paging, CSV, row actions), detail page (countdown, usage, timeline, payments, alerts sent), alerts feed + bell, settings, optional 2FA, rate limits.
+- Studio: `/me/subscription`, plan banner (dashboard, My Subscription; urgent states on every page), grace warning, read-only mode, cancel with reason, auto-renew toggle, one-click renew links, plan invoices.
+
+Tests
+- Shared +28 (deadline maths: monthly, yearly, month-end, leap years, IST boundaries; status changes; reminder stages; dedupe).
+- API +25 (`subscriptions.e2e-spec.ts`): webhook signature/idempotency, activation + alerts, 403 for non-admins, T-7/3/1/T/grace-end with no duplicates on re-runs, ACTIVE → GRACE → EXPIRED, read-only, admin extend/change/cancel/remind logged, failed payment, auto-renew, win-back, digest, usage alert, stats, CSV, settings, 2FA.
+- E2E +2 (`phase6-subscriptions.spec.ts`).

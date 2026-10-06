@@ -1,4 +1,16 @@
 import { useState } from 'react'
+import guest1 from '../assets/face-demo/guest-1.jpg'
+import guest2 from '../assets/face-demo/guest-2.jpg'
+import guest3 from '../assets/face-demo/guest-3.jpg'
+import photo1 from '../assets/face-demo/photo-1.jpg'
+import photo2 from '../assets/face-demo/photo-2.jpg'
+import photo3 from '../assets/face-demo/photo-3.jpg'
+import photo4 from '../assets/face-demo/photo-4.jpg'
+import photo5 from '../assets/face-demo/photo-5.jpg'
+import photo6 from '../assets/face-demo/photo-6.jpg'
+import photo7 from '../assets/face-demo/photo-7.jpg'
+import photo8 from '../assets/face-demo/photo-8.jpg'
+import photo9 from '../assets/face-demo/photo-9.jpg'
 import { FeatureTooltip } from './ui'
 
 const sampleGuests = [
@@ -6,32 +18,32 @@ const sampleGuests = [
     id: 'guest-1',
     name: 'Ananya Iyer',
     role: "Bride's Sister",
-    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=400&q=80',
+    avatar: guest1,
     matchedPhotos: [
       {
         id: 'img-101',
-        url: 'https://images.unsplash.com/photo-1583939003579-730e3918a45a?auto=format&fit=crop&w=600&q=80',
+        url: photo1,
         event: 'Sangeet Dance',
         confidence: 99.8,
         tag: 'Lead Performer'
       },
       {
         id: 'img-102',
-        url: 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=600&q=80',
+        url: photo2,
         event: 'Haldi Laughs',
         confidence: 99.4,
         tag: 'Candid Group'
       },
       {
         id: 'img-103',
-        url: 'https://images.unsplash.com/photo-1511285560929-80b456fea0bc?auto=format&fit=crop&w=600&q=80',
+        url: photo3,
         event: 'Mandap Blessings',
         confidence: 98.9,
         tag: 'Portrait'
       },
       {
         id: 'img-104',
-        url: 'https://images.unsplash.com/photo-1519225429815-5858022934ff?auto=format&fit=crop&w=600&q=80',
+        url: photo4,
         event: 'Baraat Welcome',
         confidence: 99.1,
         tag: 'Family Candid'
@@ -42,25 +54,25 @@ const sampleGuests = [
     id: 'guest-2',
     name: 'Vikram Nair',
     role: "Groom's Brother",
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
+    avatar: guest2,
     matchedPhotos: [
       {
         id: 'img-201',
-        url: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=600&q=80',
+        url: photo5,
         event: 'Baraat Entrance',
         confidence: 99.7,
         tag: 'Action Shot'
       },
       {
         id: 'img-202',
-        url: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?auto=format&fit=crop&w=600&q=80',
+        url: photo6,
         event: 'Cocktail Toast',
         confidence: 98.8,
         tag: 'Portrait'
       },
       {
         id: 'img-203',
-        url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=600&q=80',
+        url: photo7,
         event: 'Reception Dinner',
         confidence: 99.2,
         tag: 'Candid Group'
@@ -71,18 +83,18 @@ const sampleGuests = [
     id: 'guest-3',
     name: 'Meera & Aunties',
     role: 'Immediate Family',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+    avatar: guest3,
     matchedPhotos: [
       {
         id: 'img-301',
-        url: 'https://images.unsplash.com/photo-1532712938310-34cb3982ef74?auto=format&fit=crop&w=600&q=80',
+        url: photo8,
         event: 'Muhurtham Blessings',
         confidence: 99.5,
         tag: 'Traditional Ritual'
       },
       {
         id: 'img-302',
-        url: 'https://images.unsplash.com/photo-1465495976277-4387d4b0b4c6?auto=format&fit=crop&w=600&q=80',
+        url: photo9,
         event: 'Bridal Trousseau',
         confidence: 98.7,
         tag: 'Close-Up'

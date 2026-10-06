@@ -83,6 +83,13 @@ export type RecordPaymentInput = z.input<typeof recordPaymentSchema>
 export const changePlanSchema = z.object({
   planCode: z.enum(PLAN_CODES, { error: 'Select a plan' }),
   cycle: z.enum(BILLING_CYCLES),
+  couponCode: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .max(40)
+    .optional()
+    .transform((v) => v || undefined),
 })
 export type ChangePlanInput = z.input<typeof changePlanSchema>
 
@@ -98,6 +105,10 @@ export const planLimitsSchema = z.object({
   storageGb: z.number().int().min(1).nullable(),
   teamSeats: z.number().int().min(1),
   includedCredits: z.number().int().min(0),
+  // Photo upload limits (optional: a plan without them uses the Starter values).
+  maxPhotoMb: z.number().int().min(1, 'At least 1 MB').max(100, 'At most 100 MB').optional(),
+  maxFilesPerUpload: z.number().int().min(1).max(10_000, 'At most 10,000').optional(),
+  uploadConcurrency: z.number().int().min(1).max(8, 'At most 8').optional(),
 })
 export type PlanLimits = z.output<typeof planLimitsSchema>
 

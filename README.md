@@ -74,6 +74,15 @@ corepack pnpm lint && corepack pnpm typecheck && corepack pnpm test && corepack 
 
 The e2e database is wiped on every run — never point `E2E_DATABASE_URL` or `TEST_DATABASE_URL` at real data.
 
+## Subscriptions & plan-deadline alerts
+
+Platform admins (SUPER_ADMIN) get `/admin` (dashboard: MRR/ARR, plan split, MRR trend, new vs churned), `/admin/subscriptions` (filterable table, CSV, extend / change plan / cancel / remind), `/admin/subscriptions/:id`, `/admin/alerts` (bell feed) and `/admin/settings` (reminder days, grace days, digest time, win-back coupon, optional two-factor sign-in). Every `/api/v1/admin/*` call returns 403 to anyone else and is written to `admin_audit_log`.
+
+- **Plans activate only from a confirmed payment**: checkout opens a gateway order; `POST /api/v1/webhooks/payments` (HMAC-SHA256 with `PAYMENT_WEBHOOK_SECRET`, Razorpay format, idempotent) creates/renews the subscription, issues a sequential GST invoice (`WZ/2026-27/00001`) and alerts the studio and admins. In test mode the mock gateway confirms through the same handler.
+- **Hourly job** (`JOBS_ENABLED`, all dates in IST): T-7 (in-app + email + WhatsApp), T-3 (in-app + WhatsApp), T-1 (all + admin), deadline → GRACE (+ admin), grace end → EXPIRED (read-only, + admin), win-back coupon, 80% usage alerts, 09:00 IST admin digest. Every alert has a unique dedupe key, so re-runs never send twice. Run it on demand: `POST /api/v1/admin/jobs/subscription-alerts/run`.
+- **Expired = read-only**: no new events, albums or photo uploads; clients still open delivered albums and selections; nothing is deleted.
+- Platform WhatsApp alerts use the `PLAN_*` templates and the WhatsApp Cloud API (`WHATSAPP_CLOUD_TOKEN`), never the studio's credits.
+
 ## Feature flags
 
 `FEATURE_FACE_RECOGNITION=false` (in `apps/web/.env` and `apps/api/.env`) hides AI Face Recognition: its nav item, dashboard card, feature chip, scanner button and route. The code is kept for later.
@@ -96,7 +105,7 @@ Everything that would need a third party sits behind an interface with a simple 
 1. Create a PostgreSQL database and copy its connection string.
 2. Create a service from this repo with root directory `/`:
    - Build: `corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm --filter @weddyzone/shared build && pnpm --filter @weddyzone/api build` (`--prod=false` keeps the build tools — Prisma CLI, Nest CLI, TypeScript, tsx — which are dev dependencies and would otherwise be skipped when `NODE_ENV=production`)
-   - Start: `pnpm --filter @weddyzone/api start:prod` (runs `prisma migrate deploy`, then the API)
+   - Start: `pnpm --filter @weddyzone/api start:prod` (runs `prisma migrate deploy`, the reference-data seed below, then the API)
 3. Environment: everything in `apps/api/.env.example`, with
    - `NODE_ENV=production`, strong random `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` (`openssl rand -hex 32`)
    - `APP_URL=https://weddyzone.vercel.app`, `CORS_ORIGINS=https://weddyzone.vercel.app`
@@ -105,7 +114,7 @@ Everything that would need a third party sits behind an interface with a simple 
    - `TRUST_PROXY_HOPS=2` when Vercel forwards `/api` to the API host (rate limits then see each user's real IP)
    - The API refuses to start in production with development values (localhost URLs, example JWT secrets, no email provider)
    - `S3_BUCKET`, `S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` for a **private** Cloudflare R2 or AWS S3 bucket. Required in production: the host's disk is wiped on redeploy.
-4. Seed reference data once: `pnpm --filter @weddyzone/api db:seed:prod` (plans, WhatsApp templates and FAQs only; it never creates accounts and is safe to re-run). Never run plain `db:seed` against production: it creates demo logins whose passwords are in this repo (it now refuses to when `NODE_ENV=production`).
+4. Reference data (plans, WhatsApp templates and FAQs) is seeded by `start:prod` on every start, so sign-up works on a fresh database ("Plan not found" means it hasn't run). By hand: `pnpm --filter @weddyzone/api db:seed:prod`. It never creates accounts, never changes existing plans, and is safe to re-run. Never run plain `db:seed` against production: it creates demo logins whose passwords are in this repo (it now refuses to when `NODE_ENV=production`).
 5. Create your platform admin (signs in at `/login`, lands in `/admin`): `pnpm --filter @weddyzone/api admin:create -- --email you@yourdomain.com --name "Your Name"`. It prints a random password once; store it in a password manager. Forgot it? Run it again with `--reset-password` (this also signs that admin out everywhere). Admin sessions end after `ADMIN_SESSION_HOURS` (default 8) without activity, and every admin action is recorded in the `admin_audit_log` table.
 
 ### Web (Vercel)

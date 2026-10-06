@@ -107,3 +107,52 @@ Choices made where the build brief was ambiguous or where the environment forced
 | **Smaller photo counts than the mock** (20–36 per selection instead of 320–1,240) | Keeps the seed fast and the repo light; names, statuses, codes and relationships mirror the mock. |
 | **Face-recognition mock content** (face events, "Face AI" ticket/activity/messages) is not seeded | Out of scope for v1. |
 | **Demo login**: `hello@goldenhour.studio` / `Golden@2026`; admin `admin@weddyzone.app` / `Admin@2026` | Printed by the seed; change or remove in production with `SEED_DEMO=false`. |
+
+## Subscriptions & alerts
+
+| Decision | Why |
+| --- | --- |
+| **Extended the existing Subscription/Payment/Notification models** instead of new ones | `cycle` = billing cycle, `currentPeriodStart/End` = start date / deadline. Added grace, auto-renew, amounts, gateway ids, invoice numbers, recipient/channel/dedupe key. |
+| **Status is computed, then stored** (`computeStatus` in `@weddyzone/shared`) | Reads (access checks, admin lists) recompute from the dates, so a studio is never locked out or let in because the hourly job hasn't run yet. The job saves it for filtering and sends the alerts. |
+| **All calendar maths in IST**, stored in UTC; months clamp to the month's last day and return to the anchor day (31 Jan → 28 Feb → 31 Mar) | "Days left" counts IST calendar days, so a reminder never fires twice or is skipped around midnight. |
+| **After downtime only the most urgent reminder is sent** (T-3 at 2 days left, not T-7 too) | No burst of stale messages. Exactly-once comes from the unique dedupe key, not timing. |
+| **Studio cancellation = cancel at period end; then CANCELLED (read-only), no grace** | Replaces the old "fall back to Starter" behaviour: the brief makes ended plans read-only. Admin cancel is immediate. |
+| **Plan prices exclude GST; checkout charges 18% on top** | As the pricing pages say. Pro yearly = ₹24,990 + ₹4,498.20 = ₹29,488.20. |
+| **Renewing the same plan early continues from the current deadline** | Paying a week early loses no days. Changing plan starts a fresh period from now (no proration, as before). |
+| **Admin alerts are one shared feed** (no per-admin read state) | Small team; any admin clearing an alert clears it for all. |
+| **Webhook path is `/api/v1/webhooks/payments`, admin API under `/api/v1/admin/*`** | Same `/api/v1` prefix as every other route. |
+| **Auto-renew without a gateway mandate doesn't suppress reminders** | Only a gateway subscription can actually charge; in test mode the job simulates the renewal webhook at the deadline. |
+| **Two-factor sign-in is optional TOTP** (no new dependency), secrets AES-GCM encrypted | Works with any authenticator app. |
+| **No WhatsApp provider ⇒ WhatsApp alerts are not attempted** (no row, no "Failed") | Until `WHATSAPP_CLOUD_TOKEN` is set they could never be delivered. "Send reminder now" reports WhatsApp as "Skipped – not configured" and the dialog disables it. Older rows recorded before this show as skipped too. Once configured, the next job run sends WhatsApp for the stage due then. |
+| **Every paid plan payment has a GST invoice number** | Migration `20261003090000_backfill_platform_invoices` numbers older payments in payment order per financial year (IST) and moves the counters on, so the series stays gap-free and new invoices continue it. Admins open any invoice at `/admin/invoices/:id`. |
+| **WhatsApp credits are shown as a balance, not a limit** | "0 used this month · 1,839 left in balance". Credits are bought in packs; the plan sets no monthly cap (`limit: null`, `remaining` = balance). |
+| **Admin amounts exclude GST everywhere**, labelled once in the admin top bar | Revenue view: the subscriptions table, CSV, detail page, MRR/ARR and admin alerts all show the price before GST ("₹24,990 + GST" in alerts, which are also emailed). Studio-facing pages and invoices still show GST in full. |
+| **MRR = paid billing periods covering that moment** (one per subscription, monthly-equivalent, excl. GST) | The dashboard card and every point of the trend use the same function, so the card always equals the trend's current month. A plan in grace or with no payment adds nothing; an admin cancellation stops it immediately. |
+| **"Needs attention"** = in grace, payment failed, or deadline within 7 days | One KPI and one list tab (`?tab=attention`), each subscription counted once. |
+
+## Photo uploads
+
+| Decision | Why |
+| --- | --- |
+| **Upload limits come from the plan** (`maxPhotoMb`, `maxFilesPerUpload`, `uploadConcurrency` in each plan's `limits`; missing → Starter values) | Starter 25 MB / 300 / 3 · Pro 50 / 1,000 / 4 · Studio 80 / 3,000 / 5 · All-Access 100 / 5,000 / 6. Editable in Admin → Plans. `GET /me/upload-limits` tells the uploader; the server enforces all of it again. |
+| **The size limit is applied while the file is read** (a per-request multer limit from the plan) | An oversize photo is cut off at the plan limit instead of being buffered in full; 413 FILE_TOO_LARGE. |
+| **Storage is checked under the selection lock** | Parallel uploads can't overshoot the plan together. Usage is the live sum of the studio's files, so My Subscription → Storage needs no separate counter. |
+| **Uploads have their own rate-limit bucket** (`RATE_LIMIT_UPLOADS_PER_MIN`, default 6,000) | A 600+ photo folder hit the general 600/min limit and the rest failed with 429. 429s are also retried by the uploader. |
+| **Folders keep their path** (`photos.folder`, e.g. "Wedding/Stage") | Relative to the folder that was picked or dropped. |
+| **Production body size** | No nginx in this repo and the Vite dev proxy has no body limit. Uploads in production go Vercel → Render via the `/api` rewrite: check a 100 MB upload there, or point `VITE_API_URL` straight at the API if the rewrite limits bodies. |
+
+## Studio workflow (selections, dashboard)
+
+| Decision | Why |
+| --- | --- |
+| **One event page per selection** (`/photo-selection/:id`, data from `GET /selections/:id/overview`) | Replaces the Upload & Download dialog. Old `?selection=<id>` links redirect to it. |
+| **Statuses: Draft → Uploading → Shared (`SENT`) → In progress → Submitted → Delivered**, Expired derived | New enum values only; old rows keep theirs. Uploading starts with the first photo, Shared with the first link copy or WhatsApp send. Expired never overrides Submitted/Delivered. |
+| **Folders are rows** (`selection_folders`, `photos.folder_id`) | A dropped folder's top folder becomes the selection folder; a folder chosen on the page wins; otherwise General. The migration filed existing photos the same way. Deleting a folder moves its photos to General. |
+| **PIN = 4 digits, HMAC-hashed per selection; 5 wrong tries lock it for 15 minutes**, plus 10 tries/min per IP | The right PIN returns an access key (HMAC of the selection + PIN hash) sent as `X-Gallery-Key` or `?k=` on photo URLs; changing or removing the PIN kills every key. PIN errors are 403 so the web app doesn't try a studio login refresh. The studio sees the PIN only when setting it. |
+| **Clients only ever get server-made previews** (≤ 1600 px JPEG at quality 82, mozjpeg with the standard tables, studio name tiled when watermarking) | Made with sharp right after upload (2 at a time) or on first view; stored as files linked from `photos.preview_file_id` and not counted as studio storage. Toggling the watermark drops them so they are remade. Originals only via `/photos/:id/download`, and only when downloads are on. |
+| **ZIP export streams the originals** (archiver, stored not compressed, one file open at a time) | Works for big events without holding the ZIP in memory. Picked only by default; `scope=all`; optional `folderId`. |
+| **Unlock, reset picks, delivered and access changes are logged** (`selection_log`, actor STUDIO/CLIENT/SYSTEM) | Shown on the event page; client entries feed the dashboard's activity list. A visit is counted once per 30 minutes. |
+| **Automatic reminders after 3 and 7 quiet days, at most two per selection** | Quiet = since the share or the client's last visit; a manual reminder in the last 2 days holds them back. They only run with the WhatsApp Cloud API configured (template `selection_reminder`, 7 body parameters), because a wa.me link can't be sent by a job. Delivered first, then charged 1 credit and logged like a manual reminder; failures cost nothing. |
+| **Studio defaults** (`studios.selection_defaults`: watermark, downloads, gallery days, notes) | Pre-fill the New Selection form; the API applies them when a field is left out. |
+| **Dashboard data is a new optional `workflow` field** on `GET /dashboard` | Older fields stay for compatibility. |
+| **Digital Album removed from the studio app** | On request: sidebar entry, page and its dialogs are gone; `/digital-album` redirects to the dashboard. Album data, the albums API and clients' `/a/:token` links are kept. The album cover/review columns from the workflow migration are unused for now. |

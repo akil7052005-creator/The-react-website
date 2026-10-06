@@ -1,3 +1,4 @@
+import type { FolderType, SendVia } from './selection'
 // Response shapes returned by the API. Money fields end in `Paise`; dates are
 // ISO strings (date-only fields are YYYY-MM-DD).
 import type {
@@ -21,6 +22,7 @@ import type {
 } from './enums'
 import type { PlanLimits } from './schemas/billing'
 import type { SupplyType } from './gst'
+import type { AlertSettings, CancelReason, SubscriptionEventType, SubscriptionStatus } from './subscriptions'
 
 export interface ApiErrorBody {
   error: {
@@ -55,6 +57,8 @@ export interface StudioDto {
   gstin: string | null
   pan: string | null
   website: string | null
+  /** Instagram handle without the @ (Profile » Social Setup). */
+  instagramHandle?: string | null
   bio: string | null
   logoUrl: string | null
   referralCode: string
@@ -114,6 +118,7 @@ export interface EventRef {
   id: string
   code: string
   title: string
+  type: EventType
 }
 
 export interface SelectionMemberDto {
@@ -133,11 +138,67 @@ export interface SelectionDto {
   status: SelectionEffectiveStatus
   photoCount: number
   pickedCount: number
+  /** Folders in the selection (Haldi, Wedding…). */
+  folderCount?: number
+  /** Videos in the selection. */
+  videoCount?: number
   publicToken: string
   members: SelectionMemberDto[]
   submittedAt: string | null
   lastRemindedAt: string | null
   createdAt: string
+  /** Event date (YYYY-MM-DD). */
+  eventDate?: string
+  sharedAt?: string | null
+  /** The studio reopened it (Reset Selection / Unlock) and the client hasn't submitted again: shown as Pending. */
+  reopened?: boolean
+  deliveredAt?: string | null
+  lastClientVisitAt?: string | null
+  clientVisits?: number
+  /** Gallery access settings. */
+  hasPin?: boolean
+  allowDownload?: boolean
+  watermark?: boolean
+  notesAllowed?: boolean
+  /** Last "Send Options" send, and which card was used. */
+  lastSentAt?: string | null
+  sentVia?: SendVia | null
+}
+
+export interface SelectionFolderDto {
+  id: string
+  name: string
+  position: number
+  /** Images in the folder (videos are counted in videoCount). */
+  photoCount: number
+  pickedCount: number
+  videoCount?: number
+  /** photo (default) or video. */
+  type?: FolderType
+}
+
+export interface SelectionLogDto {
+  id: string
+  actor: 'STUDIO' | 'CLIENT' | 'SYSTEM'
+  action: string
+  detail: string | null
+  createdAt: string
+}
+
+/** Everything the event page needs in one call. */
+export interface SelectionOverviewDto {
+  selection: SelectionDto
+  folders: SelectionFolderDto[]
+  noteCount: number
+  log: SelectionLogDto[]
+}
+
+/** Studio-wide defaults for new selections. */
+export interface SelectionDefaultsDto {
+  watermark: boolean
+  allowDownload: boolean
+  galleryDays: number
+  notesAllowed: boolean
 }
 
 export interface PhotoDto {
@@ -149,8 +210,39 @@ export interface PhotoDto {
 }
 
 export interface StudioSelectionPhotoDto extends PhotoDto {
+  /** Folder the photo was uploaded from, e.g. "Haldi" or "Wedding/Stage" (null for single files). */
+  folder?: string | null
+  /** The selection folder (Haldi, Wedding…) it is filed under. */
+  folderId?: string | null
+  /** Small, fast preview for the studio grid (the original stays at url). */
+  previewUrl?: string
+  /** 'video' for MP4/MOV clips (kept with the event, not shown to the client for picking). */
+  media?: 'image' | 'video'
+  mimeType?: string
+  /** Uploaded as a 1600 px JPEG made in the browser; originalName is the file on the studio's computer. */
+  compressed?: boolean
+  /** The original file's size in bytes and pixel size (null when not known). */
+  originalSize?: number | null
+  originalWidth?: number | null
+  originalHeight?: number | null
+  /**
+   * The full-quality original in the cloud (studio only, never sent to the customer): the kept
+   * original of a compressed upload, or the uploaded file itself when it wasn't compressed. Null
+   * when a compressed upload's original wasn't kept (e.g. larger than the plan allows).
+   */
+  originalUrl?: string | null
+  /** SHA-256 (hex) of that original, to verify a download byte for byte. */
+  originalChecksum?: string | null
   pickedBy: string[]
   comments: { memberName: string; text: string; createdAt: string }[]
+}
+
+/** POST /selections/:id/photos/:photoId/original: the original was stored and verified. */
+export interface PhotoOriginalDto {
+  photoId: string
+  originalUrl: string
+  originalChecksum: string
+  size: number
 }
 
 export interface PublicSelectionDto {
@@ -167,7 +259,28 @@ export interface PublicSelectionDto {
   photos: (PhotoDto & {
     pickedBy: string[]
     comments: { memberId: string; memberName: string; text: string; createdAt: string }[]
+    folderId?: string | null
+    /** Present only when the studio allows downloads. */
+    downloadUrl?: string | null
   })[]
+  folders?: { id: string; name: string; photoCount: number }[]
+  notesAllowed?: boolean
+  allowDownload?: boolean
+  /** Hearts are on (the studio can turn picking off for a view-only gallery). */
+  favoritesEnabled?: boolean
+  /** Client can download a whole folder as a ZIP. */
+  downloadAllFolder?: boolean
+  /** Follow this Instagram account before viewing. */
+  instagram?: { handle: string } | null
+}
+
+/** What the client sees before entering the PIN. */
+export interface PublicSelectionLockedDto {
+  pinRequired: true
+  code: string
+  studio: { name: string; logoUrl: string | null; phone: string | null }
+  eventTitle: string
+  clientName: string
 }
 
 export interface AlbumDto {
@@ -243,19 +356,43 @@ export interface AdminPlanDto extends PlanDto {
 export interface SubscriptionDto {
   plan: PlanDto
   cycle: BillingCycle
-  status: 'ACTIVE' | 'CANCELLED'
+  status: SubscriptionStatus
   isTrial: boolean
   currentPeriodStart: string
+  /** The deadline. */
   currentPeriodEnd: string
+  /** When a plan in grace turns read-only (set once the deadline passes). */
+  graceEndsAt: string | null
   cancelAtPeriodEnd: boolean
+  autoRenew: boolean
+  /** IST calendar days until the deadline (0 on the day, negative after). */
+  daysLeft: number
+  /** Expired or cancelled: the studio can view everything but not create events, albums or uploads. */
+  readOnly: boolean
   pricePaise: number
+}
+
+/** GET /me/subscription — just enough for the dashboard banner. */
+export interface MySubscriptionBannerDto {
+  planName: string
+  planCode: PlanCode
+  status: SubscriptionStatus
+  endDate: string
+  graceEndsAt: string | null
+  daysLeft: number
+  readOnly: boolean
+  autoRenew: boolean
+  renewLink: string
 }
 
 export interface UsageItem {
   key: 'events' | 'albums' | 'storage' | 'credits'
   label: string
   used: number
+  /** The plan's limit; null when there is none (unlimited plans, and WhatsApp credits). */
   limit: number | null
+  /** WhatsApp credits only: the prepaid balance left (credits are bought, not a plan quota). */
+  remaining?: number
   unit: string
 }
 
@@ -263,10 +400,31 @@ export interface PaymentDto {
   id: string
   purpose: 'SUBSCRIPTION' | 'CREDIT_PACK'
   description: string
+  /** Total charged, GST included. */
   amountPaise: number
+  gstPaise: number
   status: 'SUCCESS' | 'FAILED' | 'PENDING'
   provider: string
+  invoiceNumber: string | null
+  paidAt: string | null
   createdAt: string
+}
+
+/** Tax invoice Weddyzone issues to a studio for a plan payment. */
+export interface PlatformInvoiceDto {
+  number: string
+  date: string
+  seller: { name: string; gstin: string | null; address: string | null; stateCode: string | null }
+  buyer: { name: string; gstin: string | null; address: string | null; stateCode: string | null; email: string | null }
+  description: string
+  sac: string
+  taxablePaise: number
+  cgstPaise: number
+  sgstPaise: number
+  igstPaise: number
+  totalPaise: number
+  totalInWords: string
+  paymentRef: string | null
 }
 
 export interface CheckoutResultDto {
@@ -523,6 +681,8 @@ export interface DashboardDto {
     upcomingEvents: number
     activeSelections: number
     publishedAlbums: number
+    /** Selections the client has submitted. */
+    completedSelections: number
   }
   nextAssignment: (EventDto & { daysLeft: number }) | null
   recentEvents: EventDto[]
@@ -531,4 +691,133 @@ export interface DashboardDto {
   pipeline: { name: string; progress: number; link: string }[]
   recentAlbums: AlbumDto[]
   activeBanner: BannerDto | null
+  /** Client activity and this month's additions for the dashboard. */
+  workflow?: DashboardWorkflowDto
+}
+
+export interface DashboardWorkflowDto {
+  /** Latest things clients did in their galleries. */
+  activity: {
+    id: string
+    selectionId: string
+    eventTitle: string
+    clientName: string
+    action: string
+    detail: string | null
+    at: string
+    /** The selection's status at the time of the action (for the pill); DRAFT shows as Pending. */
+    status?: SelectionEffectiveStatus
+    /** Reopened by the studio and not submitted again: shown as Pending. */
+    reopened?: boolean
+  }[]
+  /** Created this month (the "+N this month" chips). */
+  createdThisMonth: { events: number; selections: number }
+}
+
+// ------------------------------------------------------------------ platform admin: subscriptions
+
+export interface AdminSubscriptionRowDto {
+  id: string
+  studio: { id: string; name: string; slug: string }
+  owner: { name: string; email: string; phone: string | null }
+  plan: { id: string; code: PlanCode; name: string }
+  cycle: BillingCycle
+  /** Last amount paid for this subscription, excluding GST (admin amounts never include GST). */
+  amountPaise: number
+  startDate: string
+  endDate: string
+  graceEndsAt: string | null
+  daysLeft: number
+  tone: 'green' | 'amber' | 'red' | 'grey'
+  status: SubscriptionStatus
+  isTrial: boolean
+  autoRenew: boolean
+  cancelAtPeriodEnd: boolean
+  createdAt: string
+}
+
+export interface SubscriptionEventDto {
+  id: string
+  type: SubscriptionEventType
+  fromPlan: string | null
+  toPlan: string | null
+  amountPaise: number | null
+  actorName: string | null
+  note: string | null
+  createdAt: string
+}
+
+export interface SentNotificationDto {
+  id: string
+  recipientType: 'ADMIN' | 'STUDIO'
+  channel: 'IN_APP' | 'EMAIL' | 'WHATSAPP'
+  type: string
+  title: string
+  message: string
+  sentAt: string | null
+  error: string | null
+  createdAt: string
+}
+
+export interface AdminSubscriptionDetailDto extends AdminSubscriptionRowDto {
+  studioProfile: {
+    city: string | null
+    stateCode: string | null
+    gstin: string | null
+    email: string | null
+    phone: string | null
+    createdAt: string
+  }
+  gatewaySubscriptionId: string | null
+  cancelReason: CancelReason | null
+  cancelDetails: string | null
+  usage: UsageItem[]
+  events: SubscriptionEventDto[]
+  payments: PaymentDto[]
+  notifications: SentNotificationDto[]
+}
+
+export interface AdminStatsDto {
+  activeByPlan: { code: PlanCode; name: string; count: number }[]
+  trials: number
+  mrrPaise: number
+  arrPaise: number
+  newThisMonth: number
+  expiringIn7Days: number
+  expiredThisMonth: number
+  failedPayments: number
+  inGrace: number
+  /** Subscriptions whose last payment failed (still before their deadline). */
+  paymentFailed: number
+  /** In grace, payment failed or expiring within 7 days (each subscription counted once). */
+  needsAttention: number
+  /** Last 12 months, oldest first; month is YYYY-MM. The last point is MRR now (= mrrPaise). */
+  mrrTrend: { month: string; mrrPaise: number }[]
+  newVsChurned: { month: string; new: number; churned: number }[]
+  cancelReasons: { reason: CancelReason; count: number }[]
+}
+
+export interface AdminNotificationDto {
+  id: string
+  type: string
+  title: string
+  message: string
+  link: string | null
+  readAt: string | null
+  createdAt: string
+}
+
+export interface AdminAlertSettingsDto extends AlertSettings {
+  updatedAt: string | null
+  /** False when no WhatsApp provider is set up: WhatsApp alerts are skipped, not attempted. */
+  whatsappConfigured?: boolean
+}
+
+export interface TwoFactorStatusDto {
+  enabled: boolean
+}
+
+export interface TwoFactorSetupDto {
+  secret: string
+  otpauthUrl: string
 }

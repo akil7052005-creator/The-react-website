@@ -178,11 +178,13 @@ describe('Phase 3 — plans, credits, invoices', () => {
       expect(res.body.map((p: { code: string }) => p.code)).toEqual(['STARTER', 'PRO', 'STUDIO', 'ALL_ACCESS'])
     })
 
-    it('upgrades immediately, grants included credits and records the payment', async () => {
+    it('upgrades immediately (test-mode gateway), charges 18% GST, grants included credits and records the payment', async () => {
       const before = (await A.agent.get('/api/v1/credits').expect(200)).body.balance
       const res = await A.agent.post('/api/v1/subscription/change').send({ planCode: 'STUDIO', cycle: 'YEARLY' }).expect(200)
       expect(res.body.subscription).toMatchObject({ plan: { code: 'STUDIO' }, cycle: 'YEARLY', isTrial: false, status: 'ACTIVE', pricePaise: 5_999_000 })
-      expect(res.body.payment).toMatchObject({ purpose: 'SUBSCRIPTION', amountPaise: 5_999_000 })
+      // Plan prices exclude GST: ₹59,990 + 18% = ₹70,788.20.
+      expect(res.body.payment).toMatchObject({ purpose: 'SUBSCRIPTION', amountPaise: 7_078_820, gstPaise: 1_079_820, status: 'SUCCESS' })
+      expect(res.body.payment.invoiceNumber).toMatch(/^WZ\/\d{4}-\d{2}\/\d{5}$/)
       expect((await A.agent.get('/api/v1/credits').expect(200)).body.balance).toBe(before + 1000)
       await A.agent.post('/api/v1/subscription/change').send({ planCode: 'STUDIO', cycle: 'YEARLY' }).expect(409)
     })
@@ -193,20 +195,23 @@ describe('Phase 3 — plans, credits, invoices', () => {
     })
 
     it('cancels at period end and resumes', async () => {
-      const cancelled = await A.agent.post('/api/v1/subscription/cancel').expect(200)
-      expect(cancelled.body.subscription).toMatchObject({ cancelAtPeriodEnd: true, status: 'CANCELLED', plan: { code: 'STUDIO' } })
-      await A.agent.post('/api/v1/subscription/cancel').expect(409)
+      const noReason = await A.agent.post('/api/v1/subscription/cancel').expect(400)
+      expect(noReason.body.error.fields.reason).toBeTruthy()
+      const cancelled = await A.agent.post('/api/v1/subscription/cancel').send({ reason: 'TOO_EXPENSIVE', details: 'Quiet season' }).expect(200)
+      // Still the paid plan until the deadline; it just won't continue.
+      expect(cancelled.body.subscription).toMatchObject({ cancelAtPeriodEnd: true, status: 'ACTIVE', readOnly: false, plan: { code: 'STUDIO' } })
+      await A.agent.post('/api/v1/subscription/cancel').send({ reason: 'OTHER' }).expect(409)
       const resumed = await A.agent.post('/api/v1/subscription/resume').expect(200)
       expect(resumed.body.subscription).toMatchObject({ cancelAtPeriodEnd: false, status: 'ACTIVE' })
     })
 
-    it('falls back to Starter once a cancelled period has ended (derived on read)', async () => {
-      await A.agent.post('/api/v1/subscription/cancel').expect(200)
+    it('turns read-only once a cancelled period has ended (derived on read, no grace)', async () => {
+      await A.agent.post('/api/v1/subscription/cancel').send({ reason: 'SWITCHING_TOOL' }).expect(200)
       await prisma.subscription.update({ where: { studioId: A.studioId }, data: { currentPeriodEnd: new Date('2020-01-01') } })
       const res = await A.agent.get('/api/v1/subscription').expect(200)
-      expect(res.body.subscription.plan.code).toBe('STARTER')
+      expect(res.body.subscription).toMatchObject({ status: 'CANCELLED', readOnly: true, plan: { code: 'STUDIO' } })
       const me = await A.agent.get('/api/v1/auth/me').expect(200)
-      expect(me.body.studio.plan.code).toBe('STARTER')
+      expect(me.body.studio.plan.code).toBe('STUDIO')
     })
 
     it('reports usage from real counts', async () => {

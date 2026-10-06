@@ -23,6 +23,13 @@ export type SignupInput = z.input<typeof signupSchema>
 export const loginSchema = z.object({
   email: emailSchema,
   password: z.string({ error: 'Password is required' }).min(1, 'Password is required').max(128),
+  // Only for platform admins who turned on two-factor sign-in.
+  otp: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => v || undefined)
+    .pipe(z.string().regex(/^\d{6}$/, 'Enter the 6-digit code from your authenticator app').optional()),
 })
 export type LoginInput = z.input<typeof loginSchema>
 

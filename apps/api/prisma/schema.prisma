@@ -36,15 +36,20 @@ enum EventStatus {
 
 enum SelectionStatus {
   DRAFT
+  UPLOADING
   SENT
   IN_PROGRESS
   SUBMITTED
+  DELIVERED
 }
 
 enum AlbumStatus {
   DRAFT
   IN_REVIEW
+  CHANGES_REQUESTED
+  APPROVED
   PUBLISHED
+  SENT_TO_PRINT
 }
 
 enum FeedbackKind {
@@ -65,8 +70,47 @@ enum BillingCycle {
 }
 
 enum SubscriptionStatus {
+  TRIAL
   ACTIVE
+  EXPIRING_SOON
+  GRACE
+  EXPIRED
   CANCELLED
+  PAYMENT_FAILED
+}
+
+enum SubscriptionEventType {
+  CREATED
+  RENEWED
+  UPGRADED
+  DOWNGRADED
+  CANCELLED
+  EXPIRED
+  GRACE_STARTED
+  PAYMENT_FAILED
+  EXTENDED_BY_ADMIN
+  PLAN_CHANGED_BY_ADMIN
+  AUTO_RENEW_CHANGED
+}
+
+enum CancelReason {
+  TOO_EXPENSIVE
+  NOT_ENOUGH_WORK
+  MISSING_FEATURES
+  SWITCHING_TOOL
+  TECHNICAL_ISSUES
+  OTHER
+}
+
+enum NotificationRecipient {
+  ADMIN
+  STUDIO
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  WHATSAPP
 }
 
 enum PaymentPurpose {
@@ -154,26 +198,29 @@ enum FileKind {
 }
 
 model Studio {
-  id            String   @id @default(uuid()) @db.Uuid
-  name          String
-  slug          String   @unique
-  email         String?
-  phone         String?
-  gstin         String?
-  pan           String?
-  addressLine1  String?  @map("address_line1")
-  addressLine2  String?  @map("address_line2")
-  city          String?
-  stateCode     String?  @map("state_code")
-  pincode       String?
-  website       String?
-  bio           String?
-  logoFileId    String?  @unique @map("logo_file_id") @db.Uuid
-  referralCode  String   @unique @map("referral_code")
-  walletBalance Int      @default(0) @map("wallet_balance")
-  creditBalance Int      @default(0) @map("credit_balance")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id                String   @id @default(uuid()) @db.Uuid
+  name              String
+  slug              String   @unique
+  email             String?
+  phone             String?
+  gstin             String?
+  pan               String?
+  addressLine1      String?  @map("address_line1")
+  addressLine2      String?  @map("address_line2")
+  city              String?
+  stateCode         String?  @map("state_code")
+  pincode           String?
+  website           String?
+  instagramHandle   String?  @map("instagram_handle")
+  bio               String?
+  logoFileId        String?  @unique @map("logo_file_id") @db.Uuid
+  referralCode      String   @unique @map("referral_code")
+  walletBalance     Int      @default(0) @map("wallet_balance")
+  creditBalance     Int      @default(0) @map("credit_balance")
+  // Defaults for new selections: { watermark, allowDownload, galleryDays, notesAllowed }.
+  selectionDefaults Json?    @map("selection_defaults")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
 
   logo            StoredFile?       @relation("StudioLogo", fields: [logoFileId], references: [id])
   users           User[]
@@ -201,23 +248,27 @@ model Studio {
 }
 
 model User {
-  id           String    @id @default(uuid()) @db.Uuid
-  studioId     String?   @map("studio_id") @db.Uuid
-  name         String
-  email        String    @unique
-  phone        String?
-  passwordHash String    @map("password_hash")
-  role         UserRole  @default(OWNER)
-  lastLoginAt  DateTime? @map("last_login_at")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
+  id            String    @id @default(uuid()) @db.Uuid
+  studioId      String?   @map("studio_id") @db.Uuid
+  name          String
+  email         String    @unique
+  phone         String?
+  passwordHash  String    @map("password_hash")
+  role          UserRole  @default(OWNER)
+  lastLoginAt   DateTime? @map("last_login_at")
+  // Two-factor sign-in (platform admins): TOTP secret, encrypted; on when totpEnabledAt is set.
+  totpSecret    String?   @map("totp_secret")
+  totpEnabledAt DateTime? @map("totp_enabled_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
 
-  studio         Studio?         @relation(fields: [studioId], references: [id])
-  refreshTokens  RefreshToken[]
-  passwordResets PasswordReset[]
-  faqVotes       FaqFeedback[]
-  ticketMessages TicketMessage[]
-  adminActions   AdminAuditLog[]
+  studio             Studio?             @relation(fields: [studioId], references: [id])
+  refreshTokens      RefreshToken[]
+  passwordResets     PasswordReset[]
+  faqVotes           FaqFeedback[]
+  ticketMessages     TicketMessage[]
+  adminActions       AdminAuditLog[]
+  subscriptionEvents SubscriptionEvent[]
 
   @@index([studioId])
   @@map("users")
@@ -277,6 +328,8 @@ model StoredFile {
   studio        Studio         @relation("StudioFiles", fields: [studioId], references: [id])
   studioLogo    Studio?        @relation("StudioLogo")
   photo         Photo?
+  photoPreview  Photo?         @relation("PhotoPreview")
+  photoOriginal Photo?         @relation("PhotoOriginal")
   banner        Banner?
   ticket        Ticket?
   ticketMessage TicketMessage?
@@ -340,41 +393,85 @@ model Event {
 }
 
 model Photo {
-  id          String    @id @default(uuid()) @db.Uuid
-  studioId    String    @map("studio_id") @db.Uuid
-  eventId     String    @map("event_id") @db.Uuid
-  selectionId String?   @map("selection_id") @db.Uuid
-  fileId      String    @unique @map("file_id") @db.Uuid
-  position    Int       @default(0)
-  createdAt   DateTime  @default(now()) @map("created_at")
-  deletedAt   DateTime? @map("deleted_at")
+  id            String    @id @default(uuid()) @db.Uuid
+  studioId      String    @map("studio_id") @db.Uuid
+  eventId       String    @map("event_id") @db.Uuid
+  selectionId   String?   @map("selection_id") @db.Uuid
+  fileId        String    @unique @map("file_id") @db.Uuid
+  position      Int       @default(0)
+  // Folder the photo was uploaded from (e.g. "Haldi" or "Wedding/Stage"); null for single files.
+  folder        String?
+  folderId      String?   @map("folder_id") @db.Uuid
+  // Client-facing copy: resized, watermarked when the selection asks for it. Made on demand.
+  previewFileId String?   @unique @map("preview_file_id") @db.Uuid
+  /// The customer marked it as a favourite in the portal (separate from selecting it).
+  clientFavorite Boolean  @default(false) @map("client_favorite")
+  /// The file as it was on the studio's computer (e.g. "IMG_1234.CR2"), when the upload was
+  /// compressed in the browser; the stored file is then a 1600 px JPEG. Used to find the original
+  /// again (Download Selected → Copy from my computer).
+  originalName   String?  @map("original_name")
+  originalWidth  Int?     @map("original_width")
+  originalHeight Int?     @map("original_height")
+  originalSize   Int?     @map("original_size")
+  compressed     Boolean  @default(false)
+  /// The full-quality original kept in the cloud beside a compressed upload (never shown or sent to
+  /// the customer). The studio's "Download from cloud" returns it for the customer's picks.
+  originalFileId String?  @unique @map("original_file_id") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at")
+  deletedAt     DateTime? @map("deleted_at")
 
-  event      Event          @relation(fields: [eventId], references: [id])
-  selection  Selection?     @relation(fields: [selectionId], references: [id])
-  file       StoredFile     @relation(fields: [fileId], references: [id])
+  event        Event            @relation(fields: [eventId], references: [id])
+  selection    Selection?       @relation(fields: [selectionId], references: [id])
+  file         StoredFile       @relation(fields: [fileId], references: [id])
+  folderRef    SelectionFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  preview      StoredFile?      @relation("PhotoPreview", fields: [previewFileId], references: [id], onDelete: SetNull)
+  originalFile StoredFile?      @relation("PhotoOriginal", fields: [originalFileId], references: [id], onDelete: SetNull)
   picks      PhotoPick[]
   comments   PhotoComment[]
   albumPages AlbumPage[]
 
   @@index([selectionId, position])
   @@index([eventId])
+  @@index([folderId])
   @@map("photos")
 }
 
 model Selection {
-  id             String          @id @default(uuid()) @db.Uuid
-  studioId       String          @map("studio_id") @db.Uuid
-  code           String
-  eventId        String          @map("event_id") @db.Uuid
-  quota          Int
-  deadline       DateTime        @db.Date
-  status         SelectionStatus @default(DRAFT)
-  publicToken    String          @unique @map("public_token")
-  submittedAt    DateTime?       @map("submitted_at")
-  lastRemindedAt DateTime?       @map("last_reminded_at")
-  createdAt      DateTime        @default(now()) @map("created_at")
-  updatedAt      DateTime        @updatedAt @map("updated_at")
-  deletedAt      DateTime?       @map("deleted_at")
+  id                String          @id @default(uuid()) @db.Uuid
+  studioId          String          @map("studio_id") @db.Uuid
+  code              String
+  eventId           String          @map("event_id") @db.Uuid
+  quota             Int
+  deadline          DateTime        @db.Date
+  status            SelectionStatus @default(DRAFT)
+  publicToken       String          @unique @map("public_token")
+  submittedAt       DateTime?       @map("submitted_at")
+  lastRemindedAt    DateTime?       @map("last_reminded_at")
+  pinHash           String?         @map("pin_hash")
+  pinFailures       Int             @default(0) @map("pin_failures")
+  pinLockedUntil    DateTime?       @map("pin_locked_until")
+  /// Wrong customer codes entered on this selection's share link (/select/:token); 5 lock it for 10 minutes.
+  codeFailures      Int             @default(0) @map("code_failures")
+  codeLockedUntil   DateTime?       @map("code_locked_until")
+  allowDownload    Boolean         @default(false) @map("allow_download")
+  watermark         Boolean         @default(false)
+  notesAllowed      Boolean         @default(true) @map("notes_allowed")
+  sharedAt          DateTime?       @map("shared_at")
+  /// The studio reopened a submitted selection (Reset Selection / Unlock): shown as Pending until the
+  /// client submits again, which clears it.
+  reopenedAt        DateTime?       @map("reopened_at")
+  deliveredAt       DateTime?       @map("delivered_at")
+  lastClientVisitAt DateTime?       @map("last_client_visit_at")
+  clientVisits      Int             @default(0) @map("client_visits")
+  autoReminders     Int             @default(0) @map("auto_reminders")
+  /// Last Send Options send, and the card used: android | ios | web | all.
+  lastSentAt        DateTime?       @map("last_sent_at")
+  sentVia           String?         @map("sent_via")
+  /// Photo Selection settings without a column of their own (see EventSettings in @weddyzone/shared).
+  settings          Json?
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+  deletedAt         DateTime?       @map("deleted_at")
 
   studio   Studio            @relation(fields: [studioId], references: [id])
   event    Event             @relation(fields: [eventId], references: [id])
@@ -382,11 +479,48 @@ model Selection {
   members  SelectionMember[]
   picks    PhotoPick[]
   comments PhotoComment[]
+  folders  SelectionFolder[]
+  log      SelectionLog[]
+  albums   Album[]
 
   @@unique([studioId, code])
   @@index([studioId, deadline])
   @@index([studioId, status])
   @@map("selections")
+}
+
+model SelectionFolder {
+  id          String   @id @default(uuid()) @db.Uuid
+  selectionId String   @map("selection_id") @db.Uuid
+  name        String
+  position    Int      @default(0)
+  /// photo | video: which files the folder takes.
+  type        String   @default("photo")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  selection Selection @relation(fields: [selectionId], references: [id], onDelete: Cascade)
+  photos    Photo[]
+
+  @@unique([selectionId, name])
+  @@map("selection_folders")
+}
+
+/// What happened to a selection and who did it (STUDIO, CLIENT or SYSTEM): unlock, reset, delivered...
+model SelectionLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  selectionId String   @map("selection_id") @db.Uuid
+  actor       String
+  action      String
+  detail      String?
+  /// The selection's status when this happened (Client Activity shows it, not today's status):
+  /// IN_PROGRESS (opened / started picking), SUBMITTED, or DRAFT (Pending: reopened by the studio).
+  status      String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  selection Selection @relation(fields: [selectionId], references: [id], onDelete: Cascade)
+
+  @@index([selectionId, createdAt])
+  @@map("selection_log")
 }
 
 model SelectionMember {
@@ -437,26 +571,40 @@ model PhotoComment {
 }
 
 model Album {
-  id           String      @id @default(uuid()) @db.Uuid
-  studioId     String      @map("studio_id") @db.Uuid
-  code         String
-  eventId      String      @map("event_id") @db.Uuid
-  title        String
-  subtitle     String?
-  location     String?
-  status       AlbumStatus @default(DRAFT)
-  hue          Int         @default(345)
-  publicToken  String      @unique @map("public_token")
-  coverPhotoId String?     @map("cover_photo_id") @db.Uuid
-  publishedAt  DateTime?   @map("published_at")
-  createdAt    DateTime    @default(now()) @map("created_at")
-  updatedAt    DateTime    @updatedAt @map("updated_at")
-  deletedAt    DateTime?   @map("deleted_at")
+  id               String      @id @default(uuid()) @db.Uuid
+  studioId         String      @map("studio_id") @db.Uuid
+  code             String
+  eventId          String      @map("event_id") @db.Uuid
+  title            String
+  subtitle         String?
+  location         String?
+  status           AlbumStatus @default(DRAFT)
+  hue              Int         @default(345)
+  publicToken      String      @unique @map("public_token")
+  coverPhotoId     String?     @map("cover_photo_id") @db.Uuid
+  publishedAt      DateTime?   @map("published_at")
+  selectionId      String?     @map("selection_id") @db.Uuid
+  // Cover design: CLASSIC | MODERN | MINIMAL, colours as #rrggbb, details = which lines show.
+  coverStyle       String      @default("CLASSIC") @map("cover_style")
+  coverColor       String?     @map("cover_color")
+  textColor        String?     @map("text_color")
+  accentColor      String?     @map("accent_color")
+  coverDetails     Json?       @map("cover_details")
+  songUrl          String?     @map("song_url")
+  videoUrl         String?     @map("video_url")
+  backCoverPhotoId String?     @map("back_cover_photo_id") @db.Uuid
+  viewCount        Int         @default(0) @map("view_count")
+  approvedAt       DateTime?   @map("approved_at")
+  sentToPrintAt    DateTime?   @map("sent_to_print_at")
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
+  deletedAt        DateTime?   @map("deleted_at")
 
-  studio   Studio          @relation(fields: [studioId], references: [id])
-  event    Event           @relation(fields: [eventId], references: [id])
-  pages    AlbumPage[]
-  feedback AlbumFeedback[]
+  studio    Studio          @relation(fields: [studioId], references: [id])
+  event     Event           @relation(fields: [eventId], references: [id])
+  selection Selection?      @relation(fields: [selectionId], references: [id], onDelete: SetNull)
+  pages     AlbumPage[]
+  feedback  AlbumFeedback[]
 
   @@unique([studioId, code])
   @@index([studioId, updatedAt])
@@ -512,46 +660,149 @@ model Plan {
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   subscriptions Subscription[]
+  payments      Payment[]
 
   @@map("plans")
 }
 
+/// One per studio. `cycle` is the billing cycle; currentPeriodStart/End are the start date and the
+/// deadline. `status` is saved by the hourly job and admin actions; reads recompute it from the
+/// dates (computeStatus in @weddyzone/shared), so access never depends on when the job last ran.
 model Subscription {
-  id                 String             @id @default(uuid()) @db.Uuid
-  studioId           String             @unique @map("studio_id") @db.Uuid
-  planId             String             @map("plan_id") @db.Uuid
-  cycle              BillingCycle       @default(MONTHLY)
-  status             SubscriptionStatus @default(ACTIVE)
-  isTrial            Boolean            @default(false) @map("is_trial")
-  currentPeriodStart DateTime           @map("current_period_start")
-  currentPeriodEnd   DateTime           @map("current_period_end")
-  cancelAtPeriodEnd  Boolean            @default(false) @map("cancel_at_period_end")
-  cancelledAt        DateTime?          @map("cancelled_at")
-  createdAt          DateTime           @default(now()) @map("created_at")
-  updatedAt          DateTime           @updatedAt @map("updated_at")
+  id                    String             @id @default(uuid()) @db.Uuid
+  studioId              String             @unique @map("studio_id") @db.Uuid
+  planId                String             @map("plan_id") @db.Uuid
+  cycle                 BillingCycle       @default(MONTHLY)
+  status                SubscriptionStatus @default(ACTIVE)
+  isTrial               Boolean            @default(false) @map("is_trial")
+  currentPeriodStart    DateTime           @map("current_period_start")
+  currentPeriodEnd      DateTime           @map("current_period_end")
+  // Set when the deadline passes: full access until then, read-only after.
+  graceEndsAt           DateTime?          @map("grace_ends_at")
+  // Day of the month (IST) the paid plan started on, so renewals return to it after short months.
+  anchorDay             Int?               @map("anchor_day")
+  autoRenew             Boolean            @default(false) @map("auto_renew")
+  gatewaySubscriptionId String?            @unique @map("gateway_subscription_id")
+  // Last payment for this subscription (GST included) and the GST part of it.
+  amountPaid            Int                @default(0) @map("amount_paid")
+  gstAmount             Int                @default(0) @map("gst_amount")
+  lastPaymentFailedAt   DateTime?          @map("last_payment_failed_at")
+  cancelAtPeriodEnd     Boolean            @default(false) @map("cancel_at_period_end")
+  cancelledAt           DateTime?          @map("cancelled_at")
+  cancelReason          CancelReason?      @map("cancel_reason")
+  cancelDetails         String?            @map("cancel_details")
+  createdAt             DateTime           @default(now()) @map("created_at")
+  updatedAt             DateTime           @updatedAt @map("updated_at")
 
-  studio Studio @relation(fields: [studioId], references: [id])
-  plan   Plan   @relation(fields: [planId], references: [id])
+  studio        Studio              @relation(fields: [studioId], references: [id])
+  plan          Plan                @relation(fields: [planId], references: [id])
+  events        SubscriptionEvent[]
+  payments      Payment[]
+  notifications Notification[]
+  coupons       Coupon[]
 
+  @@index([currentPeriodEnd])
+  @@index([status, currentPeriodEnd])
   @@map("subscriptions")
 }
 
-model Payment {
-  id          String         @id @default(uuid()) @db.Uuid
-  studioId    String         @map("studio_id") @db.Uuid
-  purpose     PaymentPurpose
-  description String
-  amount      Int
-  status      PaymentStatus
-  provider    String
-  providerRef String?        @map("provider_ref")
-  meta        Json?
-  createdAt   DateTime       @default(now()) @map("created_at")
+/// Audit trail of a subscription: purchases, renewals, plan changes, expiry and admin actions.
+model SubscriptionEvent {
+  id             String                @id @default(uuid()) @db.Uuid
+  subscriptionId String                @map("subscription_id") @db.Uuid
+  type           SubscriptionEventType
+  fromPlan       String?               @map("from_plan")
+  toPlan         String?               @map("to_plan")
+  amount         Int?
+  // Null when the system did it (webhook, hourly job).
+  actorId        String?               @map("actor_id") @db.Uuid
+  note           String?
+  createdAt      DateTime              @default(now()) @map("created_at")
 
-  studio Studio @relation(fields: [studioId], references: [id])
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  actor        User?        @relation(fields: [actorId], references: [id])
+
+  @@index([subscriptionId, createdAt])
+  @@index([type, createdAt])
+  @@map("subscription_events")
+}
+
+/// Platform settings edited by admins, e.g. `alerts` (reminder days, grace days, digest time).
+model PlatformSetting {
+  key         String   @id
+  value       Json
+  updatedById String?  @map("updated_by_id") @db.Uuid
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_settings")
+}
+
+/// Platform-wide sequences, e.g. `invoice:2026` for Weddyzone's own GST invoices to studios.
+model PlatformCounter {
+  key   String @id
+  value Int    @default(0)
+
+  @@map("platform_counters")
+}
+
+/// Payment-gateway webhook deliveries already handled. Gateways retry; this makes repeats no-ops.
+model WebhookEvent {
+  id         String   @id
+  provider   String
+  type       String
+  receivedAt DateTime @default(now()) @map("received_at")
+
+  @@map("webhook_events")
+}
+
+/// Discount codes, e.g. the win-back coupon sent some days after a plan expires.
+model Coupon {
+  id             String    @id @default(uuid()) @db.Uuid
+  code           String    @unique
+  subscriptionId String?   @map("subscription_id") @db.Uuid
+  percentOff     Int       @map("percent_off")
+  expiresAt      DateTime  @map("expires_at")
+  redeemedAt     DateTime? @map("redeemed_at")
+  paymentId      String?   @map("payment_id") @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@map("coupons")
+}
+
+model Payment {
+  id               String         @id @default(uuid()) @db.Uuid
+  studioId         String         @map("studio_id") @db.Uuid
+  purpose          PaymentPurpose
+  description      String
+  // Total charged (GST included) and the GST part of it, in paise.
+  amount           Int
+  gst              Int            @default(0)
+  status           PaymentStatus
+  provider         String
+  providerRef      String?        @map("provider_ref")
+  meta             Json?
+  // Plan payments: what was bought and which period it pays for.
+  subscriptionId   String?        @map("subscription_id") @db.Uuid
+  planId           String?        @map("plan_id") @db.Uuid
+  cycle            BillingCycle?
+  periodStart      DateTime?      @map("period_start")
+  periodEnd        DateTime?      @map("period_end")
+  gatewayOrderId   String?        @unique @map("gateway_order_id")
+  gatewayPaymentId String?        @unique @map("gateway_payment_id")
+  invoiceNumber    String?        @unique @map("invoice_number")
+  failureReason    String?        @map("failure_reason")
+  paidAt           DateTime?      @map("paid_at")
+  createdAt        DateTime       @default(now()) @map("created_at")
+
+  studio       Studio        @relation(fields: [studioId], references: [id])
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id])
+  plan         Plan?         @relation(fields: [planId], references: [id])
 
   @@index([studioId, purpose])
   @@index([studioId, createdAt])
+  @@index([purpose, status, createdAt])
   @@map("payments")
 }
 
@@ -856,20 +1107,34 @@ model TicketMessage {
   @@map("ticket_messages")
 }
 
+/// In-app notifications (the bell) and a record of every email/WhatsApp alert sent.
+/// Studio rows have studioId; platform-admin rows have recipientType ADMIN and no studioId
+/// (one feed shared by all admins). `body` is the message.
 model Notification {
-  id        String    @id @default(uuid()) @db.Uuid
-  studioId  String    @map("studio_id") @db.Uuid
-  type      String
-  title     String
-  body      String
-  link      String?
-  icon      String    @default("bell")
-  readAt    DateTime? @map("read_at")
-  createdAt DateTime  @default(now()) @map("created_at")
+  id             String                @id @default(uuid()) @db.Uuid
+  recipientType  NotificationRecipient @default(STUDIO) @map("recipient_type")
+  studioId       String?               @map("studio_id") @db.Uuid
+  channel        NotificationChannel   @default(IN_APP)
+  type           String
+  title          String
+  body           String
+  link           String?
+  icon           String                @default("bell")
+  // The subscription an alert is about (its history on the admin detail page).
+  subscriptionId String?               @map("subscription_id") @db.Uuid
+  // Unique per alert, recipient and channel, e.g. "expiry:<sub>:<deadline>:T-7:STUDIO:EMAIL".
+  dedupeKey      String?               @unique @map("dedupe_key")
+  sentAt         DateTime?             @map("sent_at")
+  error          String?
+  readAt         DateTime?             @map("read_at")
+  createdAt      DateTime              @default(now()) @map("created_at")
 
-  studio Studio @relation(fields: [studioId], references: [id])
+  studio       Studio?       @relation(fields: [studioId], references: [id])
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
 
   @@index([studioId, readAt, createdAt])
+  @@index([recipientType, channel, readAt, createdAt])
+  @@index([subscriptionId, createdAt])
   @@map("notifications")
 }
 

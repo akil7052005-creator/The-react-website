@@ -48,10 +48,40 @@ const schema = z.object({
   MAIL_OUTBOX_DIR: z.string().optional(),
   RATE_LIMIT_AUTH_PER_MIN: z.coerce.number().int().default(10),
   RATE_LIMIT_PUBLIC_PER_MIN: z.coerce.number().int().default(120),
+  // Customer code checks (/selection/auth), per IP per minute.
+  RATE_LIMIT_CODE_PER_MIN: z.coerce.number().int().min(1).default(5),
   // Proxies between the browser and the API. Vercel's /api rewrite + the host's load balancer = 2;
   // too low and every user shares the proxy's IP (and its rate limit), too high and IPs can be spoofed.
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(1),
   FEATURE_FACE_RECOGNITION: bool,
+  RATE_LIMIT_ADMIN_PER_MIN: z.coerce.number().int().default(120),
+  // Photo uploads have their own bucket: a 1,000-photo folder is 1,000 requests within a minute or
+  // two, far past the general limit. Login-only, and plan limits still apply.
+  RATE_LIMIT_UPLOADS_PER_MIN: z.coerce.number().int().min(1).default(6000),
+  // Hourly subscription job (deadline reminders, grace/expiry, admin digest). On unless set to false;
+  // the test suite turns it off and runs the job by hand.
+  JOBS_ENABLED: z
+    .string()
+    .optional()
+    .transform((v) => v === undefined || v === '' || v === 'true' || v === '1'),
+  // Payment gateway webhooks (Razorpay format): HMAC-SHA256 secret set in the gateway dashboard.
+  // Without it POST /webhooks/payments refuses every call (test-mode purchases don't need it).
+  PAYMENT_WEBHOOK_SECRET: z.string().optional(),
+  // Extra addresses for admin alert emails and the daily digest (comma-separated). Every platform
+  // admin's own email gets them too.
+  ADMIN_ALERT_EMAILS: z.string().default(''),
+  // Seller details printed on Weddyzone's GST invoices to studios.
+  PLATFORM_LEGAL_NAME: z.string().default('Weddyzone Studio'),
+  PLATFORM_GSTIN: z.string().optional(),
+  PLATFORM_STATE_CODE: z.string().optional(),
+  PLATFORM_ADDRESS: z.string().optional(),
+  // WhatsApp Cloud API for platform alerts to studios (approved templates). Without it the alert is
+  // recorded with its wa.me link but not delivered. Never charged to the studio's WhatsApp credits.
+  WHATSAPP_CLOUD_TOKEN: z.string().optional(),
+  WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
+  WHATSAPP_TEMPLATE_LANG: z.string().default('en'),
+  // Encrypts admins' two-factor secrets at rest. Falls back to a key derived from JWT_REFRESH_SECRET.
+  ADMIN_2FA_KEY: z.string().optional(),
 })
   .superRefine((c, ctx) => {
     const fail = (path: string, message: string) => ctx.addIssue({ code: 'custom', path: [path], message })

@@ -3,6 +3,9 @@ import { defineConfig, devices } from '@playwright/test'
 // E2E runs against its own database and ports so it never touches dev data:
 //   API  → http://localhost:4100 (DATABASE_URL = E2E_DATABASE_URL, reset + seeded in global-setup)
 //   Web  → http://localhost:5174 (Vite, proxying /api to 4100)
+// E2E_WEB_PORT moves the web server off 5174 when a dev server already uses it.
+const WEB_PORT = process.env.E2E_WEB_PORT ?? '5174'
+const WEB = `http://localhost:${WEB_PORT}`
 const E2E_DB = process.env.E2E_DATABASE_URL ?? 'postgresql://weddyzone@localhost:5433/weddyzone_e2e?schema=public'
 
 export default defineConfig({
@@ -15,7 +18,7 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }]],
   globalSetup: './global-setup.ts',
   use: {
-    baseURL: 'http://localhost:5174',
+    baseURL: WEB,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
@@ -35,19 +38,23 @@ export default defineConfig({
         DATABASE_URL: E2E_DB,
         UPLOAD_DIR: './e2e-uploads',
         MAIL_OUTBOX_DIR: './e2e-mail',
-        APP_URL: 'http://localhost:5174',
-        CORS_ORIGINS: 'http://localhost:5174',
+        APP_URL: WEB,
+        CORS_ORIGINS: WEB,
         RATE_LIMIT_AUTH_PER_MIN: '1000',
         RATE_LIMIT_PUBLIC_PER_MIN: '5000',
+        RATE_LIMIT_CODE_PER_MIN: '1000',
         NODE_ENV: 'development',
+        // No hourly job during the run: its emails would land in the outbox the tests read.
+        JOBS_ENABLED: 'false',
       },
     },
     {
-      command: 'cd ../apps/web && npx vite --port 5174 --strictPort',
-      url: 'http://localhost:5174',
+      command: `cd ../apps/web && npx vite --port ${WEB_PORT} --strictPort`,
+      url: WEB,
       reuseExistingServer: false,
       timeout: 120_000,
-      env: { VITE_DEV_API_PROXY: 'http://localhost:4100' },
+      // Share links use the public address only (never localhost): a reserved example domain here.
+      env: { VITE_DEV_API_PROXY: 'http://localhost:4100', VITE_PUBLIC_APP_URL: 'https://studio.weddyzone.example', VITE_ALLOW_LAN_LINKS: 'false' },
     },
   ],
 })

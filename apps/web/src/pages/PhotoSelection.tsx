@@ -1,371 +1,293 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  SELECTION_STATUS_LABELS,
-  type MessagePreviewDto,
-  type Paginated,
-  type SelectionDto,
-  type SendResultDto,
-} from '@weddyzone/shared'
-import { useState } from 'react'
-import {
-  PageHeader,
-  Card,
-  StatCard,
-  StatusPill,
-  Progress,
-  Avatar,
-  FeatureTooltip,
-  FeatureBar,
-  EmptyState,
-  ErrorState,
-  TableSkeleton,
-  Pagination,
-  type FeatureBarItem,
-} from '../components/ui'
-import { formatDate, formatNumber } from '../utils/format'
-import { featureInfo } from '../data/featureInfo'
-import WhatsAppPreviewModal from '../components/WhatsAppPreviewModal'
-import { NewSelectionModal } from '../components/selection/NewSelectionModal'
-import { SelectionManageModal } from '../components/selection/SelectionManageModal'
-import { Select } from '../components/Select'
+import type { Paginated, SelectionDto } from '@weddyzone/shared'
+import { useEffect, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
 import { useConfirm } from '../components/Modal'
+import { EventDetailsModal } from '../components/selection/EventDetailsModal'
+import { ResetSelectionModal } from '../components/selection/ResetSelectionModal'
+import { LIVE_POLL_MS, refreshSelection, selectionPath } from '../components/selection/selectionUi'
+import { SelectionStatusPill } from '../components/selection/SelectionStatusPill'
+import { copyToClipboard, ShareModal } from '../components/selection/ShareModal'
+import { StudioDefaultsCard } from '../components/selection/StudioDefaults'
+import { EmptyState, ErrorState, Skeleton, TableSkeleton } from '../components/ui'
 import { useDebouncedUrlSearch, useUrlState } from '../hooks/useUrlState'
 import { api } from '../lib/api'
 import { toastError } from '../lib/query'
-import { sendViaWhatsApp } from '../lib/whatsapp'
+import { formatNumber } from '../utils/format'
 
-const selectionFeatures: FeatureBarItem[] = [
-  {
-    title: 'Smart Quota Lock',
-    badge: 'Auto Limits',
-    icon: 'lock',
-    summary: 'Prevents couples from picking more photos than their package includes.',
-    highlights: ['Counter shows remaining picks', 'Picks beyond the quota are blocked', 'Zero studio manual counting needed'],
-    tip: "Set the quota to match the number of photos in the couple's package."
-  },
-  {
-    title: 'Lightroom Filename Export',
-    badge: 'Faster Culling',
-    icon: 'file-earmark-code',
-    summary: 'Download picked filenames as a TXT list for a Lightroom "Filename contains" filter, or as a CSV with who picked each photo and their comments.',
-    highlights: ['Zero manual file searching in Finder/Explorer', 'Works with any tool that filters by filename', 'CSV includes picks and comments per photo'],
-    tip: 'Paste the TXT list into a Lightroom Library filter to find every picked RAW at once.'
-  },
-  {
-    title: 'WhatsApp Nudges',
-    badge: '1-Click Remind',
-    icon: 'whatsapp',
-    summary: 'Send a personalized WhatsApp message with the private gallery link to nudge couples before their deadline.',
-    highlights: ["Personalized with the client's name", 'Includes selection count progress', 'Direct access without passwords'],
-    tip: 'Send a reminder a few days before the selection deadline.'
-  },
-  {
-    title: 'Family Multi-Hearting',
-    badge: 'Collaborative',
-    icon: 'heart-half',
-    summary: 'Several family members can pick photos under their own name from the same link.',
-    highlights: ['See who picked each photo', 'One shared quota for the whole family', 'Comments on individual photos'],
-    tip: 'Reduces wedding family disagreements over album selections.'
-  }
-]
-
-const statusFilters = [
-  { value: '', label: 'All statuses' },
-  { value: 'active', label: 'Active (not submitted)' },
-  { value: 'DRAFT', label: 'Draft' },
-  { value: 'SENT', label: 'Awaiting Selection' },
-  { value: 'IN_PROGRESS', label: 'In Progress' },
-  { value: 'SUBMITTED', label: 'Completed' },
-  { value: 'EXPIRED', label: 'Expired' },
-]
+const PAGE_SIZES = ['10', '25', '50', '100']
 
 interface Summary {
+  selections: number
+  photos: number
   active: number
   completed: number
   picked: number
+  videos?: number
   avgTurnaroundDays: number | null
+}
+
+
+const statusFilterLabel: Record<string, string> = {
+  SUBMITTED: 'Selected (submitted by the client)',
+  DELIVERED: 'Delivered',
+  active: 'Active selections',
+  DRAFT: 'Drafts',
+  UPLOADING: 'Uploading',
+  SENT: 'Shared, waiting for the client',
+  IN_PROGRESS: 'In progress',
+  EXPIRED: 'Expired',
+}
+
+/** Column header that sorts the table: click once for ascending, again for descending. */
+function SortHeader({ label, field, sort, onSort, className }: { label: string; field: string; sort: string; onSort: (s: string) => void; className?: string }) {
+  const dir = sort === field ? 'asc' : sort === `-${field}` ? 'desc' : null
+  return (
+    <th className={className} aria-sort={dir === 'asc' ? 'ascending' : dir === 'desc' ? 'descending' : 'none'}>
+      <button type="button" className="pl-sort" onClick={() => onSort(dir === 'asc' ? `-${field}` : field)}>
+        {label}
+        <i className={`bi bi-${dir === 'asc' ? 'sort-up' : dir === 'desc' ? 'sort-down' : 'arrow-down-up'}`} aria-hidden="true" />
+      </button>
+    </th>
+  )
+}
+
+function OverviewTile({ icon, label, value }: { icon: string; label: string; value: number | undefined }) {
+  return (
+    <div className="pl-tile">
+      <i className={`bi bi-${icon}`} aria-hidden="true" />
+      <div>
+        <span>{label}</span>
+        <strong>{value === undefined ? <Skeleton width={36} height={20} /> : formatNumber(value)}</strong>
+      </div>
+    </div>
+  )
+}
+
+/** One small count in CONTENT, e.g. "7 🖼", with its name as a tooltip. */
+function CountChip({ kind, icon, value, label }: { kind: string; icon: string; value: number; label: string }) {
+  return (
+    <span className={`pl-chip ${kind}`} title={label}>
+      {formatNumber(value)} <i className={`bi bi-${icon}`} aria-hidden="true" />
+      <span className="sr-only">{label}</span>
+    </span>
+  )
+}
+
+/** Drawn here (no image file): a stack of photos with a check, in the app's crimson. */
+function EmptyArt() {
+  return (
+    <svg className="pl-empty-art" viewBox="0 0 160 120" aria-hidden="true">
+      <rect x="28" y="22" width="84" height="64" rx="10" fill="#fdecef" transform="rotate(-8 70 54)" />
+      <rect x="44" y="28" width="88" height="66" rx="10" fill="#fff" stroke="#f6cdd5" strokeWidth="2" />
+      <circle cx="68" cy="50" r="7" fill="#f6cdd5" />
+      <path d="M50 86l22-22 14 14 10-10 30 18v4a6 6 0 0 1-6 6H56a6 6 0 0 1-6-6z" fill="#f8b4c3" />
+      <circle cx="126" cy="90" r="16" fill="#e8174a" />
+      <path d="M119 90l5 5 9-10" fill="none" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
 }
 
 function PhotoSelection() {
   const qc = useQueryClient()
   const confirm = useConfirm()
-  const [url, setUrl] = useUrlState({ search: '', status: '', page: '1', sort: '', selection: '', new: '' })
-  const [search, setSearch] = useDebouncedUrlSearch(url.search, (v) => setUrl({ search: v }))
-  const [preview, setPreview] = useState(false)
+  const navigate = useNavigate()
+  const [url, setUrl] = useUrlState({ search: '', status: '', page: '1', sort: '', limit: '10', selection: '', tab: '', new: '', create: '' })
+  const [search, setSearch] = useDebouncedUrlSearch(url.search, (v) => setUrl({ search: v, page: '1' }))
+  const [sharing, setSharing] = useState<SelectionDto | null>(null)
+  const [reopening, setReopening] = useState<SelectionDto | null>(null)
   const page = Math.max(1, Number(url.page) || 1)
+  const limit = PAGE_SIZES.includes(url.limit) ? Number(url.limit) : 10
 
   const list = useQuery({
-    queryKey: ['selections', { search: url.search, status: url.status, page, sort: url.sort }],
-    queryFn: () => api.get<Paginated<SelectionDto>>('/selections', { search: url.search, status: url.status, page, limit: 10, sort: url.sort }),
+    queryKey: ['selections', { search: url.search, status: url.status, page, sort: url.sort, limit }],
+    queryFn: () => api.get<Paginated<SelectionDto>>('/selections', { search: url.search, status: url.status, page, limit, sort: url.sort }),
     placeholderData: (prev) => prev,
+    // The customer submits from their phone: the status changes here without a refresh.
+    refetchInterval: LIVE_POLL_MS,
+    refetchOnWindowFocus: true,
   })
-  const summary = useQuery({ queryKey: ['selections-summary'], queryFn: () => api.get<Summary>('/selections/summary') })
+  const summary = useQuery({ queryKey: ['selections-summary'], queryFn: () => api.get<Summary>('/selections/summary'), refetchInterval: LIVE_POLL_MS, refetchOnWindowFocus: true })
 
-  const managed = list.data?.data.find((s) => s.id === url.selection) ?? null
-  const managedQ = useQuery({
-    queryKey: ['selection', url.selection],
-    queryFn: () => api.get<SelectionDto>(`/selections/${url.selection}`),
-    enabled: Boolean(url.selection) && !managed,
-  })
+  const rows = list.data?.data ?? []
+  const total = list.data?.meta.total ?? 0
+  const pages = Math.max(1, Math.ceil(total / limit))
+  const from = total === 0 ? 0 : (page - 1) * limit + 1
+  const to = Math.min(page * limit, total)
 
-  // "Preview Client Message" shows the reminder for the most urgent live selection.
-  const firstActive = useQuery({
-    queryKey: ['selections', { status: 'active', limit: 1, sort: 'deadline' }],
-    queryFn: () => api.get<Paginated<SelectionDto>>('/selections', { status: 'active', limit: 1, sort: 'deadline' }),
-    enabled: preview,
-  })
-  const previewId = firstActive.data?.data[0]?.id
-  const previewQ = useQuery({
-    queryKey: ['selection-preview', previewId, 'reminder'],
-    queryFn: () => api.get<MessagePreviewDto>(`/selections/${previewId}/message-preview`, { type: 'reminder' }),
-    enabled: Boolean(previewId),
-  })
+  // Old links (?selection=<id>&tab=…) open the selection's event page.
+  useEffect(() => {
+    if (url.selection) navigate(`${selectionPath(url.selection)}${url.tab === 'settings' ? '?tab=settings' : url.tab === 'share' ? '?tab=share' : ''}`, { replace: true })
+  }, [url.selection, url.tab, navigate])
 
-  const remind = (s: SelectionDto) =>
+  // After a delete empties the last page, step back to the page before it.
+  useEffect(() => {
+    if (list.data && !list.isFetching && rows.length === 0 && page > 1) setUrl({ page: String(page - 1) })
+  }, [list.data, list.isFetching, rows.length, page, setUrl])
+
+  const remove = (s: SelectionDto) =>
     confirm({
-      title: `Remind ${s.client.name}?`,
-      message: (
-        <>
-          We'll open WhatsApp with a reminder for <strong>{s.event.title}</strong> ({s.pickedCount} of {s.quota} picked, deadline {formatDate(s.deadline)}). This uses{' '}
-          <strong>1 credit</strong>.
-        </>
-      ),
-      confirmLabel: 'Send reminder',
-      icon: 'whatsapp',
-      onConfirm: () =>
-        sendViaWhatsApp(
-          () => api.post<SendResultDto>(`/selections/${s.id}/${s.status === 'DRAFT' ? 'send' : 'remind'}`),
-          qc,
-          `Reminder sent to ${s.client.name}`,
-        )
-          .then(() => qc.invalidateQueries({ queryKey: ['selections'] }))
-          .catch((e) => {
-            toastError(e)
-            throw e
-          }),
+      title: 'Delete this event?',
+      message: 'This will remove all its photos and selections.',
+      confirmLabel: 'Delete',
+      tone: 'danger',
+      onConfirm: async () => {
+        try {
+          await api.delete(`/selections/${s.id}`)
+          toast.success(`${s.event.title} deleted`)
+          refreshSelection(qc, s.id)
+        } catch (e) {
+          toastError(e)
+          throw e
+        }
+      },
     })
 
   const sum = summary.data
-  const rows = list.data?.data ?? []
+  const filtered = Boolean(url.search || url.status)
+  const addOpen = url.new === '1' || url.create === '1'
+
+  const copyCode = async (code: string) => {
+    if (await copyToClipboard(code)) toast.success('Code copied')
+    else toast.error('Could not copy — your browser blocked the clipboard')
+  }
+  const sortBy = (s: string) => setUrl({ sort: s })
 
   return (
-    <div className="stack">
-      <PageHeader
-        eyebrow="Services"
-        featureBadge="AI Culling & Proofing"
-        title="Photo Selection Portal"
-        subtitle="Share private branded galleries where couples heart and select their favorite shots. Export the picks as a filename list for your editing catalog."
-        actions={
-          <>
-            <FeatureTooltip
-              title="Preview Client WhatsApp Notification"
-              summary="See the realistic smartphone WhatsApp message that couples receive with their gallery link."
-              position="bottom"
-              width={270}
-            >
-              <button className="btn btn-ghost" onClick={() => setPreview(true)}>
-                <i className="bi bi-whatsapp" style={{ color: 'var(--success)' }} /> Preview Client Message
-              </button>
-            </FeatureTooltip>
-
-            <FeatureTooltip
-              title="Create New Selection Gallery"
-              badge="Client Link"
-              icon="plus-circle"
-              summary="Upload watermarked thumbnails and assign maximum selection quota for client album proofing."
-              position="bottom"
-              width={280}
-            >
-              <button className="btn btn-primary" onClick={() => setUrl({ new: '1' })}>
-                <i className="bi bi-plus-lg" />
-                New Selection
-              </button>
-            </FeatureTooltip>
-          </>
-        }
-      />
-
-      {/* Feature Capabilities Ribbon */}
-      <FeatureBar items={selectionFeatures} />
-
-      <div className="grid grid-4">
-        <StatCard
-          icon="hourglass-split"
-          label="Active Selections"
-          value={sum ? sum.active : '—'}
-          tone="gold"
-          tooltip={{
-            title: 'Galleries Awaiting Client Picks',
-            badge: `${sum?.active ?? 0} Active`,
-            icon: 'hourglass-split',
-            summary: 'Couples currently have access to their selection portal and are picking album favorites.',
-            highlights: ['Real-time quota lock is active', 'Track who is actively viewing photos right now'],
-            tip: 'Check in on selections that have been idle for more than 7 days.',
-          }}
-        />
-        <StatCard
-          icon="check2-circle"
-          label="Completed"
-          value={sum ? sum.completed : '—'}
-          tone="green"
-          tooltip={{
-            title: 'Finalized Client Selections',
-            badge: `${sum?.completed ?? 0} Ready`,
-            icon: 'check2-circle',
-            summary: 'Couples have locked their selections and submitted them for album design.',
-            highlights: ['Ready for 1-click Lightroom XML export', 'Client receives confirmation notification'],
-            tip: 'Move completed selections straight into a Digital Album.',
-          }}
-        />
-        <StatCard
-          icon="heart"
-          label="Photos Picked"
-          value={sum ? formatNumber(sum.picked) : '—'}
-          tone="wine"
-          tooltip={{
-            title: 'Total Photos Favorited',
-            badge: `${formatNumber(sum?.picked ?? 0)} Hearts`,
-            icon: 'heart',
-            summary: 'Cumulative number of photos favorited by clients across all active weddings.',
-          }}
-        />
-        <StatCard
-          icon="lightning-charge"
-          label="Avg. Turnaround"
-          value={sum?.avgTurnaroundDays != null ? `${sum.avgTurnaroundDays} days` : '—'}
-          tone="blue"
-          tooltip={{
-            title: 'Average Selection Speed',
-            badge: 'From your data',
-            icon: 'lightning-charge',
-            summary: 'Time elapsed between gallery link delivery and client submission of final album picks.',
-          }}
-        />
+    <div className="stack ps-page pl-page">
+      <div className="pl-head">
+        <h1>Photo Selection</h1>
+        <button type="button" className="pl-add" onClick={() => setUrl({ new: '1' })}>
+          <i className="bi bi-plus-lg" /> Add Photo Selection
+        </button>
       </div>
 
-      <Card title="All Client Selections" subtitle="Point cursor at any client or progress bar to view details" feature={featureInfo.photoSelection} flush>
-        <div className="list-toolbar">
-          <label className="search">
-            <i className="bi bi-search" />
-            <input type="search" placeholder="Search couple, event or SEL code" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search selections" />
+      <section className="pl-card" aria-labelledby="pl-overview">
+        <h2 id="pl-overview" className="pl-title">
+          Studio snapshot
+        </h2>
+        {summary.isError ? (
+          <ErrorState error={summary.error} onRetry={() => summary.refetch()} />
+        ) : (
+          <div className="pl-tiles" data-testid="overview">
+            <OverviewTile icon="calendar-event" label="Total Events" value={sum?.selections} />
+            <OverviewTile icon="image" label="Total Images" value={sum?.photos} />
+            <OverviewTile icon="check-circle" label="Total Selected" value={sum?.picked} />
+            <OverviewTile icon="camera-video" label="Total Videos" value={sum ? (sum.videos ?? 0) : undefined} />
+          </div>
+        )}
+      </section>
+
+      <section className="pl-card pl-table-card" aria-label="All photo selections">
+        <div className="pl-toolbar">
+          <label className="pl-size">
+            <select aria-label="Entries per page" value={String(limit)} onChange={(e) => setUrl({ limit: e.target.value, page: '1' })}>
+              {PAGE_SIZES.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+            <span>entries per page</span>
           </label>
-          <Select<string>
-            aria-label="Filter by status"
-            options={statusFilters}
-            value={statusFilters.find((f) => f.value === url.status) ?? statusFilters[0]}
-            onChange={(o) => setUrl({ status: o?.value ?? '' })}
-          />
-          <Select<string>
-            aria-label="Sort"
-            options={[
-              { value: '', label: 'Newest first' },
-              { value: 'deadline', label: 'Deadline (soonest)' },
-              { value: '-deadline', label: 'Deadline (latest)' },
-            ]}
-            value={[{ value: '', label: 'Newest first' }, { value: 'deadline', label: 'Deadline (soonest)' }, { value: '-deadline', label: 'Deadline (latest)' }].find((o) => o.value === url.sort)}
-            onChange={(o) => setUrl({ sort: o?.value ?? '' })}
-          />
+          <label className="pl-search">
+            <i className="bi bi-search" aria-hidden="true" />
+            <input type="search" placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search by project, customer or code" />
+          </label>
         </div>
+
+        {url.status && (
+          <p className="pl-filter">
+            Showing <strong>{statusFilterLabel[url.status] ?? url.status}</strong>
+            <button className="link" onClick={() => setUrl({ status: '' })}>
+              Show all
+            </button>
+          </p>
+        )}
 
         {list.isPending ? (
           <TableSkeleton rows={5} cols={6} />
         ) : list.isError ? (
           <ErrorState error={list.error} onRetry={() => list.refetch()} />
         ) : rows.length === 0 ? (
-          url.search || url.status ? (
+          filtered ? (
             <EmptyState
               icon="search"
-              title="No selections match"
-              text="Try a different search or status."
+              title="No events match"
+              text="Try a different project, customer or code."
               action={
-                <button className="btn btn-ghost" onClick={() => setUrl({ search: '', status: '' })}>
-                  Clear filters
+                <button className="btn btn-ghost" onClick={() => setUrl({ search: '', status: '', page: '1' })}>
+                  Clear search
                 </button>
               }
             />
           ) : (
-            <EmptyState
-              icon="images"
-              title="No selections yet"
-              text="Create a selection, upload the event photos, and share the private link with your couple."
-              action={
-                <button className="btn btn-primary" onClick={() => setUrl({ new: '1' })}>
-                  <i className="bi bi-plus-lg" /> New Selection
-                </button>
-              }
-            />
+            <div className="pl-empty">
+              <EmptyArt />
+              <p>No photo selections yet</p>
+              <button type="button" className="pl-add" onClick={() => setUrl({ new: '1' })}>
+                <i className="bi bi-plus-lg" /> Add Photo Selection
+              </button>
+            </div>
           )
         ) : (
-          <div className="table-wrap">
-            <table className="table">
+          <div className="pl-scroll">
+            <table className="pl-table" data-testid="selections-table">
               <thead>
                 <tr>
-                  <th>Event & ID</th>
-                  <th>Client</th>
-                  <th style={{ minWidth: 200 }}>
-                    <FeatureTooltip title="Selection Quota Progress" summary="Number of photos chosen by the couple versus the allocated package limit." position="top" width={240}>
-                      <span className="table-th-interactive">
-                        Selection Progress <i className="bi bi-info-circle" />
-                      </span>
-                    </FeatureTooltip>
-                  </th>
-                  <th>Deadline</th>
-                  <th>Status</th>
-                  <th className="num">Actions</th>
+                  <SortHeader label="S.No" field="created" sort={url.sort} onSort={sortBy} className="pl-c-sno" />
+                  <SortHeader label="Project" field="project" sort={url.sort} onSort={sortBy} className="pl-c-project" />
+                  <SortHeader label="Content" field="photos" sort={url.sort} onSort={sortBy} className="pl-c-data" />
+                  <SortHeader label="Code" field="code" sort={url.sort} onSort={sortBy} className="pl-c-code" />
+                  <SortHeader label="Status" field="status" sort={url.sort} onSort={sortBy} className="pl-c-status" />
+                  <th className="pl-c-action">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((s) => {
-                  const left = s.quota - s.pickedCount
-                  const canRemind = s.status !== 'SUBMITTED' && s.status !== 'EXPIRED' && s.photoCount > 0
+                {rows.map((s, i) => {
                   return (
                     <tr key={s.id}>
-                      <td>
-                        <div className="cell-main">{s.event.title}</div>
-                        <div className="cell-sub mono">{s.code}</div>
-                      </td>
-                      <td>
-                        <div className="person">
-                          <Avatar name={s.client.name} size={30} />
+                      <td className="pl-c-sno">{from + i}</td>
+                      <td className="pl-c-project">
+                        <strong className="pl-name" title={s.client.name}>
                           {s.client.name}
+                        </strong>
+                        <span className="pl-event" title={s.event.title}>
+                          {s.event.title}
+                        </span>
+                      </td>
+                      <td className="pl-c-data">
+                        <div className="pl-chips">
+                          <CountChip kind="folders" icon="folder2" value={s.folderCount ?? 0} label="Folders" />
+                          <CountChip kind="images" icon="image" value={s.photoCount} label="Images" />
+                          <CountChip kind="selected" icon="check-lg" value={s.pickedCount} label="Selected" />
+                          <CountChip kind="videos" icon="camera-video" value={s.videoCount ?? 0} label="Videos" />
                         </div>
                       </td>
-                      <td>
-                        <div className="progress-meta" style={{ marginBottom: 6 }}>
-                          <span>
-                            <strong>{formatNumber(s.pickedCount)}</strong> / {formatNumber(s.quota)} photos
-                          </span>
-                          <small style={{ color: 'var(--gold)', fontWeight: 600 }}>{left <= 0 ? 'Quota Complete' : `${left} left`}</small>
-                        </div>
-                        <Progress value={s.pickedCount} max={s.quota} label={`${s.event.title} selection progress`} />
+                      <td className="pl-c-code">
+                        <span className="pl-code">
+                          <button type="button" className="pl-code-num" onClick={() => void copyCode(s.code)} title="Copy code" aria-label={`Copy code ${s.code}`}>
+                            {s.code}
+                          </button>
+                          <button type="button" className="pl-code-send" onClick={() => setSharing(s)} aria-label={`Send code ${s.code} to ${s.client.name}`}>
+                            Send
+                          </button>
+                        </span>
                       </td>
-                      <td>
-                        <span style={{ fontWeight: 500 }}>{formatDate(s.deadline)}</span>
+                      <td className="pl-c-status">
+                        <SelectionStatusPill selection={s} className="pl-status" onReopen={() => setReopening(s)} />
                       </td>
-                      <td>
-                        <StatusPill status={SELECTION_STATUS_LABELS[s.status]} />
-                      </td>
-                      <td className="num">
-                        <div className="row-actions">
-                          <FeatureTooltip
-                            title="WhatsApp Nudge"
-                            summary={
-                              canRemind
-                                ? `Send a reminder to ${s.client.name} to complete their selection before ${formatDate(s.deadline)}.`
-                                : s.photoCount === 0
-                                  ? 'Upload photos first.'
-                                  : 'Nothing to remind — this selection is closed.'
-                            }
-                            position="left"
-                            width={240}
-                          >
-                            <button className="btn btn-sm btn-ghost" onClick={() => remind(s)} disabled={!canRemind}>
-                              <i className="bi bi-whatsapp" />
-                              Remind
-                            </button>
-                          </FeatureTooltip>
-                          <button className="btn btn-sm btn-ghost" onClick={() => setUrl({ selection: s.id })} aria-label={`Manage ${s.code}`}>
-                            <i className="bi bi-sliders" /> Manage
+                      <td className="pl-c-action">
+                        <div className="pl-actions">
+                          <Link className="pl-act upload" to={selectionPath(s.id)} aria-label={`Upload & Download: ${s.event.title}`}>
+                            <i className="bi bi-cloud-arrow-up" /> Upload &amp; Download
+                          </Link>
+                          <Link className="pl-act manage" to={`/photo-selection/${s.id}/settings`} aria-label={`Manage ${s.event.title}`}>
+                            <i className="bi bi-gear" /> Manage
+                          </Link>
+                          <button type="button" className="pl-act delete" onClick={() => void remove(s)} aria-label={`Delete ${s.event.title}`}>
+                            <i className="bi bi-trash" /> Delete
                           </button>
                         </div>
                       </td>
@@ -376,19 +298,48 @@ function PhotoSelection() {
             </table>
           </div>
         )}
-        {list.data && <Pagination page={page} limit={list.data.meta.limit} total={list.data.meta.total} onPage={(p) => setUrl({ page: String(p) })} />}
-      </Card>
 
-      <NewSelectionModal open={url.new === '1'} onClose={() => setUrl({ new: '' })} />
-      {url.selection && (managed ?? managedQ.data) && <SelectionManageModal selection={(managed ?? managedQ.data)!} onClose={() => setUrl({ selection: '' })} />}
+        {list.data && total > 0 && (
+          <div className="pl-foot">
+            <span>
+              Showing {from} to {to} of {total} {total === 1 ? 'entry' : 'entries'}
+            </span>
+            <nav className="pl-pager" aria-label="Pages">
+              <button type="button" onClick={() => setUrl({ page: String(page - 1) })} disabled={page <= 1}>
+                Previous
+              </button>
+              {Array.from({ length: pages }, (_, n) => n + 1)
+                .filter((n) => n === 1 || n === pages || Math.abs(n - page) <= 1)
+                .map((n, idx, shown) => (
+                  <span key={n} className="pl-pager-group">
+                    {idx > 0 && n - shown[idx - 1] > 1 && <span className="pl-gap">…</span>}
+                    <button type="button" className={n === page ? 'on' : ''} aria-current={n === page ? 'page' : undefined} onClick={() => setUrl({ page: String(n) })}>
+                      {n}
+                    </button>
+                  </span>
+                ))}
+              <button type="button" onClick={() => setUrl({ page: String(page + 1) })} disabled={page >= pages}>
+                Next
+              </button>
+            </nav>
+          </div>
+        )}
+      </section>
 
-      <WhatsAppPreviewModal
-        isOpen={preview}
-        onClose={() => setPreview(false)}
-        preview={previewQ.data}
-        loading={firstActive.isPending || (Boolean(previewId) && previewQ.isPending)}
-        error={firstActive.isSuccess && !previewId ? 'No active selection yet — create one to preview the client message.' : null}
+      <StudioDefaultsCard />
+
+      <EventDetailsModal
+        key={addOpen ? 'add-open' : 'add-closed'}
+        open={addOpen}
+        onClose={() => setUrl({ new: '', create: '' })}
+        // Closes the dialog and shows page 1, newest first, so the new event is the top row.
+        onCreated={() => {
+          setSearch('')
+          setUrl({ new: '', create: '', page: '1', sort: '', search: '', status: '' })
+        }}
       />
+      {sharing && <ShareModal key={sharing.id} selection={sharing} onClose={() => setSharing(null)} />}
+      {reopening && <ResetSelectionModal key={reopening.id} selection={reopening} onClose={() => setReopening(null)} />}
     </div>
   )
 }

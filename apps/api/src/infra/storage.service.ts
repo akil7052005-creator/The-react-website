@@ -12,6 +12,12 @@ export function newStorageKey(ext: string, now = new Date()) {
   return `${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, '0')}/${randomUUID()}.${ext}`
 }
 
+/** Inclusive byte range, for video seeking (HTTP Range). */
+export interface ByteRange {
+  start: number
+  end: number
+}
+
 /**
  * Where uploaded bytes live: S3StorageService (R2 / S3) when S3_BUCKET is set, otherwise
  * LocalStorageService (UPLOAD_DIR on disk, for development). Callers only see storage keys.
@@ -19,8 +25,8 @@ export function newStorageKey(ext: string, now = new Date()) {
 export abstract class StorageService {
   /** Stores the bytes and returns an opaque storage key. */
   abstract save(data: Buffer, ext: string, contentType: string): Promise<string>
-  /** A stream of the stored bytes, or null if nothing is stored under the key. */
-  abstract open(key: string): Promise<Readable | null>
+  /** A stream of the stored bytes (or bytes start..end, inclusive), or null if nothing is stored under the key. */
+  abstract open(key: string, range?: ByteRange): Promise<Readable | null>
   abstract remove(key: string): Promise<void>
 }
 
@@ -45,14 +51,14 @@ export class LocalStorageService extends StorageService {
     return key
   }
 
-  async open(key: string): Promise<Readable | null> {
+  async open(key: string, range?: ByteRange): Promise<Readable | null> {
     const full = this.pathFor(key)
     try {
       await access(full)
     } catch {
       return null
     }
-    return createReadStream(full)
+    return createReadStream(full, range)
   }
 
   async remove(key: string): Promise<void> {
@@ -86,9 +92,11 @@ export class S3StorageService extends StorageService {
     return key
   }
 
-  async open(key: string): Promise<Readable | null> {
+  async open(key: string, range?: ByteRange): Promise<Readable | null> {
     try {
-      const out = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }))
+      const out = await this.client.send(
+        new GetObjectCommand({ Bucket: this.bucket, Key: key, Range: range ? 'bytes=' + range.start + '-' + range.end : undefined }),
+      )
       return (out.Body as Readable | undefined) ?? null
     } catch (e) {
       if (isMissing(e)) return null

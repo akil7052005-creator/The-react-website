@@ -16,7 +16,7 @@ let counter = 0
 
 export async function createTestApp() {
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile()
-  const app = moduleRef.createNestApplication({ logger: ['error'] })
+  const app = moduleRef.createNestApplication({ logger: ['error'], rawBody: true })
   configureApp(app)
   await app.init()
   return {

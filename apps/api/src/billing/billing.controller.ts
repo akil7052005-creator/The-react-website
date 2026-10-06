@@ -2,7 +2,9 @@ import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query } fr
 import { ApiTags } from '@nestjs/swagger'
 import type { Prisma } from '@prisma/client'
 import {
+  autoRenewSchema,
   buyCreditsSchema,
+  cancelSubscriptionSchema,
   changePlanSchema,
   CREDIT_PACKS,
   listQuerySchema,
@@ -11,21 +13,25 @@ import {
   PAYMENT_METHODS,
   recordPaymentSchema,
   type ListQuery,
+  type PlatformInvoiceDto,
 } from '@weddyzone/shared'
 import { z } from 'zod'
 import { StudioId } from '../auth/auth.decorators'
+import { notFound } from '../common/errors'
 import { paginate, skipTake, startOfMonthUtc } from '../common/util'
 import { ApiListQuery, ApiZodBody, zod } from '../common/zod'
 import { messageDto } from '../core/messaging.service'
 import { PlansService } from '../core/plans.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { InvoicesService } from './invoices.service'
+import { platformInvoiceDto } from '../subscriptions/invoice'
 import { SubscriptionsService } from './subscriptions.service'
 
 @ApiTags('plans')
 @Controller()
 export class PlansController {
   constructor(
+    private readonly prisma: PrismaService,
     private readonly plans: PlansService,
     private readonly subs: SubscriptionsService,
   ) {}
@@ -50,13 +56,35 @@ export class PlansController {
   @HttpCode(200)
   @ApiZodBody(changePlanSchema)
   change(@StudioId() studioId: string, @Body(zod(changePlanSchema)) body: z.output<typeof changePlanSchema>) {
-    return this.subs.changePlan(studioId, body.planCode, body.cycle)
+    return this.subs.changePlan(studioId, body.planCode, body.cycle, body.couponCode)
   }
 
+  /** Cancel at the end of the period; the studio tells us why (shown to admins). */
   @Post('subscription/cancel')
   @HttpCode(200)
-  cancel(@StudioId() studioId: string) {
-    return this.subs.cancel(studioId)
+  @ApiZodBody(cancelSubscriptionSchema)
+  cancel(@StudioId() studioId: string, @Body(zod(cancelSubscriptionSchema)) body: z.output<typeof cancelSubscriptionSchema>) {
+    return this.subs.cancel(studioId, body.reason, body.details)
+  }
+
+  @Post('subscription/auto-renew')
+  @HttpCode(200)
+  @ApiZodBody(autoRenewSchema)
+  autoRenew(@StudioId() studioId: string, @Body(zod(autoRenewSchema)) body: z.output<typeof autoRenewSchema>) {
+    return this.subs.setAutoRenew(studioId, body.autoRenew)
+  }
+
+  @Get('me/subscription')
+  banner(@StudioId() studioId: string) {
+    return this.subs.banner(studioId)
+  }
+
+  /** Weddyzone's GST tax invoice for one of the studio's plan payments. */
+  @Get('subscription/payments/:id/invoice')
+  async invoice(@StudioId() studioId: string, @Param('id', ParseUUIDPipe) id: string): Promise<PlatformInvoiceDto> {
+    const p = await this.prisma.payment.findFirst({ where: { id, studioId, purpose: 'SUBSCRIPTION', status: 'SUCCESS' }, include: { studio: true } })
+    if (!p?.invoiceNumber) throw notFound('Invoice')
+    return platformInvoiceDto(p)
   }
 
   @Post('subscription/resume')

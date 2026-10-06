@@ -28,7 +28,18 @@ function invalidate(qc: ReturnType<typeof useQueryClient>) {
 }
 
 /** New Event (create) or Edit Event (when `event` is given). */
-export function EventModal({ open, onClose, event }: { open: boolean; onClose: () => void; event?: EventDto | null }) {
+export function EventModal({
+  open,
+  onClose,
+  event,
+  onCreated,
+}: {
+  open: boolean
+  onClose: () => void
+  event?: EventDto | null
+  /** Called with the new event after it is created (not after an edit). */
+  onCreated?: (event: EventDto) => void
+}) {
   const editing = Boolean(event)
   const qc = useQueryClient()
   const confirm = useConfirm()
@@ -56,6 +67,7 @@ export function EventModal({ open, onClose, event }: { open: boolean; onClose: (
       toast.success(editing ? `Event ${e.code} updated` : `Event ${e.code} created`)
       invalidate(qc)
       form.reset()
+      if (!editing) onCreated?.(e)
       onClose()
     },
     onError: (e) => applyApiErrors(form, e),

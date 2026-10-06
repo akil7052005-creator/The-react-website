@@ -34,6 +34,7 @@ export class StudioMapper {
       gstin: studio.gstin,
       pan: studio.pan,
       website: studio.website,
+      instagramHandle: studio.instagramHandle,
       bio: studio.bio,
       logoUrl: studio.logoFileId ? fileUrls.public(studio.logoFileId) : null,
       referralCode: studio.referralCode,

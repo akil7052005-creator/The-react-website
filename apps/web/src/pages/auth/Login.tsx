@@ -1,11 +1,12 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { loginSchema, type MeDto } from '@weddyzone/shared'
+import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { ME_KEY, useMeQuery } from '../../auth/AuthProvider'
 import { applyApiErrors, SubmitButton, TextField, useZodForm } from '../../components/form/form'
 import { PageSkeleton, Spinner } from '../../components/ui'
-import { api } from '../../lib/api'
+import { api, isApiError } from '../../lib/api'
 import { toastError } from '../../lib/query'
 import { AuthLayout, PasswordField } from './AuthLayout'
 
@@ -26,7 +27,9 @@ export default function Login() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const me = useMeQuery()
-  const form = useZodForm(loginSchema, { defaultValues: { email: '', password: '' } })
+  const form = useZodForm(loginSchema, { defaultValues: { email: '', password: '', otp: '' } })
+  // Shown once the API says this account uses two-factor sign-in.
+  const [needsOtp, setNeedsOtp] = useState(false)
 
   const login = useMutation({
     mutationFn: (body: object) => api.post<MeDto>('/auth/login', body),
@@ -35,7 +38,10 @@ export default function Login() {
       toast.success(`Welcome back, ${data.user.name.split(' ')[0]}!`)
       navigate(safeNext(params, data.user.role === 'SUPER_ADMIN'), { replace: true })
     },
-    onError: (e) => applyApiErrors(form, e),
+    onError: (e) => {
+      if (isApiError(e) && e.code === 'OTP_REQUIRED') setNeedsOtp(true)
+      applyApiErrors(form, e)
+    },
   })
 
   // "Log in with a different account": end this session, drop everything cached for it, then the
@@ -87,6 +93,9 @@ export default function Login() {
       <form method="post" onSubmit={form.handleSubmit((v) => login.mutate(v))} noValidate>
         <TextField form={form} name="email" label="Email" type="email" autoComplete="email" required placeholder="you@studio.com" />
         <PasswordField form={form} name="password" label="Password" autoComplete="current-password" />
+        {needsOtp && (
+          <TextField form={form} name="otp" label="Authenticator code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} required placeholder="6-digit code" autoFocus />
+        )}
         <div className="auth-inline">
           <Link to="/forgot-password" className="link">
             Forgot password?

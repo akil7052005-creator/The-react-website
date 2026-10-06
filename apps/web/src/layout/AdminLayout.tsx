@@ -1,12 +1,20 @@
 import { Suspense, useState } from 'react'
 import { Link, NavLink, Outlet } from 'react-router-dom'
 import { useAdmin } from '../auth/AuthProvider'
+import { AdminBell } from '../components/AdminBell'
 import { PageSkeleton } from '../components/ui'
 
 const adminNav = [
-  { to: '/admin/tickets', label: 'Support inbox', icon: 'headset' },
-  { to: '/admin/help', label: 'Help Center', icon: 'question-circle' },
-  { to: '/admin/plans', label: 'Plans', icon: 'box-seam' },
+  { label: 'Revenue', items: [
+    { to: '/admin', label: 'Dashboard', icon: 'speedometer2', end: true },
+    { to: '/admin/subscriptions', label: 'Subscriptions', icon: 'credit-card-2-front' },
+  ] },
+  { label: 'Manage', items: [
+    { to: '/admin/tickets', label: 'Support inbox', icon: 'headset' },
+    { to: '/admin/help', label: 'Help Center', icon: 'question-circle' },
+    { to: '/admin/plans', label: 'Plans', icon: 'box-seam' },
+    { to: '/admin/settings', label: 'Settings', icon: 'gear' },
+  ] },
 ]
 
 /** Shell of the platform-admin area (/admin): its own sidebar, separate from the studio app. */
@@ -26,15 +34,17 @@ function AdminLayout() {
           </div>
         </Link>
         <nav className="nav" aria-label="Admin">
-          <div className="nav-section">
-            <p className="nav-label">Manage</p>
-            {adminNav.map((item) => (
-              <NavLink key={item.to} to={item.to} className="nav-link" onClick={close}>
-                <i className={`bi bi-${item.icon}`} />
-                <span>{item.label}</span>
-              </NavLink>
-            ))}
-          </div>
+          {adminNav.map((section) => (
+            <div className="nav-section" key={section.label}>
+              <p className="nav-label">{section.label}</p>
+              {section.items.map((item) => (
+                <NavLink key={item.to} to={item.to} end={'end' in item} className="nav-link" onClick={close}>
+                  <i className={`bi bi-${item.icon}`} />
+                  <span>{item.label}</span>
+                </NavLink>
+              ))}
+            </div>
+          ))}
         </nav>
         <div className="sidebar-foot admin-who">
           <p>
@@ -53,10 +63,14 @@ function AdminLayout() {
           <button className="icon-btn menu-btn" onClick={() => setNavOpen(true)} aria-label="Open menu">
             <i className="bi bi-list" />
           </button>
-          <span className="pill pill-warning admin-badge">
-            <i className="bi bi-shield-lock" /> Admin
-          </span>
-          <span className="muted admin-session-note">You're signed in as a platform admin. Every change is recorded.</span>
+          {/* The one place admin money is labelled: every amount in the admin area excludes GST. */}
+          <span className="muted admin-gst-note">Amounts exclude GST</span>
+          <div className="topbar-actions">
+            <span className="admin-badge" title="You're signed in as a platform admin. Every change is recorded.">
+              <i className="bi bi-shield-lock" /> Admin
+            </span>
+            <AdminBell />
+          </div>
         </header>
         <main className="content">
           <Suspense fallback={<PageSkeleton />}>

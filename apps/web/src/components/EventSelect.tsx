@@ -30,6 +30,7 @@ export function EventSelectField<T extends FieldValues>({
   full,
   onChange,
   required = true,
+  onCreateNew,
 }: {
   form: AnyForm<T>
   name: FieldPath<T>
@@ -39,12 +40,33 @@ export function EventSelectField<T extends FieldValues>({
   full?: boolean
   onChange?: (eventId: string | null, option: Option<string> | null) => void
   required?: boolean
+  /** Shows a "+ New event" link that calls this (e.g. to open the New Event dialog). */
+  onCreateNew?: () => void
 }) {
   const [selected, setSelected] = useState<Option<string> | null>(initial ? { value: initial.id, label: initial.title, sub: initial.code } : null)
   const id = `f-${name}`
   const error = form.formState.errors[name]?.message as string | undefined
   return (
-    <FieldShell label={label} htmlFor={id} required={required} full={full} error={error} hint={hint ?? 'Search by couple name, event code or city'}>
+    <FieldShell
+      label={label}
+      htmlFor={id}
+      required={required}
+      full={full}
+      error={error}
+      hint={
+        <>
+          {hint ?? 'Search by couple name, event code or city'}
+          {onCreateNew && (
+            <>
+              {' · '}
+              <button type="button" className="link" onClick={onCreateNew}>
+                + New event
+              </button>
+            </>
+          )}
+        </>
+      }
+    >
       <Controller
         control={form.control}
         name={name}
@@ -63,7 +85,7 @@ export function EventSelectField<T extends FieldValues>({
               onChange?.(o?.value ?? null, o)
             }}
             isClearable={!required}
-            noOptionsMessage={({ inputValue }) => (inputValue ? `No events match “${inputValue}”` : 'No events yet — create one from the dashboard')}
+            noOptionsMessage={({ inputValue }) => (inputValue ? `No events match “${inputValue}”` : onCreateNew ? 'No events yet — use “+ New event” below' : 'No events yet')}
           />
         )}
       />

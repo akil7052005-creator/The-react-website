@@ -28,6 +28,11 @@ export const profileSchema = z
     gstin: emptyToUndefined(gstinFormatSchema),
     pan: emptyToUndefined(panSchema),
     website: optionalText(120),
+    /** Instagram handle; a leading @ or a profile URL is trimmed to the handle. */
+    instagramHandle: z.preprocess(
+      (v) => (typeof v === 'string' ? v.trim().replace(/^https?:\/\/(www\.)?instagram\.com\//i, '').replace(/^@/, '').replace(/[/?].*$/, '') : v),
+      z.union([z.literal(''), z.string().regex(/^[A-Za-z0-9._]{1,30}$/, 'Enter an Instagram handle like goldenhour.studio')]).optional(),
+    ),
     bio: optionalText(500),
   })
   .superRefine((v, ctx) => {

@@ -8,6 +8,7 @@ import { MessagingService, WaMeMessagingService } from './messaging.service'
 import { NotificationsService } from './notifications.service'
 import { MockPaymentService, PaymentService } from './payment.service'
 import { PlansService } from './plans.service'
+import { SettingsService } from './settings.service'
 import { StudioMapper } from './studio.mapper'
 import { UsageService } from './usage.service'
 
@@ -19,6 +20,7 @@ import { UsageService } from './usage.service'
     { provide: StorageService, useFactory: createStorage },
     FilesService,
     NotificationsService,
+    SettingsService,
     PlansService,
     UsageService,
     StudioMapper,
@@ -26,6 +28,6 @@ import { UsageService } from './usage.service'
     { provide: MessagingService, useClass: WaMeMessagingService },
     { provide: PaymentService, useClass: MockPaymentService },
   ],
-  exports: [AuditService, MailService, StorageService, FilesService, NotificationsService, PlansService, UsageService, StudioMapper, LedgerService, MessagingService, PaymentService],
+  exports: [AuditService, MailService, StorageService, FilesService, NotificationsService, SettingsService, PlansService, UsageService, StudioMapper, LedgerService, MessagingService, PaymentService],
 })
 export class CoreModule {}

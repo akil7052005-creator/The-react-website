@@ -13,16 +13,18 @@ interface ModalProps {
   size?: 'sm' | 'md' | 'lg' | 'xl'
   /** Prevent closing (Esc / outside click) while something is saving. */
   busy?: boolean
+  /** Extra class on the dialog, for a page-specific look. */
+  className?: string
 }
 
 /** Studio-styled dialog (Radix handles focus trap, Esc and aria). */
-export function Modal({ open, onClose, title, subtitle, icon, children, footer, size = 'md', busy }: ModalProps) {
+export function Modal({ open, onClose, title, subtitle, icon, children, footer, size = 'md', busy, className }: ModalProps) {
   return (
     <Dialog.Root open={open} onOpenChange={(o) => !o && !busy && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className="wz-modal-overlay">
           <Dialog.Content
-          className={`wz-modal wz-modal-${size}`}
+          className={`wz-modal wz-modal-${size}${className ? ` ${className}` : ''}`}
           onPointerDownOutside={(e) => busy && e.preventDefault()}
           onEscapeKeyDown={(e) => busy && e.preventDefault()}
           aria-describedby={subtitle ? undefined : undefined}

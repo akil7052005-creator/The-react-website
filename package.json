@@ -17,6 +17,10 @@
     "db:reset": "pnpm --filter @weddyzone/api db:reset",
     "db:local:init": "node scripts/local-db.mjs init",
     "db:local:start": "node scripts/local-db.mjs start",
-    "db:local:stop": "node scripts/local-db.mjs stop"
+    "db:local:stop": "node scripts/local-db.mjs stop",
+    "servers:start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-servers.ps1",
+    "servers:status": "pm2 status",
+    "servers:logs": "pm2 logs",
+    "servers:stop": "pm2 stop all"
   }
 }

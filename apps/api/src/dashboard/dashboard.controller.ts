@@ -9,6 +9,7 @@ import { fileUrls } from '../core/files.service'
 import { eventDto } from '../core/mappers'
 import { NotificationsService } from '../core/notifications.service'
 import { PrismaService } from '../prisma/prisma.service'
+import { dashboardWorkflow } from './dashboard-workflow'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -71,7 +72,7 @@ export class DashboardController {
     const chartStart = new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() - 5, 1))
     const chartEnd = new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 3, 1))
 
-    const [totalEvents, photoSelections, digitalAlbums, upcomingEvents, activeSelections, publishedAlbums, next, recent, activity, chartEvents, openSelections, workAlbums, recentAlbums, banner] =
+    const [totalEvents, photoSelections, digitalAlbums, upcomingEvents, activeSelections, publishedAlbums, next, recent, activity, chartEvents, openSelections, workAlbums, recentAlbums, banner, completedSelections] =
       await Promise.all([
         createdCounts('event'),
         createdCounts('selection'),
@@ -85,7 +86,7 @@ export class DashboardController {
           orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
         }),
         this.prisma.event.findMany({ where: live, include: { client: true }, orderBy: { createdAt: 'desc' }, take: 6 }),
-        this.prisma.notification.findMany({ where: { studioId }, orderBy: { createdAt: 'desc' }, take: 5 }),
+        this.prisma.notification.findMany({ where: { studioId, channel: 'IN_APP' }, orderBy: { createdAt: 'desc' }, take: 5 }),
         this.prisma.event.findMany({ where: { ...live, date: { gte: chartStart, lt: chartEnd } }, select: { date: true } }),
         this.prisma.selection.findMany({
           where: { ...live, status: { not: 'SUBMITTED' }, deadline: { gte: toDate(today) } },
@@ -118,6 +119,7 @@ export class DashboardController {
           include: { image: true },
           orderBy: { position: 'asc' },
         }),
+        this.prisma.selection.count({ where: { ...live, status: 'SUBMITTED' } }),
       ])
 
     const monthly = Array.from({ length: 8 }, (_, i) => {
@@ -148,7 +150,7 @@ export class DashboardController {
     ].slice(0, 4)
 
     return {
-      stats: { totalEvents, photoSelections, digitalAlbums, upcomingEvents, activeSelections, publishedAlbums },
+      stats: { totalEvents, photoSelections, digitalAlbums, upcomingEvents, activeSelections, publishedAlbums, completedSelections },
       nextAssignment: next ? { ...eventDto(next), daysLeft: daysBetween(today, toIso(next.date)) } : null,
       recentEvents: recent.map(eventDto),
       activity: activity.map((n) => this.notifications.toDto(n)),
@@ -156,6 +158,7 @@ export class DashboardController {
       pipeline,
       recentAlbums: recentAlbums.map((a) => this.albums.toDto(a)),
       activeBanner: banner ? bannerDto(banner) : null,
+      workflow: await dashboardWorkflow(this.prisma, studioId),
     }
   }
 }
