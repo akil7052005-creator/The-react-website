@@ -167,6 +167,9 @@ describe('Photo uploads: plan-based limits', () => {
     expect(cleanFolder('Haldi/../..')).toBeNull()
     expect(cleanFolder('')).toBeNull()
     expect(cleanFolder(undefined)).toBeNull()
-    expect(cleanFolder('x'.repeat(301))).toBeNull()
+    expect(cleanFolder('x'.repeat(256))).toBeNull()
+    // Folder names up to 255 characters each, nested: kept whole, so local copies still match.
+    const long = 'Haldi Ceremony – Bride Side (Cam 1) – 25 Nov 2026 Morning Session'.padEnd(255, '.')
+    expect(cleanFolder(`${long}/${long}`)).toBe(`${long}/${long}`)
   })
 })

@@ -48,6 +48,8 @@ const schema = z.object({
   MAIL_OUTBOX_DIR: z.string().optional(),
   RATE_LIMIT_AUTH_PER_MIN: z.coerce.number().int().default(10),
   RATE_LIMIT_PUBLIC_PER_MIN: z.coerce.number().int().default(120),
+  // Customer code checks (/selection/auth), per IP per minute.
+  RATE_LIMIT_CODE_PER_MIN: z.coerce.number().int().min(1).default(5),
   // Proxies between the browser and the API. Vercel's /api rewrite + the host's load balancer = 2;
   // too low and every user shares the proxy's IP (and its rate limit), too high and IPs can be spoofed.
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(1),

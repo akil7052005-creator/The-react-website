@@ -11,10 +11,13 @@ import { DashboardController } from './dashboard/dashboard.controller'
 import { ClientsController, EventsController } from './events/clients-events.controller'
 import { NotificationsController, SearchController } from './notifications/notifications.controller'
 import { PhotoPreviewService } from './selections/previews.service'
+import { EventSettingsService } from './selections/event-settings.service'
 import { SelectionRemindersService } from './selections/selection-reminders.service'
 import { SelectionWorkflowService } from './selections/selection-workflow.service'
-import { PublicSelectionsController, SelectionDefaultsController, SelectionsController } from './selections/selections.controller'
+import { ClientSelectionController, PublicSelectionsController, SelectionDefaultsController, SelectionsController } from './selections/selections.controller'
+import { ClientSelectionService } from './selections/client-selection.service'
 import { SelectionsService } from './selections/selections.service'
+import { SharePreviewController, SharePreviewService } from './selections/share-preview'
 import { UploadLimitsController, UploadLimitsService } from './selections/upload-limits'
 import { PlatformWhatsAppService } from './infra/platform-whatsapp.service'
 import { AdminSubscriptionsController } from './subscriptions/admin-subscriptions.controller'
@@ -34,6 +37,8 @@ import { WebhooksController } from './subscriptions/webhooks.controller'
     DashboardController,
     SelectionsController,
     PublicSelectionsController,
+    ClientSelectionController,
+    SharePreviewController,
     SelectionDefaultsController,
     UploadLimitsController,
     AlbumsController,
@@ -56,7 +61,10 @@ import { WebhooksController } from './subscriptions/webhooks.controller'
     UploadLimitsService,
     SelectionWorkflowService,
     SelectionRemindersService,
+    EventSettingsService,
+    ClientSelectionService,
     PhotoPreviewService,
+    SharePreviewService,
     AlbumsService,
     SubscriptionsService,
     InvoicesService,

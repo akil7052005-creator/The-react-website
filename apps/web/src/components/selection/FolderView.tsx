@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { isSelectionLocked, SUGGESTED_FOLDERS, type SelectionDto, type SelectionFolderDto, type StudioSelectionPhotoDto } from '@weddyzone/shared'
+import { FOLDER_NAME_MAX, isSelectionLocked, SUGGESTED_FOLDERS, type SelectionDto, type SelectionFolderDto, type StudioSelectionPhotoDto } from '@weddyzone/shared'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { api } from '../../lib/api'
@@ -7,16 +7,13 @@ import { fileUrl } from '../../lib/env'
 import { toastError } from '../../lib/query'
 import { formatBytes } from '../../utils/format'
 import { Modal, useConfirm } from '../Modal'
-import { PhotoUploader } from '../PhotoUploader'
 import { RowMenu } from '../RowMenu'
 import { EmptyState, ErrorState, Skeleton, Spinner } from '../ui'
+import { returnOriginals, safeName, type CloudPick } from './cloudReturn'
+import { canCopyLocally, PermissionNeeded, pickOriginalsFolder } from './localCopy'
 import { count, refreshSelection } from './selectionUi'
 
-type Filter = 'all' | 'picked' | 'notes'
-/** Tiles drawn at first; "Show more" adds the next batch, so 3,000-photo events stay quick. */
-const PAGE = 120
-
-function FolderModal({
+export function FolderModal({
   open,
   onClose,
   selectionId,
@@ -40,7 +37,8 @@ function FolderModal({
   const save = async (value = name) => {
     const v = value.trim()
     if (!v) return setError('Enter a folder name')
-    if (v.length > 60) return setError('At most 60 characters')
+    if (v.length > FOLDER_NAME_MAX) return setError(`At most ${FOLDER_NAME_MAX} characters`)
+    if (existing.some((e) => e.trim().toLowerCase() === v.toLowerCase() && e !== folder?.name)) return setError('A folder with this name already exists')
     setBusy(true)
     try {
       const f = folder
@@ -92,7 +90,7 @@ function FolderModal({
             id="folder-name"
             className="input"
             value={name}
-            maxLength={60}
+            maxLength={FOLDER_NAME_MAX}
             autoFocus
             onChange={(e) => {
               setName(e.target.value)
@@ -123,8 +121,8 @@ function FolderModal({
   )
 }
 
-/** One photo, large, with its picks and notes, and studio actions (move, remove). */
-function PhotoPanel({
+/** One photo (or video), large, with its picks and notes, and studio actions (move, remove). */
+export function PhotoPanel({
   s,
   photo,
   folders,
@@ -196,7 +194,11 @@ function PhotoPanel({
           <button className="icon-btn lb-nav" onClick={onPrev} disabled={!onPrev} aria-label="Previous photo">
             <i className="bi bi-chevron-left" />
           </button>
-          <img src={fileUrl(photo.previewUrl ?? photo.url)} alt={photo.originalName} />
+          {photo.media === 'video' ? (
+            <video src={fileUrl(photo.url)} controls preload="metadata" className="fv-player" aria-label={photo.originalName} />
+          ) : (
+            <img src={fileUrl(photo.previewUrl ?? photo.url)} alt={photo.originalName} />
+          )}
           <button className="icon-btn lb-nav" onClick={onNext} disabled={!onNext} aria-label="Next photo">
             <i className="bi bi-chevron-right" />
           </button>
@@ -254,72 +256,97 @@ function PhotoPanel({
   )
 }
 
-export function EventPhotos({
-  s,
-  folders,
-  uploadOpen,
-  setUploadOpen,
-  onBusyChange,
-}: {
-  s: SelectionDto
-  folders: SelectionFolderDto[]
-  uploadOpen: boolean
-  setUploadOpen: (v: boolean) => void
-  onBusyChange: (busy: boolean) => void
-}) {
+/** Tiles drawn at first; "Show more" adds the next batch, so big folders stay quick. */
+const PAGE = 120
+type Filter = 'all' | 'picked' | 'notes'
+
+/** One folder's photos and videos: picks and notes on each, open one for details, rename/delete, download the originals. */
+export function FolderView({ s, folder, folders, onBack }: { s: SelectionDto; folder: SelectionFolderDto; folders: SelectionFolderDto[]; onBack: () => void }) {
   const qc = useQueryClient()
   const confirm = useConfirm()
-  const [folderId, setFolderIdRaw] = useState<string>('')
   const [filter, setFilterRaw] = useState<Filter>('all')
   const [shown, setShown] = useState(PAGE)
-  // Changing folder or filter starts again from the first page of tiles.
-  const setFolderId = (v: string) => {
-    setFolderIdRaw(v)
-    setShown(PAGE)
-  }
-  const setFilter = (v: Filter) => {
-    setFilterRaw(v)
-    setShown(PAGE)
-  }
   const [open, setOpen] = useState<number | null>(null)
-  const [folderModal, setFolderModal] = useState<{ open: boolean; folder?: SelectionFolderDto | null }>({ open: false })
-  const locked = isSelectionLocked(s.status)
+  const [renaming, setRenaming] = useState(false)
+  const setFilter = (f: Filter) => {
+    setFilterRaw(f)
+    setShown(PAGE)
+  }
 
   const photosQ = useQuery({
     queryKey: ['selection-photos', s.id],
     queryFn: () => api.get<StudioSelectionPhotoDto[]>(`/selections/${s.id}/photos`),
   })
-  // A folder created a moment ago may not be in the list yet; it shows once the list refreshes.
-  const current = folders.find((f) => f.id === folderId) ?? null
-
-  const all = useMemo(() => photosQ.data ?? [], [photosQ.data])
-  const inFolder = useMemo(() => (folderId ? all.filter((p) => p.folderId === folderId) : all), [all, folderId])
+  const inFolder = useMemo(() => (photosQ.data ?? []).filter((p) => p.folderId === folder.id), [photosQ.data, folder.id])
   const list = useMemo(
     () => inFolder.filter((p) => (filter === 'picked' ? p.pickedBy.length > 0 : filter === 'notes' ? p.comments.length > 0 : true)),
     [inFolder, filter],
   )
-  const pickedHere = inFolder.filter((p) => p.pickedBy.length > 0).length
-  const notesHere = inFolder.filter((p) => p.comments.length > 0).length
   const photo = open !== null ? list[open] : null
 
-  const deleteFolder = (f: SelectionFolderDto) =>
+  /** The folder's full-quality originals, verified, saved into a folder you pick (no ZIP). */
+  const [savingFolder, setSavingFolder] = useState(false)
+  const downloadFolder = async () => {
+    let root = null
+    if (canCopyLocally()) {
+      try {
+        // Straight from the click: the browser shows its own folder picker.
+        root = await pickOriginalsFolder()
+      } catch (e) {
+        if (e instanceof PermissionNeeded) toast.error('Permission needed to save the photos')
+        else toastError(e)
+        return
+      }
+    }
+    setSavingFolder(true)
+    try {
+      const picks: CloudPick[] = inFolder.map((p) => ({
+        id: p.id,
+        originalName: p.originalName,
+        folder: p.folder ?? null,
+        album: folder.name,
+        size: p.originalSize ?? null,
+        originalUrl: p.originalUrl ?? null,
+        originalChecksum: p.originalChecksum ?? null,
+      }))
+      const r = await returnOriginals(picks, {
+        root,
+        folderName: safeName(s.event.title),
+        get: async (url) => {
+          const res = await fetch(fileUrl(url)!, { credentials: 'include' })
+          if (!res.ok) throw new Error(`Download failed (${res.status})`)
+          return res.arrayBuffer()
+        },
+        save: (data, name) => {
+          const a = document.createElement('a')
+          a.href = URL.createObjectURL(new Blob([data]))
+          a.download = name
+          a.click()
+          setTimeout(() => URL.revokeObjectURL(a.href), 2000)
+        },
+      })
+      const left = r.notInCloud.length + r.failed.length
+      if (left) toast.warning(`${r.saved} originals saved · ${left} not available`, { description: 'Not kept in the cloud or didn’t match: use Download Selected → Copy from my computer for those.' })
+      else toast.success(`${r.saved} originals saved${root ? ` in “${safeName(s.event.title)}/${safeName(folder.name)}”` : ''}`)
+    } catch (e) {
+      toastError(e)
+    } finally {
+      setSavingFolder(false)
+    }
+  }
+
+  const remove = () =>
     confirm({
-      title: `Delete folder ${f.name}?`,
-      message: f.photoCount ? (
-        <>
-          Its <strong>{f.photoCount}</strong> photos are kept and move to <strong>General</strong>.
-        </>
-      ) : (
-        'The folder is empty.'
-      ),
+      title: `Delete folder ${folder.name}?`,
+      message: folder.photoCount + (folder.videoCount ?? 0) ? `Its ${folder.photoCount + (folder.videoCount ?? 0)} files are kept and move to General.` : 'The folder is empty.',
       confirmLabel: 'Delete folder',
       tone: 'danger',
       onConfirm: async () => {
         try {
-          await api.delete(`/selections/${s.id}/folders/${f.id}`)
-          toast.success(`Folder ${f.name} deleted`)
-          setFolderId('')
+          await api.delete(`/selections/${s.id}/folders/${folder.id}`)
+          toast.success(`Folder ${folder.name} deleted`)
           refreshSelection(qc, s.id)
+          onBack()
         } catch (e) {
           toastError(e)
           throw e
@@ -328,106 +355,68 @@ export function EventPhotos({
     })
 
   return (
-    <div className="stack sw-photos">
-      <div className="sw-folders" role="tablist" aria-label="Folders">
-        <button role="tab" aria-selected={!folderId} className={`sw-folder${!folderId ? ' on' : ''}`} onClick={() => setFolderId('')}>
-          <i className="bi bi-images" /> All <small>{count(s.photoCount)}</small>
+    <section className="fv" aria-label={`Folder ${folder.name}`}>
+      <div className="fv-head">
+        <button type="button" className="fv-back" onClick={onBack}>
+          <i className="bi bi-arrow-left" /> All folders
         </button>
-        {folders.map((f) => (
-          <button key={f.id} role="tab" aria-selected={folderId === f.id} className={`sw-folder${folderId === f.id ? ' on' : ''}`} onClick={() => setFolderId(f.id)}>
-            <i className="bi bi-folder2" /> {f.name} <small>{count(f.photoCount)}</small>
-            {f.pickedCount > 0 && (
-              <small className="sw-folder-picked" title={`${f.pickedCount} picked`}>
-                <i className="bi bi-heart-fill" /> {count(f.pickedCount)}
-              </small>
-            )}
+        <h2>
+          <i className="bi bi-folder2-open" aria-hidden="true" /> {folder.name}
+        </h2>
+        <span className="muted">
+          {count(folder.photoCount)} Images{folder.videoCount ? ` · ${count(folder.videoCount)} Videos` : ''} · {count(folder.pickedCount)} picked
+        </span>
+        <div className="fv-actions">
+          <button type="button" className="ef-btn outline sm" onClick={() => void downloadFolder()} disabled={!inFolder.length || savingFolder} data-testid="folder-download">
+            {savingFolder ? <Spinner size={12} /> : <i className="bi bi-download" />} Download
           </button>
-        ))}
-        <button className="sw-folder sw-folder-add" onClick={() => setFolderModal({ open: true })}>
-          <i className="bi bi-folder-plus" /> New folder
-        </button>
-      </div>
-
-      {uploadOpen && !locked && (
-        <section className="sw-upload card" aria-label="Upload photos">
-          <div className="row-between">
-            <p className="sw-upload-hint">
-              {current ? (
-                <>
-                  Uploading into <strong>{current.name}</strong>.
-                </>
-              ) : (
-                <>Drop a whole folder: each top folder (Haldi, Wedding…) becomes a folder here. Loose photos go to General.</>
-              )}{' '}
-              Duplicates are skipped and previews are made automatically.
-            </p>
-            <button className="icon-btn" onClick={() => setUploadOpen(false)} aria-label="Hide uploader">
-              <i className="bi bi-chevron-up" />
-            </button>
-          </div>
-          <PhotoUploader
-            endpoint={`/selections/${s.id}/photos`}
-            fields={current ? { folderId: current.id } : undefined}
-            onBusyChange={onBusyChange}
-            onUploaded={() => refreshSelection(qc, s.id)}
-            label={current ? `Drop photos for ${current.name}, or click to browse` : 'Drop photos or a whole folder here, or click to browse'}
-          />
-        </section>
-      )}
-
-      <div className="row-between sw-photo-bar">
-        <div className="tabs" role="tablist" aria-label="Show">
-          {(
-            [
-              ['all', `All (${count(inFolder.length)})`],
-              ['picked', `Picked (${count(pickedHere)})`],
-              ['notes', `With notes (${count(notesHere)})`],
-            ] as [Filter, string][]
-          ).map(([k, label]) => (
-            <button key={k} role="tab" aria-selected={filter === k} className={filter === k ? 'on' : ''} onClick={() => setFilter(k)}>
-              {label}
-            </button>
-          ))}
-        </div>
-        {current && (
           <RowMenu
-            label={`Folder ${current.name} actions`}
+            label={`Folder ${folder.name} actions`}
             items={[
-              { label: 'Rename folder', icon: 'pencil', onSelect: () => setFolderModal({ open: true, folder: current }) },
-              { label: 'Delete folder', icon: 'trash', danger: true, onSelect: () => void deleteFolder(current) },
+              { label: 'Rename folder', icon: 'pencil', onSelect: () => setRenaming(true) },
+              { label: 'Delete folder', icon: 'trash', danger: true, onSelect: () => void remove() },
             ]}
           />
-        )}
+        </div>
+      </div>
+
+      <div className="tabs" role="tablist" aria-label="Show">
+        {(
+          [
+            ['all', `All (${count(inFolder.length)})`],
+            ['picked', `Picked (${count(inFolder.filter((p) => p.pickedBy.length).length)})`],
+            ['notes', `With notes (${count(inFolder.filter((p) => p.comments.length).length)})`],
+          ] as [Filter, string][]
+        ).map(([k, label]) => (
+          <button key={k} role="tab" aria-selected={filter === k} className={filter === k ? 'on' : ''} onClick={() => setFilter(k)}>
+            {label}
+          </button>
+        ))}
       </div>
 
       {photosQ.isPending ? (
         <div className="photo-grid">
-          {Array.from({ length: 12 }).map((_, i) => (
+          {Array.from({ length: 8 }).map((_, i) => (
             <Skeleton key={i} height={140} radius={12} />
           ))}
         </div>
       ) : photosQ.isError ? (
         <ErrorState error={photosQ.error} onRetry={() => photosQ.refetch()} />
       ) : list.length === 0 ? (
-        <EmptyState
-          icon={filter === 'all' ? 'images' : filter === 'picked' ? 'heart' : 'chat'}
-          title={filter === 'all' ? (current ? `No photos in ${current.name} yet` : 'No photos yet') : filter === 'picked' ? 'Nothing picked here yet' : 'No notes here'}
-          text={filter === 'all' ? 'Upload the event photos for the couple to choose from.' : undefined}
-          action={
-            filter === 'all' && !locked && !uploadOpen ? (
-              <button className="btn btn-primary" onClick={() => setUploadOpen(true)}>
-                <i className="bi bi-cloud-arrow-up" /> Upload photos
-              </button>
-            ) : undefined
-          }
-        />
+        <EmptyState icon={filter === 'all' ? 'images' : filter === 'picked' ? 'heart' : 'chat'} title={filter === 'all' ? 'This folder is empty' : filter === 'picked' ? 'Nothing picked here yet' : 'No notes here'} />
       ) : (
         <>
-          <div className="photo-grid sw-grid">
+          <div className="photo-grid sw-grid" data-testid="folder-photos">
             {list.slice(0, shown).map((p, i) => (
               <figure key={p.id} className={`photo-tile${p.pickedBy.length ? ' is-picked' : ''}`}>
                 <button className="photo-open" onClick={() => setOpen(i)} aria-label={`Open ${p.originalName}`}>
-                  <img src={fileUrl(p.previewUrl ?? p.url)} alt={p.originalName} loading="lazy" decoding="async" />
+                  {p.media === 'video' ? (
+                    <span className="fv-video">
+                      <i className="bi bi-play-circle-fill" aria-hidden="true" />
+                    </span>
+                  ) : (
+                    <img src={fileUrl(p.previewUrl ?? p.url)} alt={p.originalName} loading="lazy" decoding="async" />
+                  )}
                 </button>
                 {p.pickedBy.length > 0 && (
                   <span className="photo-badge" title={`Picked by ${p.pickedBy.join(', ')}`}>
@@ -466,18 +455,17 @@ export function EventPhotos({
         />
       )}
       <FolderModal
-        key={folderModal.open ? (folderModal.folder?.id ?? 'new') : 'closed'}
-        open={folderModal.open}
-        folder={folderModal.folder}
-        onClose={() => setFolderModal({ open: false })}
+        key={renaming ? folder.id : 'closed'}
+        open={renaming}
+        folder={folder}
+        onClose={() => setRenaming(false)}
         selectionId={s.id}
         existing={folders.map((f) => f.name)}
         onSaved={(f) => {
-          toast.success(folderModal.folder ? `Folder renamed to ${f.name}` : `Folder ${f.name} created`)
-          if (!folderModal.folder) setFolderId(f.id)
+          toast.success(`Folder renamed to ${f.name}`)
           refreshSelection(qc, s.id)
         }}
       />
-    </div>
+    </section>
   )
 }

@@ -1,136 +1,83 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  EVENT_TYPE_LABELS,
-  isSelectionLocked,
-  pickedLabel,
-  SELECTION_STATUS_LABELS,
-  type SelectionOverviewDto,
-} from '@weddyzone/shared'
+import { useQuery } from '@tanstack/react-query'
+import type { SelectionFolderDto, SelectionOverviewDto } from '@weddyzone/shared'
 import { useEffect, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { toast } from 'sonner'
-import { Modal, useConfirm } from '../components/Modal'
-import { EventPhotos } from '../components/selection/EventPhotos'
-import { ActivityLog, EventSettings } from '../components/selection/EventSettings'
-import { EventShare } from '../components/selection/EventShare'
-import { count, refreshSelection, SELECTION_TONE } from '../components/selection/selectionUi'
-import { useUploadGuard } from '../components/selection/useUploadGuard'
-import { EmptyState, ErrorState, Progress, Skeleton, Spinner } from '../components/ui'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { CreateFolderModal } from '../components/selection/CreateFolderModal'
+import { DownloadSelectedModal } from '../components/selection/DownloadSelectedModal'
+import { FolderView } from '../components/selection/FolderView'
+import { SelectedPhotosView } from '../components/selection/SelectedPhotosView'
+import { count, hasSubmitted, LIVE_POLL_MS } from '../components/selection/selectionUi'
+import { SelectionStatusPill } from '../components/selection/SelectionStatusPill'
+import { ResetSelectionModal } from '../components/selection/ResetSelectionModal'
+import { ShareModal } from '../components/selection/ShareModal'
+import { UploadFoldersModal, type UploadFoldersHandle } from '../components/selection/UploadFoldersModal'
+import { EmptyState, ErrorState, Skeleton } from '../components/ui'
 import { useUrlState } from '../hooks/useUrlState'
-import { api, download, isApiError } from '../lib/api'
-import { fileUrl } from '../lib/env'
-import { toastError } from '../lib/query'
-import { formatDate, timeAgo } from '../utils/format'
+import { api, isApiError } from '../lib/api'
 
-type Tab = 'photos' | 'share' | 'settings' | 'activity'
-const TABS: [Tab, string, string][] = [
-  ['photos', 'Photos', 'images'],
-  ['share', 'Share', 'send'],
-  ['settings', 'Settings', 'sliders'],
-  ['activity', 'Activity', 'clock-history'],
-]
-
-/** A labelled button with a small dropdown of actions (closes on outside click and Esc). */
-function MenuButton({ label, icon, items }: { label: string; icon: string; items: { label: string; icon: string; onSelect: () => void; disabled?: boolean; hint?: string }[] }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!open) return
-    const onDown = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false)
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
-    document.addEventListener('mousedown', onDown)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onDown)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [open])
+/** A yellow folder with a pink photo (or video camera) badge, drawn here, no image files. */
+function FolderArt({ video }: { video: boolean }) {
   return (
-    <div className="sw-menu-wrap" ref={ref}>
-      <button className="btn btn-ghost" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        <i className={`bi bi-${icon}`} /> {label} <i className="bi bi-chevron-down sw-caret" />
-      </button>
-      {open && (
-        <div className="sw-menu" role="menu">
-          {items.map((it) => (
-            <button
-              key={it.label}
-              role="menuitem"
-              className="sw-menu-item"
-              disabled={it.disabled}
-              title={it.hint}
-              onClick={() => {
-                setOpen(false)
-                it.onSelect()
-              }}
-            >
-              <i className={`bi bi-${it.icon}`} /> {it.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function UnlockModal({ open, onClose, id, code }: { open: boolean; onClose: () => void; id: string; code: string }) {
-  const qc = useQueryClient()
-  const [reason, setReason] = useState('')
-  const [busy, setBusy] = useState(false)
-  const unlock = async () => {
-    setBusy(true)
-    try {
-      await api.post(`/selections/${id}/unlock`, { reason: reason.trim() || undefined })
-      toast.success(`${code} unlocked — the client can change their picks again`)
-      refreshSelection(qc, id)
-      setReason('')
-      onClose()
-    } catch (e) {
-      toastError(e)
-    } finally {
-      setBusy(false)
-    }
-  }
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title="Unlock selection?"
-      subtitle="The client can change and submit their picks again. Their current picks are kept."
-      icon="unlock"
-      busy={busy}
-      footer={
+    <svg className="ef-art" viewBox="0 0 120 92" aria-hidden="true" data-kind={video ? 'video' : 'photo'}>
+      <path d="M6 18a8 8 0 0 1 8-8h30l10 10h52a8 8 0 0 1 8 8v52a8 8 0 0 1-8 8H14a8 8 0 0 1-8-8z" fill="#f6b73c" />
+      <path d="M6 32a8 8 0 0 1 8-8h92a8 8 0 0 1 8 8v48a8 8 0 0 1-8 8H14a8 8 0 0 1-8-8z" fill="#ffcf5c" />
+      <rect x="44" y="40" width="32" height="26" rx="5" fill="#fff" />
+      {video ? (
         <>
-          <button className="btn btn-ghost" onClick={onClose} disabled={busy}>
-            Cancel
-          </button>
-          <button className="btn btn-primary" onClick={unlock} disabled={busy}>
-            {busy ? <Spinner size={14} /> : <i className="bi bi-unlock" />} Unlock
-          </button>
+          <rect x="47" y="45" width="18" height="16" rx="3" fill="#e8174a" />
+          <path d="M66 49l7-4v16l-7-4z" fill="#e8174a" />
         </>
-      }
-    >
-      <div className="field">
-        <label htmlFor="unlock-reason">Reason (for the change log)</label>
-        <input id="unlock-reason" className="input" maxLength={200} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Couple wants to swap two photos" />
-      </div>
-    </Modal>
+      ) : (
+        <>
+          <rect x="47" y="43" width="26" height="20" rx="3" fill="#f7c6d3" />
+          <circle cx="54" cy="49" r="3" fill="#fff" />
+          <path d="M47 63l9-9 6 6 4-4 7 7z" fill="#e8174a" />
+        </>
+      )}
+    </svg>
   )
 }
 
+function FolderCard({ folder, onOpen }: { folder: SelectionFolderDto; onOpen: () => void }) {
+  const video = folder.type === 'video'
+  const n = video ? (folder.videoCount ?? 0) : folder.photoCount
+  const unit = video ? 'Videos' : 'Images'
+  return (
+    <button type="button" className="ef-card" onClick={onOpen} aria-label={`Open ${video ? 'video' : 'photo'} folder ${folder.name}, ${n} ${unit.toLowerCase()}`}>
+      <FolderArt video={video} />
+      <span className="ef-name">
+        <i className={`bi bi-${video ? 'camera-video' : 'image'}`} aria-hidden="true" /> <span title={folder.name} aria-label={folder.name}>
+          {folder.name}
+        </span>
+      </span>
+      <span className="ef-count">
+        {count(n)} {unit}
+      </span>
+    </button>
+  )
+}
+
+/**
+ * The event's folder page (Upload & Download): its folders as cards, uploading whole folders,
+ * new folder, settings and reset; a folder opens its photos.
+ */
 export default function SelectionEvent() {
   const { selectionId = '' } = useParams()
-  const qc = useQueryClient()
-  const confirm = useConfirm()
-  const [url, setUrl] = useUrlState({ tab: '', upload: '' })
-  const tab: Tab = (TABS.find(([t]) => t === url.tab)?.[0] ?? 'photos') as Tab
-  const [unlockOpen, setUnlockOpen] = useState(false)
-  const { setUploading } = useUploadGuard()
+  const [url, setUrl] = useUrlState({ folder: '', view: '' })
+  const [uploadOpen, setUploadOpen] = useState(false)
+  const [newFolder, setNewFolder] = useState(false)
+  const [downloading, setDownloading] = useState(false)
+  const [sharing, setSharing] = useState(false)
+  const [resetting, setResetting] = useState(false)
+  const navigate = useNavigate()
+  const uploader = useRef<UploadFoldersHandle>(null)
 
   const q = useQuery({
     queryKey: ['selection-overview', selectionId],
     queryFn: () => api.get<SelectionOverviewDto>(`/selections/${selectionId}/overview`),
-    refetchInterval: 60_000,
+    // The customer picks and submits from their phone: the badge and counts follow without a refresh.
+    refetchInterval: LIVE_POLL_MS,
+    refetchOnWindowFocus: true,
   })
 
   useEffect(() => {
@@ -139,23 +86,26 @@ export default function SelectionEvent() {
 
   if (q.isPending) {
     return (
-      <div className="stack sw-page">
-        <Skeleton width={180} height={16} />
-        <Skeleton height={150} radius={16} />
-        <Skeleton height={320} radius={16} />
+      <div className="stack ef-page">
+        <Skeleton width={220} height={30} />
+        <div className="ef-grid">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} height={190} radius={12} />
+          ))}
+        </div>
       </div>
     )
   }
   if (q.isError) {
     const missing = isApiError(q.error) && (q.error.status === 404 || q.error.status === 400)
     return (
-      <div className="stack sw-page">
+      <div className="stack ef-page">
         <Link to="/photo-selection" className="sw-back">
-          <i className="bi bi-arrow-left" /> Photo Selection
+          <i className="bi bi-arrow-left" /> All events
         </Link>
         <div className="card">
           {missing ? (
-            <EmptyState icon="images" title="Selection not found" text="It may have been deleted." action={<Link className="btn btn-primary" to="/photo-selection">Back to Photo Selection</Link>} />
+            <EmptyState icon="images" title="Event not found" text="It may have been deleted." action={<Link className="btn btn-primary" to="/photo-selection">Back to Photo Selection</Link>} />
           ) : (
             <ErrorState error={q.error} onRetry={() => q.refetch()} />
           )}
@@ -164,181 +114,115 @@ export default function SelectionEvent() {
     )
   }
 
-  const { selection: s, folders, noteCount, log } = q.data
-  const locked = isSelectionLocked(s.status)
-  const uploadOpen = url.upload === '1' || (s.photoCount === 0 && !locked)
-  const setTab = (t: Tab) => setUrl({ tab: t === 'photos' ? '' : t })
+  const overview = q.data
+  const { selection: s, folders } = overview
+  const open = folders.find((f) => f.id === url.folder) ?? null
+  const images = folders.reduce((n, f) => n + f.photoCount, 0)
+  const videos = folders.reduce((n, f) => n + (f.videoCount ?? 0), 0)
 
-  const exportList = async (format: 'csv' | 'txt') => {
-    try {
-      await download(`/selections/${s.id}/export?format=${format}`, `${s.code}-${format === 'txt' ? 'lightroom.txt' : 'picks.csv'}`)
-      toast.success(format === 'txt' ? 'Lightroom list downloaded' : 'File-name list downloaded')
-    } catch (e) {
-      toastError(e)
-    }
-  }
-  /** ZIPs stream straight to the browser's downloads (no size limit in memory). */
-  const zip = (scope: 'picked' | 'all') => {
-    window.location.href = fileUrl(`/api/v1/selections/${s.id}/zip?scope=${scope}`)!
-    toast.info(scope === 'picked' ? 'Preparing the ZIP of picked photos…' : 'Preparing the ZIP of all photos…')
+  /** Opens the dialog and, in the same click, the folder picker. */
+  const startUpload = () => {
+    setUploadOpen(true)
+    uploader.current?.pick()
   }
 
-  const resetPicks = () =>
-    confirm({
-      title: 'Reset all picks?',
-      message: (
-        <>
-          All <strong>{s.pickedCount}</strong> picks are cleared so the client can start again. Photos and notes are kept.
-        </>
-      ),
-      confirmLabel: 'Reset picks',
-      tone: 'danger',
-      onConfirm: async () => {
-        try {
-          await api.post(`/selections/${s.id}/reset-picks`)
-          toast.success('Picks reset')
-          refreshSelection(qc, s.id)
-        } catch (e) {
-          toastError(e)
-          throw e
-        }
-      },
-    })
-
-  const deliver = () =>
-    confirm({
-      title: 'Mark as delivered?',
-      message: 'Records that the edited photos were handed over. The selection stays locked.',
-      confirmLabel: 'Mark delivered',
-      icon: 'box-seam',
-      onConfirm: async () => {
-        try {
-          await api.post(`/selections/${s.id}/deliver`)
-          toast.success(`${s.code} delivered`)
-          refreshSelection(qc, s.id)
-        } catch (e) {
-          toastError(e)
-          throw e
-        }
-      },
-    })
-
-  const more = [
-    ...(s.status === 'SUBMITTED' ? [{ label: 'Unlock selection', icon: 'unlock', onSelect: () => setUnlockOpen(true) }] : []),
-    ...(s.status === 'SUBMITTED' ? [{ label: 'Mark delivered', icon: 'box-seam', onSelect: () => void deliver() }] : []),
-    ...(!locked ? [{ label: 'Reset picks', icon: 'arrow-counterclockwise', onSelect: () => void resetPicks(), disabled: s.pickedCount === 0 }] : []),
-    { label: 'Settings', icon: 'gear', onSelect: () => setTab('settings') },
-  ]
+  const submitted = hasSubmitted(s.status)
 
   return (
-    <div className="stack sw-page">
+    <div className="stack ef-page">
       <Link to="/photo-selection" className="sw-back">
-        <i className="bi bi-arrow-left" /> Photo Selection
+        <i className="bi bi-arrow-left" /> All events
       </Link>
-
-      <header className="card sw-head">
-        <div className="sw-head-main">
-          <div className="sw-title">
-            <h1>{s.event.title}</h1>
-            <span className={`ps-status ${SELECTION_TONE[s.status]}`} data-testid="selection-status">
-              {SELECTION_STATUS_LABELS[s.status]}
-            </span>
-          </div>
-          <p className="sw-meta">
-            <span>
-              <i className="bi bi-person" /> {s.client.name}
-            </span>
-            <span>
-              <i className="bi bi-tag" /> {EVENT_TYPE_LABELS[s.event.type]}
-            </span>
-            {s.eventDate && (
-              <span>
-                <i className="bi bi-calendar-event" /> {formatDate(s.eventDate)}
-              </span>
-            )}
-            <span className="mono">{s.code}</span>
-          </p>
-        </div>
-
-        <div className="sw-stats">
-          <div className="sw-counter">
-            <div className="sw-counter-top">
-              <strong data-testid="picked-counter">{pickedLabel(s.pickedCount, s.quota)}</strong>
-              <span className="muted">{count(s.photoCount)} photos</span>
-            </div>
-            <Progress value={s.pickedCount} max={s.quota} label="Photos picked" />
-          </div>
-          <dl className="sw-facts">
-            <div>
-              <dt>Last client visit</dt>
-              <dd>{s.lastClientVisitAt ? timeAgo(s.lastClientVisitAt) : 'Not opened yet'}</dd>
-            </div>
-            <div>
-              <dt>Gallery expires</dt>
-              <dd className={s.status === 'EXPIRED' ? 'sw-expired' : undefined}>{formatDate(s.deadline)}</dd>
-            </div>
-            <div>
-              <dt>Notes</dt>
-              <dd>{count(noteCount)}</dd>
-            </div>
-          </dl>
-        </div>
-
-        <div className="sw-actions">
-          <button className="btn btn-primary" onClick={() => setTab('share')}>
-            <i className="bi bi-send" /> Share
+      <header className="ef-head">
+        <h1>Photo Selection</h1>
+        <div className="ef-actions">
+          <span className="ef-tip-wrap" title={submitted ? undefined : 'No photos selected by the client yet'}>
+            <button type="button" className="ef-btn solid" onClick={() => setDownloading(true)} disabled={!submitted} data-testid="download-selected">
+              <i className="bi bi-download" /> Download Selected ({count(s.pickedCount)})
+            </button>
+          </span>
+          <button type="button" className="ef-btn solid" onClick={startUpload}>
+            <i className="bi bi-cloud-arrow-up" /> Upload Folder
           </button>
-          {!locked && (
-            <button
-              className="btn btn-ghost"
-              onClick={() => {
-                setUrl({ tab: '', upload: '1' })
-              }}
-            >
-              <i className="bi bi-cloud-arrow-up" /> Upload photos
+          <button type="button" className="ef-btn solid" onClick={() => setNewFolder(true)}>
+            <i className="bi bi-folder-plus" /> New Folder
+          </button>
+          <button type="button" className="ef-btn outline" onClick={() => navigate(`/photo-selection/${s.id}/settings`)}>
+            <i className="bi bi-gear" /> Settings
+          </button>
+          <button
+            type="button"
+            className="ef-btn outline"
+            onClick={() => setResetting(true)}
+            disabled={s.pickedCount === 0 || s.status === 'DELIVERED'}
+            title={s.status === 'DELIVERED' ? 'Already downloaded' : s.pickedCount === 0 ? 'Nothing picked yet' : undefined}
+          >
+            <i className="bi bi-arrow-counterclockwise" /> Reset Selection
+          </button>
+        </div>
+      </header>
+      <p className="ef-info" data-testid="event-info">
+        <span>
+          <i className="bi bi-folder2" /> {count(folders.length)} Folders
+        </span>
+        <span className="ef-sep">|</span>
+        <span>
+          <i className="bi bi-image" /> {count(images)} Images
+        </span>
+        <span className="ef-sep">|</span>
+        <span>
+          <i className="bi bi-camera-video" /> {count(videos)} Videos
+        </span>
+        <span className="ef-sep">|</span>
+        <span>
+          Customer : <strong>{s.client.name}</strong>
+        </span>
+        <span className="ef-sep">|</span>
+        <span>
+          Event : <strong>{s.event.title}</strong>
+        </span>
+        <span className="ef-info-end">
+          <SelectionStatusPill selection={s} className="psx-status" onReopen={() => setResetting(true)} />
+          {submitted && (
+            <button type="button" className="ef-link" onClick={() => setUrl({ view: 'selected', folder: '' })}>
+              <i className="bi bi-check2-square" /> Selected Photos
             </button>
           )}
-          <MenuButton
-            label="Export"
-            icon="download"
-            items={[
-              { label: 'ZIP of picked photos', icon: 'file-zip', onSelect: () => zip('picked'), disabled: s.pickedCount === 0 },
-              { label: 'ZIP of all photos', icon: 'file-zip', onSelect: () => zip('all'), disabled: s.photoCount === 0 },
-              { label: 'Lightroom list (TXT)', icon: 'filetype-txt', onSelect: () => void exportList('txt'), disabled: s.pickedCount === 0 },
-              { label: 'File names with notes (CSV)', icon: 'filetype-csv', onSelect: () => void exportList('csv'), disabled: s.pickedCount === 0 },
-            ]}
-          />
-          <MenuButton label="More" icon="three-dots" items={more} />
-        </div>
-        {s.status === 'SUBMITTED' && (
-          <p className="notice success sw-notice">
-            <i className="bi bi-check2-circle" /> Submitted {s.submittedAt ? timeAgo(s.submittedAt) : ''}: {s.pickedCount} photos picked. Download the picks, then mark it delivered.
-          </p>
-        )}
-      </header>
-
-      <div className="tabs sw-tabs" role="tablist" aria-label="Selection sections">
-        {TABS.map(([t, label, icon]) => (
-          <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>
-            <i className={`bi bi-${icon}`} /> {label}
-            {t === 'activity' && log.length > 0 && <small className="sw-tab-count">{log.length}</small>}
+          <button type="button" className="ef-link" onClick={() => setSharing(true)}>
+            <i className="bi bi-share" /> Share
           </button>
-        ))}
-      </div>
+        </span>
+      </p>
 
-      {/* Kept mounted on other tabs so uploads in progress carry on. */}
-      <div hidden={tab !== 'photos'}>
-        <EventPhotos s={s} folders={folders} uploadOpen={uploadOpen} setUploadOpen={(v) => setUrl({ upload: v ? '1' : '' })} onBusyChange={setUploading} />
-      </div>
-      {tab === 'share' && <EventShare s={s} />}
-      {tab === 'settings' && <EventSettings s={s} />}
-      {tab === 'activity' && (
-        <section className="card sw-card">
-          <ActivityLog log={log} />
-        </section>
+      {url.view === 'selected' && submitted ? (
+        <SelectedPhotosView s={s} folders={folders} onBack={() => setUrl({ view: '' })} />
+      ) : open ? (
+        <FolderView s={s} folder={open} folders={folders} onBack={() => setUrl({ folder: '' })} />
+      ) : folders.length === 0 ? (
+        <div className="card ef-empty">
+          <EmptyState
+            icon="folder2-open"
+            title="No folders yet — click Upload Folder"
+            action={
+              <button type="button" className="ef-btn solid" onClick={startUpload}>
+                <i className="bi bi-cloud-arrow-up" /> Upload Folder
+              </button>
+            }
+          />
+        </div>
+      ) : (
+        <div className="ef-grid" data-testid="folder-grid">
+          {folders.map((f) => (
+            <FolderCard key={f.id} folder={f} onOpen={() => setUrl({ folder: f.id })} />
+          ))}
+        </div>
       )}
 
-      <UnlockModal open={unlockOpen} onClose={() => setUnlockOpen(false)} id={s.id} code={s.code} />
+      <UploadFoldersModal ref={uploader} open={uploadOpen} onClose={() => setUploadOpen(false)} selectionId={s.id} folders={folders} />
+      <CreateFolderModal key={newFolder ? 'new-open' : 'new-closed'} open={newFolder} onClose={() => setNewFolder(false)} selectionId={s.id} existing={folders.map((f) => f.name)} />
+      {downloading && <DownloadSelectedModal selection={s} folders={folders} onClose={() => setDownloading(false)} onDone={() => setUrl({ view: 'selected', folder: '' })} />}
+      {sharing && <ShareModal selection={s} onClose={() => setSharing(false)} />}
+      {resetting && <ResetSelectionModal selection={s} onClose={() => setResetting(false)} onDone={() => setUrl({ view: '' })} />}
     </div>
   )
 }

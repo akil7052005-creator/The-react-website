@@ -1,0 +1,116 @@
+/* Dashboard layout: the two key numbers as a full-width row of link cards, then Recent Events,
+   then Client Activity as a table matching Recent Events. Loaded after workflow.css. */
+
+.db-stats {
+  display: grid;
+  /* Two equal cards; they stack when two no longer fit side by side. */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+  gap: 18px;
+}
+.db-stats .db-stat {
+  position: relative;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  height: 120px;
+  padding: 20px;
+  border-radius: 16px;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: 0 2px 6px -2px rgba(46, 10, 25, 0.12), 0 12px 24px -16px rgba(46, 10, 25, 0.3);
+  transition: transform 150ms var(--ease), box-shadow 150ms var(--ease);
+}
+.db-stats .db-stat:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px -2px rgba(46, 10, 25, 0.16), 0 20px 34px -16px rgba(46, 10, 25, 0.42);
+}
+.db-stats .db-stat:active {
+  transform: translateY(0);
+}
+.db-stats .db-stat:focus-visible {
+  outline: 3px solid #2a1e22;
+  outline-offset: 3px;
+}
+.db-stats .db-stat-body strong {
+  font-size: 32px;
+}
+.db-stat-go {
+  margin-left: auto;
+  font-size: 20px;
+  opacity: 0.7;
+  transition: transform 150ms var(--ease), opacity 150ms;
+}
+.db-stats .db-stat:hover .db-stat-go {
+  opacity: 1;
+  transform: translateX(3px);
+}
+
+/* LOCKED: Photo Selection box, "Deep wine" (approved by owner). Colours come only from the
+   --ps-box-* tokens in tokens.css; do not change without an explicit request. */
+.db-stats .db-stat.royal {
+  background: var(--ps-box-bg);
+  border: var(--ps-box-border);
+  box-shadow: var(--ps-box-shadow);
+  color: var(--ps-box-text);
+}
+.db-stats .db-stat.royal:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--ps-box-shadow-hover);
+}
+.db-stat.royal .db-stat-label,
+.db-stat.royal .db-stat-body strong,
+.db-stat.royal .db-stat-foot,
+.db-stat.royal .db-stat-go {
+  color: var(--ps-box-text);
+  opacity: 1;
+}
+.db-stat.royal .db-stat-icon,
+.db-stat.royal .db-chip {
+  background: var(--ps-box-tile);
+  color: var(--ps-box-tile-text);
+}
+
+/* Client Activity table: same card, header and row height as Recent Events. */
+.db-client {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: inherit;
+  text-decoration: none;
+}
+.db-client:hover .db-strong {
+  color: var(--db-red);
+}
+.db-activity-table .db-avatar {
+  width: 28px;
+  height: 28px;
+  font-size: 13px;
+}
+/* With the 28px avatar, rows come out the same height as Recent Events. */
+.db-activity-table td {
+  padding-top: 15px;
+  padding-bottom: 15px;
+}
+.db-ellipsis {
+  display: inline-block;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+.db-muted {
+  color: var(--text-muted);
+}
+
+@media (max-width: 639px) {
+  .db-stats {
+    gap: 14px;
+  }
+  .db-stats .db-stat {
+    height: 112px;
+    padding: 18px;
+  }
+  .db-ellipsis {
+    max-width: 200px;
+  }
+}

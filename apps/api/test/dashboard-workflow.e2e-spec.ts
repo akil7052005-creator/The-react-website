@@ -41,64 +41,32 @@ describe('Dashboard workflow and automatic reminders', () => {
     await app?.close()
   })
 
-  it('shows the get-started checklist until the first selection is shared', async () => {
-    expect((await workflow()).checklist).toEqual({ eventCreated: false, photosUploaded: false, selectionShared: false })
-    const s = await selection(10, 'Checklist wedding')
-    expect((await workflow()).checklist).toEqual({ eventCreated: true, photosUploaded: true, selectionShared: false })
-    await A.agent.post(`/api/v1/selections/${s.id}/mark-shared`).expect(200)
-    expect((await workflow()).checklist).toEqual({ eventCreated: true, photosUploaded: true, selectionShared: true })
-    expect((await workflow()).uploadTarget).toMatchObject({ id: s.id })
+  it('counts the events and selections added this month', async () => {
+    expect((await workflow()).createdThisMonth).toEqual({ events: 0, selections: 0 })
+    await selection(10, 'Counted wedding')
+    expect((await workflow()).createdThisMonth).toEqual({ events: 1, selections: 1 })
   })
 
-  it('needs attention: submitted picks, galleries expiring within 7 days, unpaid invoices', async () => {
-    const submitted = await selection(20, 'Submitted wedding')
-    const view = (await pub().get(`/api/v1/public/selections/${submitted.publicToken}`).expect(200)).body
-    await pub().post(`/api/v1/public/selections/${submitted.publicToken}/picks`).send({ photoId: view.photos[0].id, memberId: view.members[0].id, picked: true }).expect(200)
-    await pub().post(`/api/v1/public/selections/${submitted.publicToken}/submit`).send({ memberId: view.members[0].id }).expect(200)
-    const soon = await selection(5, 'Soon wedding')
-    await A.agent.post(`/api/v1/selections/${soon.id}/mark-shared`).expect(200)
-    const later = await selection(12, 'Later wedding')
-    await prisma.invoice.create({
-      data: {
-        studioId: A.studioId,
-        number: 'INV-TEST-1',
-        clientId,
-        issueDate: new Date(),
-        dueDate: new Date(Date.now() - 2 * DAY),
-        placeOfSupply: '33',
-        subtotal: 100_000,
-        cgst: 9_000,
-        sgst: 9_000,
-        igst: 0,
-        total: 118_000,
-        amountPaid: 18_000,
-      },
-    })
-
+  it('client activity: opened, started picking, submitted — each with the status at that time', async () => {
+    const s = await selection(20, 'Submitted wedding')
+    const view = (await pub().get(`/api/v1/public/selections/${s.publicToken}`).expect(200)).body
+    await pub().post(`/api/v1/public/selections/${s.publicToken}/picks`).send({ photoId: view.photos[0].id, memberId: view.members[0].id, picked: true }).expect(200)
+    await pub().post(`/api/v1/public/selections/${s.publicToken}/submit`).send({ memberId: view.members[0].id }).expect(200)
     const w = await workflow()
-    const byKind = (k: string) => w.needsAttention.filter((n: { kind: string }) => n.kind === k)
-    expect(byKind('SUBMITTED')).toEqual([
-      expect.objectContaining({ id: submitted.id, title: 'Meera Iyer submitted their picks', detail: 'Submitted wedding · 1 of 5 photos', link: `/photo-selection/${submitted.id}` }),
-    ])
-    expect(byKind('EXPIRING').map((n: { id: string }) => n.id)).toEqual([soon.id])
-    expect(byKind('EXPIRING')[0].title).toBe('Gallery expires in 5 days')
-    expect(byKind('EXPIRING').some((n: { id: string }) => n.id === later.id)).toBe(false)
-    expect(byKind('UNPAID')).toEqual([expect.objectContaining({ title: '₹1,000 unpaid · Meera Iyer', detail: expect.stringMatching(/^INV-TEST-1 · overdue since /) })])
-
-    // Client activity: opening the gallery, picking, submitting.
-    expect(w.activity.map((a: { action: string }) => a.action)).toEqual(expect.arrayContaining(['Submitted', 'Started picking', 'Opened the gallery']))
-    expect(w.thisMonth).toMatchObject({ selectionsSubmitted: 1, billedPaise: 118_000 })
-    expect(w.thisMonth.photosUploaded).toBeGreaterThanOrEqual(4)
-    expect(w.upcoming.length).toBeLessThanOrEqual(5)
-    expect(w.upcoming[0]).toEqual(expect.objectContaining({ clientName: 'Meera Iyer', daysLeft: expect.any(Number) }))
+    const mine = w.activity.filter((a: { selectionId: string }) => a.selectionId === s.id)
+    expect(mine.map((a: { action: string }) => a.action)).toEqual(['Submitted', 'Started picking', 'Opened the gallery'])
+    expect(mine[0]).toMatchObject({ clientName: 'Meera Iyer', eventTitle: 'Submitted wedding', status: 'SUBMITTED' })
+    // Opened and started picking keep In Progress after the submit.
+    expect(mine.map((a: { status: string }) => a.status)).toEqual(['SUBMITTED', 'IN_PROGRESS', 'IN_PROGRESS'])
+    // A deleted selection drops out of the feed.
+    await A.agent.delete(`/api/v1/selections/${s.id}`).expect(200)
+    expect((await workflow()).activity.some((a: { selectionId: string }) => a.selectionId === s.id)).toBe(false)
   })
 
   it("another studio's dashboard shows none of it", async () => {
     const w = await workflow(B)
-    expect(w.needsAttention).toEqual([])
     expect(w.activity).toEqual([])
-    expect(w.upcoming).toEqual([])
-    expect(w.checklist.eventCreated).toBe(false)
+    expect(w.createdThisMonth).toEqual({ events: 0, selections: 0 })
   })
 
   describe('automatic reminders', () => {

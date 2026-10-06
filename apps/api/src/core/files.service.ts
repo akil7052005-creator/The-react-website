@@ -27,6 +27,8 @@ export interface FileCheckOverrides {
   label?: string
   /** false = the caller has already checked the storage quota. Default true. */
   checkStorage?: boolean
+  /** Accepted types instead of the kind's usual ones (Photo Selection also takes videos). */
+  mimes?: string[]
 }
 
 // URL builders — the web app prefixes them with the API origin.
@@ -63,7 +65,7 @@ export class FilesService {
   async validate(studioId: string, kind: FileKind, file: UploadedFile | undefined, field = 'file', overrides: FileCheckOverrides = {}) {
     if (!file || !file.buffer?.length) throw fileInvalid('Please choose a file to upload', field)
     const base = this.rules(kind)
-    const rules = { ...base, maxBytes: overrides.maxBytes ?? base.maxBytes, label: overrides.label ?? base.label }
+    const rules = { ...base, maxBytes: overrides.maxBytes ?? base.maxBytes, label: overrides.label ?? base.label, mimes: overrides.mimes ?? base.mimes }
     if (file.size > rules.maxBytes) {
       throw fileInvalid(`${file.originalname} is too large — upload ${rules.label}`, field)
     }

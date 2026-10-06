@@ -101,7 +101,7 @@ export class PlanUploadInterceptor implements NestInterceptor {
     const limits = await this.limits.forStudio(studioId)
     if (limits.readOnly) throw renewToUpload(limits)
 
-    const parse = multer({ storage: memoryStorage(), limits: { fileSize: limits.maxPhotoMb * MB, files: 1, fields: 5, fieldSize: 2048 } }).single('file')
+    const parse = multer({ storage: memoryStorage(), limits: { fileSize: limits.maxPhotoMb * MB, files: 1, fields: 12, fieldSize: 2048 } }).single('file')
     await new Promise<void>((resolve, reject) =>
       parse(req, res, (err: unknown) => {
         if (!err) return resolve()
@@ -119,6 +119,25 @@ export class PlanUploadInterceptor implements NestInterceptor {
  * The folder a photo came from, from the form field the uploader sends ("Haldi", "Wedding/Stage").
  * Normalised and bounded; anything odd (empty, "..", absurdly long) is stored as no folder.
  */
+/**
+ * What the browser says about the original of a compressed upload: its file name (any extension,
+ * e.g. IMG_1234.CR2), byte size and pixel size. Anything missing or out of range is dropped.
+ */
+export function originalMeta(body: Record<string, unknown>) {
+  const int = (v: unknown, max: number) => {
+    const n = Number(v)
+    return Number.isInteger(n) && n > 0 && n <= max ? n : null
+  }
+  const rawName = typeof body.originalName === 'string' ? body.originalName.replace(/[\\/]/g, '').replace(/[\u0000-\u001f]/g, '').trim() : ''
+  return {
+    compressed: body.compressed === '1' || body.compressed === 'true',
+    originalName: rawName ? rawName.slice(0, 255) : null,
+    originalSize: int(body.originalSize, 2_147_483_647),
+    originalWidth: int(body.originalWidth, 100_000),
+    originalHeight: int(body.originalHeight, 100_000),
+  }
+}
+
 export function cleanFolder(raw: unknown): string | null {
   if (typeof raw !== 'string') return null
   const parts = raw
@@ -127,6 +146,7 @@ export function cleanFolder(raw: unknown): string | null {
     .map((p) => p.trim())
     .filter((p) => p && p !== '.')
   if (!parts.length || parts.some((p) => p === '..')) return null
+  // Each folder name can be up to 255 characters (FOLDER_NAME_MAX), so allow a deep path of long names.
   const folder = parts.join('/')
-  return folder.length > 300 ? null : folder
+  return folder.length > 4096 || parts.some((p) => p.length > 255) ? null : folder
 }

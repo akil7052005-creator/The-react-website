@@ -95,11 +95,11 @@ describe('Phase 2 — clients, events, selections, albums, dashboard', () => {
       eventId = (await newEvent(A, client.id, { title: 'Divya & Arvind Wedding' })).id
       const res = await A.agent
         .post('/api/v1/selections')
-        .send({ eventId, quota: 2, deadline: isoDaysFromToday(7), members: [{ name: 'Divya' }, { name: 'Mom', phone: '9840099999' }] })
+        .send({ eventId, quota: 2, deadline: isoDaysFromToday(7), notesAllowed: true, members: [{ name: 'Divya' }, { name: 'Mom', phone: '9840099999' }] })
         .expect(201)
       selection = res.body
       expect(res.body).toMatchObject({ status: 'DRAFT', quota: 2, photoCount: 0, pickedCount: 0 })
-      expect(res.body.code).toMatch(/^SEL-\d+$/)
+      expect(res.body.code).toMatch(/^\d{6}$/)
     })
 
     it('validates new selections', async () => {
@@ -256,8 +256,9 @@ describe('Phase 2 — clients, events, selections, albums, dashboard', () => {
       expect(s.body.status).toBe('EXPIRED')
       const list = await A.agent.get('/api/v1/selections').query({ status: 'EXPIRED' }).expect(200)
       expect(list.body.data.map((x: { id: string }) => x.id)).toContain(sel.id)
-      const pub = await request(app.getHttpServer()).get(`/api/v1/public/selections/${sel.publicToken}`).expect(200)
-      expect(pub.body.readOnly).toBe(true)
+      // An expired gallery is closed to the client.
+      const pub = await request(app.getHttpServer()).get(`/api/v1/public/selections/${sel.publicToken}`).expect(410)
+      expect(pub.body.error.code).toBe('GALLERY_EXPIRED')
     })
   })
 
@@ -269,7 +270,7 @@ describe('Phase 2 — clients, events, selections, albums, dashboard', () => {
     beforeAll(async () => {
       const client = (await newClient(A, 'Kavya Reddy')).body
       eventId = (await newEvent(A, client.id, { title: 'Kavya & Aditya Wedding' })).id
-      const sel = (await A.agent.post('/api/v1/selections').send({ eventId, quota: 4, deadline: isoDaysFromToday(4) }).expect(201)).body
+      const sel = (await A.agent.post('/api/v1/selections').send({ eventId, quota: 4, deadline: isoDaysFromToday(4), notesAllowed: true }).expect(201)).body
       for (const hue of [200, 220, 240, 260]) await upload(A, sel.id, hue).expect(201)
       const photos = await A.agent.get(`/api/v1/events/${eventId}/photos`).expect(200)
       photoIds = photos.body.map((p: { id: string }) => p.id)

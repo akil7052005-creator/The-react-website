@@ -124,7 +124,7 @@ export class AlbumsService {
       .map((p) => ({
         id: p.id,
         url: fileUrls.studio(p.fileId),
-        originalName: p.file.originalName,
+        originalName: p.originalName ?? p.file.originalName,
         size: p.file.size,
         position: p.position,
         picked: p._count.picks > 0,

@@ -211,6 +211,7 @@ model Studio {
   stateCode         String?  @map("state_code")
   pincode           String?
   website           String?
+  instagramHandle   String?  @map("instagram_handle")
   bio               String?
   logoFileId        String?  @unique @map("logo_file_id") @db.Uuid
   referralCode      String   @unique @map("referral_code")
@@ -328,6 +329,7 @@ model StoredFile {
   studioLogo    Studio?        @relation("StudioLogo")
   photo         Photo?
   photoPreview  Photo?         @relation("PhotoPreview")
+  photoOriginal Photo?         @relation("PhotoOriginal")
   banner        Banner?
   ticket        Ticket?
   ticketMessage TicketMessage?
@@ -402,14 +404,28 @@ model Photo {
   folderId      String?   @map("folder_id") @db.Uuid
   // Client-facing copy: resized, watermarked when the selection asks for it. Made on demand.
   previewFileId String?   @unique @map("preview_file_id") @db.Uuid
+  /// The customer marked it as a favourite in the portal (separate from selecting it).
+  clientFavorite Boolean  @default(false) @map("client_favorite")
+  /// The file as it was on the studio's computer (e.g. "IMG_1234.CR2"), when the upload was
+  /// compressed in the browser; the stored file is then a 1600 px JPEG. Used to find the original
+  /// again (Download Selected → Copy from my computer).
+  originalName   String?  @map("original_name")
+  originalWidth  Int?     @map("original_width")
+  originalHeight Int?     @map("original_height")
+  originalSize   Int?     @map("original_size")
+  compressed     Boolean  @default(false)
+  /// The full-quality original kept in the cloud beside a compressed upload (never shown or sent to
+  /// the customer). The studio's "Download from cloud" returns it for the customer's picks.
+  originalFileId String?  @unique @map("original_file_id") @db.Uuid
   createdAt     DateTime  @default(now()) @map("created_at")
   deletedAt     DateTime? @map("deleted_at")
 
-  event      Event            @relation(fields: [eventId], references: [id])
-  selection  Selection?       @relation(fields: [selectionId], references: [id])
-  file       StoredFile       @relation(fields: [fileId], references: [id])
-  folderRef  SelectionFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
-  preview    StoredFile?      @relation("PhotoPreview", fields: [previewFileId], references: [id], onDelete: SetNull)
+  event        Event            @relation(fields: [eventId], references: [id])
+  selection    Selection?       @relation(fields: [selectionId], references: [id])
+  file         StoredFile       @relation(fields: [fileId], references: [id])
+  folderRef    SelectionFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  preview      StoredFile?      @relation("PhotoPreview", fields: [previewFileId], references: [id], onDelete: SetNull)
+  originalFile StoredFile?      @relation("PhotoOriginal", fields: [originalFileId], references: [id], onDelete: SetNull)
   picks      PhotoPick[]
   comments   PhotoComment[]
   albumPages AlbumPage[]
@@ -434,14 +450,25 @@ model Selection {
   pinHash           String?         @map("pin_hash")
   pinFailures       Int             @default(0) @map("pin_failures")
   pinLockedUntil    DateTime?       @map("pin_locked_until")
-  allowDownload     Boolean         @default(false) @map("allow_download")
+  /// Wrong customer codes entered on this selection's share link (/select/:token); 5 lock it for 10 minutes.
+  codeFailures      Int             @default(0) @map("code_failures")
+  codeLockedUntil   DateTime?       @map("code_locked_until")
+  allowDownload    Boolean         @default(false) @map("allow_download")
   watermark         Boolean         @default(false)
   notesAllowed      Boolean         @default(true) @map("notes_allowed")
   sharedAt          DateTime?       @map("shared_at")
+  /// The studio reopened a submitted selection (Reset Selection / Unlock): shown as Pending until the
+  /// client submits again, which clears it.
+  reopenedAt        DateTime?       @map("reopened_at")
   deliveredAt       DateTime?       @map("delivered_at")
   lastClientVisitAt DateTime?       @map("last_client_visit_at")
   clientVisits      Int             @default(0) @map("client_visits")
   autoReminders     Int             @default(0) @map("auto_reminders")
+  /// Last Send Options send, and the card used: android | ios | web | all.
+  lastSentAt        DateTime?       @map("last_sent_at")
+  sentVia           String?         @map("sent_via")
+  /// Photo Selection settings without a column of their own (see EventSettings in @weddyzone/shared).
+  settings          Json?
   createdAt         DateTime        @default(now()) @map("created_at")
   updatedAt         DateTime        @updatedAt @map("updated_at")
   deletedAt         DateTime?       @map("deleted_at")
@@ -467,6 +494,8 @@ model SelectionFolder {
   selectionId String   @map("selection_id") @db.Uuid
   name        String
   position    Int      @default(0)
+  /// photo | video: which files the folder takes.
+  type        String   @default("photo")
   createdAt   DateTime @default(now()) @map("created_at")
 
   selection Selection @relation(fields: [selectionId], references: [id], onDelete: Cascade)
@@ -483,6 +512,9 @@ model SelectionLog {
   actor       String
   action      String
   detail      String?
+  /// The selection's status when this happened (Client Activity shows it, not today's status):
+  /// IN_PROGRESS (opened / started picking), SUBMITTED, or DRAFT (Pending: reopened by the studio).
+  status      String?
   createdAt   DateTime @default(now()) @map("created_at")
 
   selection Selection @relation(fields: [selectionId], references: [id], onDelete: Cascade)

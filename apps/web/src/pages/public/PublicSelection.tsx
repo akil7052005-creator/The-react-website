@@ -158,6 +158,9 @@ export default function PublicSelection() {
   const confirm = useConfirm()
   const [key, setKey] = useStored(`wz-gallery-key-${token}`)
   const [memberId, setMemberId] = useStored(`wz-member-${token}`)
+  // Instagram Follow lock: remembered once the client has opened the studio's profile.
+  const [followed, setFollowed] = useStored(`wz-ig-${token}`)
+  const [igOpened, setIgOpened] = useState(false)
   const [folder, setFolderRaw] = useState('')
   const [filter, setFilterRaw] = useState<Filter>('all')
   const [view, setView] = useState<View>('gallery')
@@ -228,6 +231,25 @@ export default function PublicSelection() {
     if (isApiError(e) && e.code === 'PIN_REQUIRED' && e.details) {
       return <PinScreen info={e.details as unknown as PublicSelectionLockedDto} token={token} onKey={(k) => setKey(k)} />
     }
+    if (isApiError(e) && (e.code === 'GALLERY_CLOSED' || e.code === 'GALLERY_EXPIRED')) {
+      const d = (e.details ?? {}) as { studio?: { name: string; logoUrl: string | null; phone: string | null }; eventTitle?: string }
+      return (
+        <div className="cg-shell cg-pin-shell">
+          <div className="cg-pin card" data-testid="gallery-unavailable">
+            {d.studio && <Avatar name={d.studio.name} src={d.studio.logoUrl} size={56} />}
+            {d.eventTitle && <h1>{d.eventTitle}</h1>}
+            <p className="muted">
+              <i className={`bi bi-${e.code === 'GALLERY_EXPIRED' ? 'hourglass-bottom' : 'eye-slash'}`} /> {e.message}
+            </p>
+            {d.studio?.phone && (
+              <a className="btn btn-ghost" href={`tel:${d.studio.phone}`}>
+                <i className="bi bi-telephone" /> Call {d.studio.name}
+              </a>
+            )}
+          </div>
+        </div>
+      )
+    }
     const notFound = isApiError(e) && e.status === 404
     return (
       <div className="cg-shell">
@@ -244,6 +266,26 @@ export default function PublicSelection() {
     )
   }
 
+  if (data.instagram && !followed) {
+    const handle = data.instagram.handle
+    return (
+      <div className="cg-shell cg-pin-shell">
+        <div className="cg-pin card" data-testid="instagram-gate">
+          <Avatar name={data.studio.name} src={data.studio.logoUrl} size={56} />
+          <p className="eyebrow">{data.studio.name}</p>
+          <h1>{data.eventTitle}</h1>
+          <p className="muted">Follow {data.studio.name} on Instagram to see your photos.</p>
+          <a className="btn btn-primary cg-wide" href={`https://instagram.com/${encodeURIComponent(handle)}`} target="_blank" rel="noreferrer" onClick={() => setIgOpened(true)}>
+            <i className="bi bi-instagram" /> Follow @{handle}
+          </a>
+          <button className="btn btn-ghost cg-wide" disabled={!igOpened} onClick={() => setFollowed('1')}>
+            I've followed — show my photos
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   // ---------------------------------------------------------------- gallery
 
   const full = data.pickedCount >= data.quota
@@ -253,6 +295,9 @@ export default function PublicSelection() {
   const current = open !== null ? photos[open] : null
   const myPick = (p: Photo) => p.pickedBy.includes(memberId)
   const notesOn = data.notesAllowed !== false
+  /** Hearts are on (the studio can make the gallery view-only). */
+  const canPick = !data.readOnly && data.favoritesEnabled !== false
+  const keyQuery = key ? `?k=${encodeURIComponent(key)}` : ''
 
   const toggle = (p: Photo) => {
     if (data.readOnly) return
@@ -312,10 +357,12 @@ export default function PublicSelection() {
               <small>{data.eventTitle}</small>
             </div>
           </div>
-          <div className="cg-counter" aria-live="polite">
-            <strong data-testid="client-counter">{pickedLabel(data.pickedCount, data.quota)}</strong>
-            <Progress value={data.pickedCount} max={data.quota} label="Photos picked" />
-          </div>
+          {data.favoritesEnabled !== false && (
+            <div className="cg-counter" aria-live="polite">
+              <strong data-testid="client-counter">{pickedLabel(data.pickedCount, data.quota)}</strong>
+              <Progress value={data.pickedCount} max={data.quota} label="Photos picked" />
+            </div>
+          )}
         </div>
       </header>
 
@@ -324,7 +371,14 @@ export default function PublicSelection() {
           <div className="cg-intro">
             <h1>{data.eventTitle}</h1>
             <p className="muted">
-              Tap <i className="bi bi-heart" aria-label="the heart" /> on your favourites — up to {data.quota}. Open until {formatDate(data.deadline)}.
+              {canPick ? (
+                <>
+                  Tap <i className="bi bi-heart" aria-label="the heart" /> on your favourites — up to {data.quota}.
+                </>
+              ) : (
+                'Your photos from ' + data.studio.name + '.'
+              )}
+              {data.deadline < '9999' ? ` Open until ${formatDate(data.deadline)}.` : ''}
             </p>
           </div>
         ) : (
@@ -375,10 +429,18 @@ export default function PublicSelection() {
                 </button>
                 {folders.map((f) => (
                   <button key={f.id} className={folder === f.id ? 'on' : ''} aria-pressed={folder === f.id} onClick={() => setFolder(f.id)}>
-                    {f.name} <small>{f.photoCount}</small>
+                    <span className="cg-folder-name" title={f.name}>
+                      {f.name}
+                    </span>{' '}
+                    <small>{f.photoCount}</small>
                   </button>
                 ))}
               </nav>
+            )}
+            {data.downloadAllFolder && folder && (
+              <a className="btn btn-ghost btn-sm cg-folder-zip" href={fileUrl(`/api/v1/public/selections/${token}/folders/${folder}/zip${keyQuery}`)} download data-testid="folder-zip">
+                <i className="bi bi-file-zip" /> Download this folder
+              </a>
             )}
             <div className="cg-filter tabs" role="tablist">
               {(
@@ -413,7 +475,7 @@ export default function PublicSelection() {
                   <button className="cg-open" onClick={() => setOpen(i)} aria-label={`Open ${p.originalName}`}>
                     <img src={fileUrl(p.url)} alt={p.originalName} loading="lazy" decoding="async" />
                   </button>
-                  {!data.readOnly ? (
+                  {canPick ? (
                     <button
                       className={`cg-heart${mine ? ' on' : ''}`}
                       onClick={() => toggle(p)}
@@ -449,7 +511,7 @@ export default function PublicSelection() {
         )}
       </main>
 
-      {!data.readOnly && (
+      {canPick && (
         <footer className="cg-bar">
           <div className="cg-wrap cg-bar-inner">
             <span>
@@ -496,7 +558,7 @@ export default function PublicSelection() {
             </button>
           </div>
           <div className="cg-viewer-side">
-            {!data.readOnly && (
+            {canPick && (
               <button className={`btn ${myPick(current) ? 'btn-primary' : 'btn-ghost'} cg-wide`} onClick={() => toggle(current)} disabled={pending === current.id}>
                 <i className={`bi bi-heart${myPick(current) ? '-fill' : ''}`} /> {myPick(current) ? 'Picked' : 'Pick this photo'}
               </button>

@@ -16,10 +16,14 @@ import { StorageService } from '../infra/storage.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { hashPin } from './gallery-access'
 import { PhotoPreviewService } from './previews.service'
-import { logDto, writeLog } from './selection-log'
+import { logDto, REOPENED_ACTION, RESET_ACTIONS, writeLog } from './selection-log'
 import { GENERAL_FOLDER, SelectionsService } from './selections.service'
 
 const readOnly = (message: string) => new AppError(HttpStatus.CONFLICT, ERROR_CODES.READ_ONLY, message)
+
+export type ResetMode = 'shortlist' | 'reject'
+/** Log actions of the two resets; the dashboard's Client Activity lists them too. */
+export { REOPENED_ACTION, RESET_ACTIONS }
 
 const cleanZipPart = (v: string) => v.replace(/[\\/:*?"<>|]+/g, '_').trim() || 'photo'
 
@@ -67,32 +71,42 @@ export class SelectionWorkflowService {
 
   async folders(studioId: string, id: string): Promise<SelectionFolderDto[]> {
     await this.selections.find(studioId, id)
-    const [folders, photos, picked] = await Promise.all([
+    const [folders, photos, videos, picked] = await Promise.all([
       this.prisma.selectionFolder.findMany({ where: { selectionId: id }, orderBy: [{ position: 'asc' }, { name: 'asc' }] }),
-      this.prisma.photo.groupBy({ by: ['folderId'], where: { selectionId: id, deletedAt: null }, _count: true }),
+      this.prisma.photo.groupBy({ by: ['folderId'], where: { selectionId: id, deletedAt: null, file: { mimeType: { startsWith: 'image/' } } }, _count: true }),
+      this.prisma.photo.groupBy({ by: ['folderId'], where: { selectionId: id, deletedAt: null, file: { mimeType: { startsWith: 'video/' } } }, _count: true }),
       this.prisma.$queryRaw<{ folder_id: string | null; n: bigint }[]>`
         SELECT p.folder_id, COUNT(DISTINCT k.photo_id) AS n FROM photo_picks k
         JOIN photos p ON p.id = k.photo_id AND p.deleted_at IS NULL
         WHERE k.selection_id = ${id}::uuid GROUP BY p.folder_id`,
     ])
     const count = new Map(photos.map((r) => [r.folderId, r._count]))
+    const videoCount = new Map(videos.map((r) => [r.folderId, r._count]))
     const picks = new Map(picked.map((r) => [r.folder_id, Number(r.n)]))
-    return folders.map((f) => ({ id: f.id, name: f.name, position: f.position, photoCount: count.get(f.id) ?? 0, pickedCount: picks.get(f.id) ?? 0 }))
+    return folders.map((f) => ({
+      id: f.id,
+      name: f.name,
+      position: f.position,
+      photoCount: count.get(f.id) ?? 0,
+      pickedCount: picks.get(f.id) ?? 0,
+      videoCount: videoCount.get(f.id) ?? 0,
+      type: f.type === 'video' ? ('video' as const) : ('photo' as const),
+    }))
   }
 
   private async assertFolderName(selectionId: string, name: string, exceptId?: string) {
     const clash = await this.prisma.selectionFolder.findFirst({
       where: { selectionId, name: { equals: name, mode: 'insensitive' }, ...(exceptId ? { id: { not: exceptId } } : {}) },
     })
-    if (clash) throw conflict(`There is already a folder called ${clash.name}`, { name: 'Choose a different name' })
+    if (clash) throw conflict('A folder with this name already exists', { name: 'A folder with this name already exists' })
   }
 
-  async createFolder(studioId: string, id: string, name: string): Promise<SelectionFolderDto> {
+  async createFolder(studioId: string, id: string, name: string, type: 'photo' | 'video' = 'photo'): Promise<SelectionFolderDto> {
     await this.selections.find(studioId, id)
     await this.assertFolderName(id, name)
     const position = await this.prisma.selectionFolder.count({ where: { selectionId: id } })
-    const f = await this.prisma.selectionFolder.create({ data: { selectionId: id, name, position } })
-    return { id: f.id, name: f.name, position: f.position, photoCount: 0, pickedCount: 0 }
+    const f = await this.prisma.selectionFolder.create({ data: { selectionId: id, name, position, type } })
+    return { id: f.id, name: f.name, position: f.position, photoCount: 0, pickedCount: 0, videoCount: 0, type }
   }
 
   async renameFolder(studioId: string, id: string, folderId: string, name: string) {
@@ -165,7 +179,7 @@ export class SelectionWorkflowService {
 
   // ---------------------------------------------------------------- unlock / reset / delivered
 
-  /** Reopens a submitted selection so the client can change picks. Logged with the reason. */
+  /** Reopens a submitted selection so the client can change picks (shown as Pending). Logged with the reason. */
   async unlock(studioId: string, id: string, reason?: string | null) {
     const s = await this.selections.find(studioId, id)
     if (s.status !== 'SUBMITTED') throw badRequest('Only a submitted selection can be unlocked.')
@@ -173,28 +187,45 @@ export class SelectionWorkflowService {
       throw badRequest('The gallery expiry has passed. Extend it before unlocking.', { deadline: 'Extend the gallery expiry' })
     }
     await this.prisma.$transaction(async (tx) => {
-      await tx.selection.update({ where: { id }, data: { status: 'IN_PROGRESS', submittedAt: null } })
+      await tx.selection.update({ where: { id }, data: { status: 'IN_PROGRESS', submittedAt: null, reopenedAt: new Date() } })
       await writeLog(tx, id, 'STUDIO', 'Unlocked', reason || null)
     })
     return this.selections.dto(studioId, id)
   }
 
-  /** Clears every pick (not the photos or notes). Only while the selection is open. */
-  async resetPicks(studioId: string, id: string) {
+  /**
+   * Reset Selection, two ways, both reopening the selection for the client (shown as Pending until
+   * they submit again):
+   * - shortlist: the client's picks stay, so they can change them and submit again;
+   * - reject: every pick is cleared (the photos and notes are kept).
+   * A delivered selection is final. Logged so it shows in Client Activity.
+   */
+  async resetPicks(studioId: string, id: string, mode: ResetMode = 'reject') {
     const s = await this.selections.find(studioId, id)
-    if (isSelectionLocked(s.status)) throw readOnly('Unlock the selection before resetting the picks.')
-    const cleared = await this.prisma.$transaction(async (tx) => {
+    if (s.status === 'DELIVERED') throw readOnly('This selection was delivered. Its picks can no longer be reset.')
+    const result = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM selections WHERE id = ${id}::uuid FOR UPDATE`
-      const r = await tx.photoPick.deleteMany({ where: { selectionId: id } })
-      if (s.status === 'IN_PROGRESS') await tx.selection.update({ where: { id }, data: { status: 'SENT' } })
-      await writeLog(tx, id, 'STUDIO', 'Picks reset', `${r.count} pick${r.count === 1 ? '' : 's'} cleared`)
-      return r.count
+      const kept = mode === 'shortlist' ? (await this.selections.pickCounts([id])).picked.get(id) ?? 0 : 0
+      const cleared = mode === 'reject' ? (await tx.photoPick.deleteMany({ where: { selectionId: id } })).count : 0
+      const reopen = s.status === 'IN_PROGRESS' || s.status === 'SUBMITTED' ? { status: 'SENT' as const, submittedAt: null } : {}
+      await tx.selection.update({ where: { id }, data: { ...reopen, reopenedAt: new Date() } })
+      const n = (k: number) => `${k} photo${k === 1 ? '' : 's'}`
+      await writeLog(
+        tx,
+        id,
+        'STUDIO',
+        REOPENED_ACTION,
+        mode === 'shortlist' ? `Shortlist · ${n(kept)} kept · status Pending` : `Reject all · ${n(cleared)} cleared · status Pending`,
+      )
+      return { cleared, kept }
     })
-    return { cleared, selection: await this.selections.dto(studioId, id) }
+    return { ...result, mode, selection: await this.selections.dto(studioId, id) }
   }
 
+  /** Shown as "Downloaded": set after the studio copies or downloads the picks. Repeating it is harmless. */
   async markDelivered(studioId: string, id: string) {
     const s = await this.selections.find(studioId, id)
+    if (s.status === 'DELIVERED') return this.selections.dto(studioId, id)
     if (s.status !== 'SUBMITTED') throw badRequest('Mark as delivered after the client has submitted.')
     await this.prisma.$transaction(async (tx) => {
       await tx.selection.update({ where: { id }, data: { status: 'DELIVERED', deliveredAt: new Date() } })
@@ -232,13 +263,16 @@ export class SelectionWorkflowService {
     })
     if (!photos.length) throw badRequest(scope === 'picked' ? 'No picked photos to download yet.' : 'No photos to download.')
     const names = zipNames(photos.map((p) => ({ folder: p.folderRef?.name ?? null, name: p.file.originalName })))
-    const base = `${s.code}-${s.event.title}${scope === 'picked' ? '-picked' : ''}`
+    const base = (scope === 'picked' ? `${s.event.title}-selected` : `${s.code}-${s.event.title}`)
       .replace(/[^\w-]+/g, '-')
       .replace(/-+/g, '-')
-      .replace(/-$/, '')
+      .replace(/^-|-$/g, '')
     res.setHeader('Content-Type', 'application/zip')
-    res.setHeader('Content-Disposition', `attachment; filename="${base}.zip"`)
+    res.setHeader('Content-Disposition', `attachment; filename="${base || 'selected'}.zip"`)
     res.setHeader('Cache-Control', 'no-store')
+    // The ZIP is streamed (no Content-Length); the files' total lets the browser show progress.
+    res.setHeader('X-Total-Bytes', String(photos.reduce((n, p) => n + p.file.size, 0)))
+    res.setHeader('Access-Control-Expose-Headers', 'X-Total-Bytes, Content-Disposition')
     // Photos are already compressed: store them as they are (fast, same size).
     const zip = archiver('zip', { store: true })
     zip.on('warning', (e) => this.logger.warn(`ZIP ${s.code}: ${e.message}`))

@@ -35,7 +35,7 @@ export const SELECTION_STATUS_LABELS: Record<SelectionEffectiveStatus, string> =
   UPLOADING: 'Uploading',
   SENT: 'Shared',
   IN_PROGRESS: 'In progress',
-  SUBMITTED: 'Submitted',
+  SUBMITTED: 'Selected',
   DELIVERED: 'Delivered',
   EXPIRED: 'Expired',
 }

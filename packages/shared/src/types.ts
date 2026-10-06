@@ -1,3 +1,4 @@
+import type { FolderType, SendVia } from './selection'
 // Response shapes returned by the API. Money fields end in `Paise`; dates are
 // ISO strings (date-only fields are YYYY-MM-DD).
 import type {
@@ -56,6 +57,8 @@ export interface StudioDto {
   gstin: string | null
   pan: string | null
   website: string | null
+  /** Instagram handle without the @ (Profile » Social Setup). */
+  instagramHandle?: string | null
   bio: string | null
   logoUrl: string | null
   referralCode: string
@@ -135,6 +138,10 @@ export interface SelectionDto {
   status: SelectionEffectiveStatus
   photoCount: number
   pickedCount: number
+  /** Folders in the selection (Haldi, Wedding…). */
+  folderCount?: number
+  /** Videos in the selection. */
+  videoCount?: number
   publicToken: string
   members: SelectionMemberDto[]
   submittedAt: string | null
@@ -143,6 +150,8 @@ export interface SelectionDto {
   /** Event date (YYYY-MM-DD). */
   eventDate?: string
   sharedAt?: string | null
+  /** The studio reopened it (Reset Selection / Unlock) and the client hasn't submitted again: shown as Pending. */
+  reopened?: boolean
   deliveredAt?: string | null
   lastClientVisitAt?: string | null
   clientVisits?: number
@@ -151,14 +160,21 @@ export interface SelectionDto {
   allowDownload?: boolean
   watermark?: boolean
   notesAllowed?: boolean
+  /** Last "Send Options" send, and which card was used. */
+  lastSentAt?: string | null
+  sentVia?: SendVia | null
 }
 
 export interface SelectionFolderDto {
   id: string
   name: string
   position: number
+  /** Images in the folder (videos are counted in videoCount). */
   photoCount: number
   pickedCount: number
+  videoCount?: number
+  /** photo (default) or video. */
+  type?: FolderType
 }
 
 export interface SelectionLogDto {
@@ -200,8 +216,33 @@ export interface StudioSelectionPhotoDto extends PhotoDto {
   folderId?: string | null
   /** Small, fast preview for the studio grid (the original stays at url). */
   previewUrl?: string
+  /** 'video' for MP4/MOV clips (kept with the event, not shown to the client for picking). */
+  media?: 'image' | 'video'
+  mimeType?: string
+  /** Uploaded as a 1600 px JPEG made in the browser; originalName is the file on the studio's computer. */
+  compressed?: boolean
+  /** The original file's size in bytes and pixel size (null when not known). */
+  originalSize?: number | null
+  originalWidth?: number | null
+  originalHeight?: number | null
+  /**
+   * The full-quality original in the cloud (studio only, never sent to the customer): the kept
+   * original of a compressed upload, or the uploaded file itself when it wasn't compressed. Null
+   * when a compressed upload's original wasn't kept (e.g. larger than the plan allows).
+   */
+  originalUrl?: string | null
+  /** SHA-256 (hex) of that original, to verify a download byte for byte. */
+  originalChecksum?: string | null
   pickedBy: string[]
   comments: { memberName: string; text: string; createdAt: string }[]
+}
+
+/** POST /selections/:id/photos/:photoId/original: the original was stored and verified. */
+export interface PhotoOriginalDto {
+  photoId: string
+  originalUrl: string
+  originalChecksum: string
+  size: number
 }
 
 export interface PublicSelectionDto {
@@ -225,6 +266,12 @@ export interface PublicSelectionDto {
   folders?: { id: string; name: string; photoCount: number }[]
   notesAllowed?: boolean
   allowDownload?: boolean
+  /** Hearts are on (the studio can turn picking off for a view-only gallery). */
+  favoritesEnabled?: boolean
+  /** Client can download a whole folder as a ZIP. */
+  downloadAllFolder?: boolean
+  /** Follow this Instagram account before viewing. */
+  instagram?: { handle: string } | null
 }
 
 /** What the client sees before entering the PIN. */
@@ -644,41 +691,27 @@ export interface DashboardDto {
   pipeline: { name: string; progress: number; link: string }[]
   recentAlbums: AlbumDto[]
   activeBanner: BannerDto | null
-  /** The studio workflow home: what needs doing, what's next, what clients are up to. */
+  /** Client activity and this month's additions for the dashboard. */
   workflow?: DashboardWorkflowDto
 }
 
-export interface AttentionItemDto {
-  kind: 'SUBMITTED' | 'EXPIRING' | 'UNPAID'
-  id: string
-  title: string
-  detail: string
-  link: string
-  /** When it happened / is due, for ordering. */
-  at: string | null
-}
-
 export interface DashboardWorkflowDto {
-  needsAttention: AttentionItemDto[]
-  /** The next 5 events by date. */
-  upcoming: {
-    id: string
-    title: string
-    type: EventType
-    date: string
-    daysLeft: number
-    clientName: string
-    city: string
-    /** Its open selection, if any (for a direct link). */
-    selectionId: string | null
-  }[]
   /** Latest things clients did in their galleries. */
-  activity: { id: string; selectionId: string; eventTitle: string; clientName: string; action: string; detail: string | null; at: string }[]
-  thisMonth: { events: number; photosUploaded: number; selectionsSubmitted: number; billedPaise: number }
-  /** Get-started steps, shown until the first selection is shared. */
-  checklist: { eventCreated: boolean; photosUploaded: boolean; selectionShared: boolean }
-  /** The latest open selection, for the "Upload photos" action. */
-  uploadTarget: { id: string; title: string } | null
+  activity: {
+    id: string
+    selectionId: string
+    eventTitle: string
+    clientName: string
+    action: string
+    detail: string | null
+    at: string
+    /** The selection's status at the time of the action (for the pill); DRAFT shows as Pending. */
+    status?: SelectionEffectiveStatus
+    /** Reopened by the studio and not submitted again: shown as Pending. */
+    reopened?: boolean
+  }[]
+  /** Created this month (the "+N this month" chips). */
+  createdThisMonth: { events: number; selections: number }
 }
 
 // ------------------------------------------------------------------ platform admin: subscriptions

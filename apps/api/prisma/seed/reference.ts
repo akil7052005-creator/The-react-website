@@ -66,14 +66,14 @@ export const TEMPLATES = [
     name: 'Selection link',
     body:
       'Hi {{clientName}}! 💕\n\nYour private photo selection gallery for *{{eventTitle}}* from {{studioName}} is ready.\n' +
-      'Please pick up to {{quota}} favourite photos before {{deadline}}:\n{{link}}',
+      'Please pick up to {{quota}} favourite photos before {{deadline}}:\n{{link}}\n\nYour selection code: {{code}}',
   },
   {
     key: 'SELECTION_REMINDER',
     name: 'Selection reminder',
     body:
       'Hi {{clientName}}! 💕\n\nA gentle reminder from {{studioName}}: you have picked {{picked}} of {{quota}} photos for *{{eventTitle}}*.\n' +
-      '⏳ Selection deadline: {{deadline}}\n\nContinue here: {{link}}',
+      '⏳ Selection deadline: {{deadline}}\n\nContinue here: {{link}}\n\nYour selection code: {{code}}',
   },
   {
     key: 'ALBUM_SHARE',

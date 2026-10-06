@@ -5,7 +5,7 @@ import { DEFAULT_SELECTION_DEFAULTS, resolveSelectionDefaults } from './selectio
 
 describe('selection workflow statuses', () => {
   it('labels the studio workflow', () => {
-    expect(SELECTION_STATUS_LABELS).toMatchObject({ DRAFT: 'Draft', UPLOADING: 'Uploading', SENT: 'Shared', IN_PROGRESS: 'In progress', SUBMITTED: 'Submitted', DELIVERED: 'Delivered', EXPIRED: 'Expired' })
+    expect(SELECTION_STATUS_LABELS).toMatchObject({ DRAFT: 'Draft', UPLOADING: 'Uploading', SENT: 'Shared', IN_PROGRESS: 'In progress', SUBMITTED: 'Selected', DELIVERED: 'Delivered', EXPIRED: 'Expired' })
     expect(ALBUM_STATUS_LABELS).toMatchObject({ IN_REVIEW: 'In review', CHANGES_REQUESTED: 'Changes requested', APPROVED: 'Approved', PUBLISHED: 'Approved', SENT_TO_PRINT: 'Sent to print' })
   })
   it('knows locked and unshared states', () => {

@@ -16,6 +16,7 @@
     "@radix-ui/react-dialog": "^1.1.15",
     "@tanstack/react-query": "^5.90.5",
     "@weddyzone/shared": "workspace:*",
+    "heic2any": "^0.0.4",
     "qrcode": "^1.5.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

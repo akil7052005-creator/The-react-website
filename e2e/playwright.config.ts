@@ -42,6 +42,7 @@ export default defineConfig({
         CORS_ORIGINS: WEB,
         RATE_LIMIT_AUTH_PER_MIN: '1000',
         RATE_LIMIT_PUBLIC_PER_MIN: '5000',
+        RATE_LIMIT_CODE_PER_MIN: '1000',
         NODE_ENV: 'development',
         // No hourly job during the run: its emails would land in the outbox the tests read.
         JOBS_ENABLED: 'false',
@@ -52,7 +53,8 @@ export default defineConfig({
       url: WEB,
       reuseExistingServer: false,
       timeout: 120_000,
-      env: { VITE_DEV_API_PROXY: 'http://localhost:4100' },
+      // Share links use the public address only (never localhost): a reserved example domain here.
+      env: { VITE_DEV_API_PROXY: 'http://localhost:4100', VITE_PUBLIC_APP_URL: 'https://studio.weddyzone.example', VITE_ALLOW_LAN_LINKS: 'false' },
     },
   ],
 })

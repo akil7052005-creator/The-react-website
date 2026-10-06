@@ -1,23 +1,32 @@
-import { randomUUID } from 'node:crypto'
+import { randomInt, randomUUID } from 'node:crypto'
 import { HttpStatus, Injectable } from '@nestjs/common'
 import type { Prisma } from '@prisma/client'
+import archiver from 'archiver'
+import type { Response } from 'express'
 import {
+  cleanFolderName,
   ERROR_CODES,
   isSelectionLocked,
   isSelectionUnshared,
   resolveSelectionDefaults,
+  resolveStoredSettings,
+  SEND_VIA_LABELS,
   todayIST,
   type createSelectionSchema,
+  type eventDetailsSchema,
   type ListQuery,
+  type PhotoOriginalDto,
   type PublicSelectionDto,
+  type SendVia,
   type SelectionDto,
   type StudioSelectionPhotoDto,
   type updateSelectionSchema,
   type UploadLimitsDto,
+  videoFolderName,
 } from '@weddyzone/shared'
 import type { z } from 'zod'
-import { AppError, badRequest, conflict, notFound } from '../common/errors'
-import { nextSequence, paginate, randomToken, skipTake, toDate, toIso } from '../common/util'
+import { AppError, badRequest, conflict, fileInvalid, notFound } from '../common/errors'
+import { nextSequence, paginate, randomToken, sha256, skipTake, toDate, toIso } from '../common/util'
 import { config } from '../config'
 import { FilesService, fileUrls, type UploadedFile } from '../core/files.service'
 import { selectionDto, selectionStatus, type SelectionWithRelations } from '../core/mappers'
@@ -25,9 +34,11 @@ import { MessagingService } from '../core/messaging.service'
 import { NotificationsService } from '../core/notifications.service'
 import { PrismaService, type Tx } from '../prisma/prisma.service'
 import { accessKey, hashPin, hasAccess, PIN_LOCK_MINUTES, PIN_MAX_FAILURES, pinLocked, pinMatches, pinRequired, wrongPin } from './gallery-access'
-import { PhotoPreviewService } from './previews.service'
+import { IMAGE_MIMES, isVideoMime, VIDEO_MIMES } from '../infra/file-sniff'
+import { StorageService } from '../infra/storage.service'
+import { LIGHT_PREVIEW_PX, PhotoPreviewService, PREVIEW_PX, type WatermarkSpec } from './previews.service'
 import { writeLog } from './selection-log'
-import { fileTooLarge, renewToUpload, storageFull, UploadLimitsService } from './upload-limits'
+import { fileTooLarge, type originalMeta, renewToUpload, storageFull, UploadLimitsService } from './upload-limits'
 
 const MB = 1024 * 1024
 const GB = 1024 ** 3
@@ -35,7 +46,8 @@ const GB = 1024 ** 3
 const include = {
   event: { include: { client: true } },
   members: { orderBy: { createdAt: 'asc' as const } },
-  _count: { select: { photos: { where: { deletedAt: null } } } },
+  // photoCount = images; videos are counted separately (videoCounts).
+  _count: { select: { photos: { where: { deletedAt: null, file: { mimeType: { startsWith: 'image/' } } } }, folders: true } },
 } satisfies Prisma.SelectionInclude
 
 const readOnly = (message: string) => new AppError(HttpStatus.CONFLICT, ERROR_CODES.READ_ONLY, message)
@@ -46,6 +58,9 @@ const CLOSED = ['SUBMITTED', 'DELIVERED'] as const
 const VISIT_GAP_MS = 30 * 60_000
 /** Folder for photos uploaded without one. */
 export const GENERAL_FOLDER = 'General'
+
+/** A selection opened for its client (see openGallery), with its resolved settings. */
+export type OpenGallery = Awaited<ReturnType<SelectionsService['openGallery']>>
 
 export function formatDeadline(iso: string) {
   return new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
@@ -60,6 +75,7 @@ export class SelectionsService {
     private readonly notifications: NotificationsService,
     private readonly uploadLimits: UploadLimitsService,
     private readonly previews: PhotoPreviewService,
+    private readonly storage: StorageService,
   ) {}
 
   publicUrl(token: string) {
@@ -67,7 +83,7 @@ export class SelectionsService {
   }
 
   /** Distinct picked photos per selection and picks per member. */
-  private async pickCounts(ids: string[]) {
+  async pickCounts(ids: string[]) {
     const picked = new Map<string, number>()
     const members = new Map<string, number>()
     if (ids.length === 0) return { picked, members }
@@ -81,8 +97,22 @@ export class SelectionsService {
   }
 
   private async toDtos(rows: SelectionWithRelations[]): Promise<SelectionDto[]> {
-    const { picked, members } = await this.pickCounts(rows.map((r) => r.id))
-    return rows.map((r) => selectionDto(r, picked.get(r.id) ?? 0, members))
+    const ids = rows.map((r) => r.id)
+    const [{ picked, members }, videos] = await Promise.all([this.pickCounts(ids), this.videoCounts(ids)])
+    return rows.map((r) => selectionDto(r, picked.get(r.id) ?? 0, members, videos.get(r.id) ?? 0))
+  }
+
+  /** Videos per selection. */
+  private async videoCounts(ids: string[]) {
+    const out = new Map<string, number>()
+    if (!ids.length) return out
+    const rows = await this.prisma.photo.groupBy({
+      by: ['selectionId'],
+      where: { selectionId: { in: ids }, deletedAt: null, file: { mimeType: { startsWith: 'video/' } } },
+      _count: true,
+    })
+    rows.forEach((r) => r.selectionId && out.set(r.selectionId, r._count))
+    return out
   }
 
   async find(studioId: string, id: string) {
@@ -144,9 +174,10 @@ export class SelectionsService {
 
   async summary(studioId: string) {
     const today = toDate(todayIST())
-    const [selections, photos, active, completed, submitted, picked] = await Promise.all([
+    const [selections, photos, videos, active, completed, submitted, picked] = await Promise.all([
       this.prisma.selection.count({ where: { studioId, deletedAt: null } }),
-      this.prisma.photo.count({ where: { deletedAt: null, selection: { studioId, deletedAt: null } } }),
+      this.prisma.photo.count({ where: { ...{ deletedAt: null, file: { mimeType: { startsWith: 'image/' } } }, selection: { studioId, deletedAt: null } } }),
+      this.prisma.photo.count({ where: { deletedAt: null, file: { mimeType: { startsWith: 'video/' } }, selection: { studioId, deletedAt: null } } }),
       this.prisma.selection.count({ where: { studioId, deletedAt: null, status: { notIn: [...CLOSED] }, deadline: { gte: today } } }),
       this.prisma.selection.count({ where: { studioId, deletedAt: null, status: { in: [...CLOSED] } } }),
       this.prisma.selection.findMany({
@@ -168,6 +199,7 @@ export class SelectionsService {
       completed,
       picked: Number(picked[0]?.n ?? 0),
       avgTurnaroundDays: avg === null ? null : Math.round(avg * 10) / 10,
+      videos,
     }
   }
 
@@ -179,13 +211,12 @@ export class SelectionsService {
     const defaults = resolveSelectionDefaults(studio.selectionDefaults)
     const id = randomUUID()
     const created = await this.prisma.$transaction(async (tx) => {
-      const seq = await nextSequence(tx, studioId, 'SEL', 101)
       const members = body.members.length ? body.members : [{ name: event.client.name, phone: event.client.phone }]
       const row = await tx.selection.create({
         data: {
           id,
           studioId,
-          code: `SEL-${seq}`,
+          code: await this.newCode(tx),
           eventId: event.id,
           quota: body.quota,
           deadline: toDate(body.deadline),
@@ -227,27 +258,131 @@ export class SelectionsService {
     return this.dto(studioId, id)
   }
 
+  /** A random 6-digit code no other selection has: the reference the customer gets with the link. */
+  private async newCode(db: Tx | PrismaService) {
+    for (let i = 0; i < 25; i++) {
+      const code = String(randomInt(100_000, 1_000_000))
+      if (!(await db.selection.findFirst({ where: { code }, select: { id: true } }))) return code
+    }
+    throw new Error('Could not find a free selection code')
+  }
+
+  /**
+   * "Event Details": customer, event name and selection limit in one step. The customer is reused
+   * when the studio already has a client with that phone and name; the event is dated today; the
+   * gallery stays open for the studio's default number of days. Starts as Pending (Draft).
+   */
+  async createFromDetails(studioId: string, body: z.output<typeof eventDetailsSchema>) {
+    const studio = await this.prisma.studio.findUniqueOrThrow({ where: { id: studioId }, select: { selectionDefaults: true } })
+    const defaults = resolveSelectionDefaults(studio.selectionDefaults)
+    const today = todayIST()
+    const deadline = toIso(new Date(toDate(today).getTime() + defaults.galleryDays * 86_400_000))
+    const id = randomUUID()
+    await this.prisma.$transaction(async (tx) => {
+      const client =
+        (await tx.client.findFirst({
+          where: { studioId, deletedAt: null, phone: body.customerPhone, name: { equals: body.customerName, mode: 'insensitive' } },
+          orderBy: { createdAt: 'asc' },
+        })) ?? (await tx.client.create({ data: { studioId, name: body.customerName, phone: body.customerPhone } }))
+      const seq = await nextSequence(tx, studioId, 'EVT', 1001)
+      const event = await tx.event.create({
+        data: { studioId, code: `EVT-${seq}`, clientId: client.id, title: body.eventName, type: 'OTHER', date: toDate(today), venue: '', city: '', status: 'AWAITING_SELECTION' },
+      })
+      await tx.selection.create({
+        data: {
+          id,
+          studioId,
+          code: await this.newCode(tx),
+          eventId: event.id,
+          quota: body.quota,
+          deadline: toDate(deadline),
+          publicToken: randomToken(18),
+          allowDownload: defaults.allowDownload,
+          watermark: defaults.watermark,
+          notesAllowed: defaults.notesAllowed,
+          members: { create: [{ name: client.name, phone: client.phone }] },
+          // Remember the expiry choice so the settings page shows it (when it is one of its options).
+          ...([7, 15, 30, 60, 90].includes(defaults.galleryDays) ? { settings: { galleryExpiryDays: defaults.galleryDays } } : {}),
+        },
+      })
+      await writeLog(tx, id, 'STUDIO', 'Created', `Limit ${body.quota} photos · gallery open until ${formatDeadline(deadline)}`)
+    })
+    return this.dto(studioId, id)
+  }
+
+  /** Manage: the customer's name and phone, the event name and the selection limit. */
+  async updateDetails(studioId: string, id: string, body: z.output<typeof eventDetailsSchema>) {
+    const s = await this.find(studioId, id)
+    if (body.quota !== s.quota) {
+      if (isSelectionLocked(s.status)) throw readOnly('The client already submitted. Unlock the selection to change the limit.')
+      const [dto] = await this.toDtos([s])
+      if (body.quota < dto.pickedCount) {
+        throw badRequest('Limit is below the photos already picked', { quota: `The client has already picked ${dto.pickedCount} photos — the limit must be at least that` })
+      }
+    }
+    const changes = [
+      body.customerName !== s.event.client.name ? `customer ${s.event.client.name} → ${body.customerName}` : null,
+      body.customerPhone !== s.event.client.phone ? 'phone changed' : null,
+      body.eventName !== s.event.title ? `event ${s.event.title} → ${body.eventName}` : null,
+      body.quota !== s.quota ? `limit ${s.quota} → ${body.quota}` : null,
+    ].filter(Boolean)
+    if (!changes.length) return this.dto(studioId, id)
+    await this.prisma.$transaction(async (tx) => {
+      await tx.client.update({ where: { id: s.event.clientId }, data: { name: body.customerName, phone: body.customerPhone } })
+      await tx.event.update({ where: { id: s.eventId }, data: { title: body.eventName } })
+      await tx.selection.update({ where: { id }, data: { quota: body.quota } })
+      await writeLog(tx, id, 'STUDIO', 'Details changed', changes.join(' · '))
+    })
+    return this.dto(studioId, id)
+  }
+
+  /**
+   * Deletes the selection with its photos (their files stop counting as storage). Its event goes too
+   * when nothing else uses it (no other selection, invoice or album).
+   */
   async remove(studioId: string, id: string) {
-    await this.find(studioId, id)
-    await this.prisma.selection.update({ where: { id }, data: { deletedAt: new Date() } })
+    const s = await this.find(studioId, id)
+    const now = new Date()
+    await this.prisma.$transaction(async (tx) => {
+      const photos = await tx.photo.findMany({ where: { selectionId: id, deletedAt: null }, select: { fileId: true, previewFileId: true, originalFileId: true } })
+      const fileIds = photos.flatMap((p) => [p.fileId, ...(p.previewFileId ? [p.previewFileId] : []), ...(p.originalFileId ? [p.originalFileId] : [])])
+      await tx.photo.updateMany({ where: { selectionId: id, deletedAt: null }, data: { deletedAt: now } })
+      if (fileIds.length) await tx.storedFile.updateMany({ where: { id: { in: fileIds } }, data: { deletedAt: now } })
+      await tx.selection.update({ where: { id }, data: { deletedAt: now } })
+      const stillUsed =
+        (await tx.selection.count({ where: { eventId: s.eventId, deletedAt: null } })) +
+        (await tx.invoice.count({ where: { eventId: s.eventId, deletedAt: null } })) +
+        (await tx.album.count({ where: { eventId: s.eventId, deletedAt: null } }))
+      if (!stillUsed) await tx.event.update({ where: { id: s.eventId }, data: { deletedAt: now } })
+    })
   }
 
   async photos(studioId: string, id: string): Promise<StudioSelectionPhotoDto[]> {
     await this.find(studioId, id)
     const photos = await this.prisma.photo.findMany({
       where: { selectionId: id, deletedAt: null },
-      include: { file: true, picks: { include: { member: true } }, comments: { include: { member: true }, orderBy: { createdAt: 'asc' } } },
+      include: { file: true, originalFile: true, picks: { include: { member: true } }, comments: { include: { member: true }, orderBy: { createdAt: 'asc' } } },
       orderBy: { position: 'asc' },
     })
+    // The full-quality original: kept beside a compressed upload, or the upload itself when not compressed.
+    const original = (p: (typeof photos)[number]) => (p.originalFile && !p.originalFile.deletedAt ? p.originalFile : p.compressed ? null : p.file)
     return photos.map((p) => ({
       id: p.id,
       url: fileUrls.studio(p.fileId),
-      originalName: p.file.originalName,
+      originalName: p.originalName ?? p.file.originalName,
       size: p.file.size,
       position: p.position,
       folder: p.folder,
       folderId: p.folderId,
       previewUrl: `/api/v1/selections/${id}/photos/${p.id}/preview`,
+      media: isVideoMime(p.file.mimeType) ? ('video' as const) : ('image' as const),
+      mimeType: p.file.mimeType,
+      compressed: p.compressed,
+      originalSize: p.originalSize,
+      originalWidth: p.originalWidth,
+      originalHeight: p.originalHeight,
+      originalUrl: original(p) ? fileUrls.studio(original(p)!.id) : null,
+      originalChecksum: original(p)?.checksum ?? null,
       pickedBy: p.picks.map((k) => k.member.name),
       comments: p.comments.map((c) => ({ memberName: c.member.name, text: c.text, createdAt: c.createdAt.toISOString() })),
     }))
@@ -262,15 +397,20 @@ export class SelectionsService {
     studioId: string,
     id: string,
     file: UploadedFile | undefined,
-    opts: { limits?: UploadLimitsDto; folder?: string | null; folderId?: string | null } = {},
+    opts: { limits?: UploadLimitsDto; folder?: string | null; folderId?: string | null; original?: ReturnType<typeof originalMeta> } = {},
   ) {
     const s = await this.find(studioId, id)
     if (isSelectionLocked(s.status)) throw readOnly('This selection was submitted — photos can no longer be added.')
     const { limits } = opts
     if (limits?.readOnly) throw renewToUpload(limits)
     if (limits && file && file.size > limits.maxPhotoMb * MB) throw fileTooLarge(limits)
-    const overrides = limits ? { maxBytes: limits.maxPhotoMb * MB, label: `JPEG, PNG or WebP up to ${limits.maxPhotoMb} MB`, checkStorage: false } : {}
-    const { checksum } = await this.files.validate(studioId, 'PHOTO', file, 'file', overrides)
+    // Photos (JPEG, PNG, WebP) and event videos (MP4, MOV); HEIC is converted to JPEG in the browser.
+    const mimes = [...IMAGE_MIMES, ...VIDEO_MIMES]
+    const overrides = limits
+      ? { maxBytes: limits.maxPhotoMb * MB, label: `JPEG, PNG, WebP, MP4 or MOV up to ${limits.maxPhotoMb} MB`, checkStorage: false, mimes }
+      : { mimes }
+    const { checksum, type } = await this.files.validate(studioId, 'PHOTO', file, 'file', overrides)
+    const media = isVideoMime(type.mime) ? 'video' : 'photo'
     // The uploader sends several files at once (a whole folder, say). Locking the selection row makes
     // uploads to one selection take turns between the duplicate check and the insert, so the same
     // photo arriving twice in parallel is still caught, and positions never collide.
@@ -292,10 +432,25 @@ export class SelectionsService {
           if (used + file!.size > limits.storageGb * GB) throw storageFull(used, limits)
         }
         const last = await tx.photo.findFirst({ where: { selectionId: id }, orderBy: { position: 'desc' } })
-        const folderId = await this.resolveFolder(tx, id, opts.folderId, opts.folder)
+        const folderId = await this.resolveFolder(tx, id, media, opts.folderId, opts.folder)
         const stored = await this.files.store(studioId, 'PHOTO', file, 'file', tx, overrides)
+        // The original's name and size: from the browser for a compressed upload, else the file itself.
+        const o = opts.original
         const photo = await tx.photo.create({
-          data: { studioId, eventId: s.eventId, selectionId: id, fileId: stored.id, position: (last?.position ?? -1) + 1, folder: opts.folder ?? null, folderId },
+          data: {
+            studioId,
+            eventId: s.eventId,
+            selectionId: id,
+            fileId: stored.id,
+            position: (last?.position ?? -1) + 1,
+            folder: opts.folder ?? null,
+            folderId,
+            compressed: !!o?.compressed,
+            originalName: o?.originalName ?? stored.originalName,
+            originalSize: o?.originalSize ?? (o?.compressed ? null : stored.size),
+            originalWidth: o?.originalWidth ?? null,
+            originalHeight: o?.originalHeight ?? null,
+          },
         })
         // The first photo moves a new selection from Draft to Uploading (until it is shared).
         await tx.selection.updateMany({ where: { id, status: 'DRAFT' }, data: { status: 'UPLOADING' } })
@@ -303,16 +458,74 @@ export class SelectionsService {
       },
       { timeout: 30_000, maxWait: 30_000 },
     )
-    this.previews.queue(photo.id, s.watermark ? await this.studioName(studioId) : null)
+    if (!isVideoMime(stored.mimeType)) this.previews.queue(photo.id, this.watermarkFor(s, await this.studioName(studioId)))
     return {
       id: photo.id,
       url: fileUrls.studio(stored.id),
-      originalName: stored.originalName,
+      originalName: photo.originalName ?? stored.originalName,
       size: stored.size,
       position: photo.position,
       folder: photo.folder,
       folderId: photo.folderId,
+      compressed: photo.compressed,
+      originalSize: photo.originalSize,
+      originalWidth: photo.originalWidth,
+      originalHeight: photo.originalHeight,
     }
+  }
+
+  /**
+   * Keeps the full-quality original of a compressed upload in the cloud, for the studio only (the
+   * customer always gets the compressed copy). Verified before it is kept: the bytes must hash to the
+   * SHA-256 the browser computed (when it sent one) and match the original's name and size recorded
+   * with the photo. Any file type (RAW, HEIC…), up to the plan's size per photo; counts as storage.
+   */
+  async attachOriginal(
+    studioId: string,
+    id: string,
+    photoId: string,
+    file: UploadedFile | undefined,
+    opts: { limits?: UploadLimitsDto; sha256?: string | null } = {},
+  ): Promise<PhotoOriginalDto> {
+    const s = await this.find(studioId, id)
+    if (isSelectionLocked(s.status)) throw readOnly('This selection was submitted — photos can no longer be added.')
+    const { limits } = opts
+    if (limits?.readOnly) throw renewToUpload(limits)
+    if (!file || !file.buffer?.length) throw fileInvalid('Please choose the original file', 'file')
+    if (limits && file.size > limits.maxPhotoMb * MB) throw fileTooLarge(limits)
+    const checksum = sha256(file.buffer)
+    if (opts.sha256 && opts.sha256.toLowerCase() !== checksum) {
+      throw fileInvalid(`${file.originalname} changed on the way — upload it again`, 'file')
+    }
+    const photo = await this.prisma.photo.findFirst({ where: { id: photoId, selectionId: id, deletedAt: null }, include: { originalFile: true } })
+    if (!photo) throw notFound('Photo')
+    if (!photo.compressed) throw badRequest('This photo was uploaded at full quality — it is its own original.')
+    if ((photo.originalName && photo.originalName !== file.originalname) || (photo.originalSize && photo.originalSize !== file.size)) {
+      throw fileInvalid(`${file.originalname} is not the original of ${photo.originalName ?? 'this photo'}`, 'file')
+    }
+    const dto = (f: { id: string; checksum: string; size: number }): PhotoOriginalDto => ({ photoId, originalUrl: fileUrls.studio(f.id), originalChecksum: f.checksum, size: f.size })
+    // Sent again (a retry): the same bytes are already kept.
+    if (photo.originalFile && !photo.originalFile.deletedAt && photo.originalFile.checksum === checksum) return dto(photo.originalFile)
+
+    const ext = (/\.([a-z0-9]{1,8})$/i.exec(file.originalname)?.[1] ?? 'bin').toLowerCase()
+    const key = await this.storage.save(file.buffer, ext, 'application/octet-stream')
+    const stored = await this.prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT id FROM selections WHERE id = ${id}::uuid FOR UPDATE`
+        if (limits && limits.storageGb !== null) {
+          const used = await this.uploadLimits.storageUsed(studioId, tx)
+          if (used + file.size > limits.storageGb * GB) throw storageFull(used, limits)
+        }
+        const f = await tx.storedFile.create({
+          data: { studioId, kind: 'PHOTO', storageKey: key, originalName: file.originalname.slice(0, 200), mimeType: 'application/octet-stream', size: file.size, checksum },
+        })
+        if (photo.originalFileId) await tx.storedFile.update({ where: { id: photo.originalFileId }, data: { deletedAt: new Date() } })
+        await tx.photo.update({ where: { id: photo.id }, data: { originalFileId: f.id } })
+        return f
+      },
+      { timeout: 30_000, maxWait: 30_000 },
+    )
+    return dto(stored)
   }
 
   /** The studio's grid shows the same preview the client sees (fast to load), not the original. */
@@ -320,7 +533,15 @@ export class SelectionsService {
     const s = await this.find(studioId, id)
     const photo = await this.prisma.photo.findFirst({ where: { id: photoId, selectionId: id, deletedAt: null }, include: { file: true } })
     if (!photo) throw notFound('Photo')
-    return (await this.previews.previewFor(photo.id, s.watermark ? await this.studioName(studioId) : null)) ?? photo.file
+    if (isVideoMime(photo.file.mimeType)) return photo.file
+    return (await this.previews.previewFor(photo.id, this.watermarkFor(s, await this.studioName(studioId)))) ?? photo.file
+  }
+
+  /** The watermark to stamp for this event, or null when it is off. */
+  watermarkFor(s: { watermark: boolean; settings: unknown }, studioName: string): WatermarkSpec | null {
+    if (!s.watermark) return null
+    const w = resolveStoredSettings(s.settings).watermark
+    return { logoFileId: w.logoFileId, text: studioName, position: w.position, sizePct: w.sizePct, spacingPct: w.spacingPct, opacityPct: w.opacityPct }
   }
 
   private async studioName(studioId: string) {
@@ -331,17 +552,22 @@ export class SelectionsService {
    * The folder a new photo goes in: the one chosen on the page, else the top folder it was uploaded
    * from ("Haldi/Close-ups" → Haldi, made if new), else General. Runs under the selection lock.
    */
-  private async resolveFolder(tx: Tx, selectionId: string, folderId?: string | null, path?: string | null) {
+  private async resolveFolder(tx: Tx, selectionId: string, media: 'photo' | 'video', folderId?: string | null, path?: string | null) {
     if (folderId) {
       const f = await tx.selectionFolder.findFirst({ where: { id: folderId, selectionId } })
       if (!f) throw badRequest('Folder not found', { folderId: 'Choose one of this selection’s folders' })
+      if (f.type !== media) {
+        throw fileInvalid(f.type === 'video' ? `${f.name} is a video folder — it takes MP4, MOV or WebM videos only` : `${f.name} is a photo folder — it takes JPEG, PNG or WebP photos only`, 'file')
+      }
       return f.id
     }
-    const name = (path?.split('/')[0] ?? '').trim().slice(0, 60) || GENERAL_FOLDER
-    const existing = await tx.selectionFolder.findFirst({ where: { selectionId, name: { equals: name, mode: 'insensitive' } } })
+    // By upload path: photos go to the top folder's name (or General), videos to a video folder of it.
+    const base = cleanFolderName(path?.split('/')[0] ?? '') || (media === 'video' ? 'Videos' : GENERAL_FOLDER)
+    const name = media === 'video' && base !== 'Videos' ? videoFolderName(base) : base
+    const existing = await tx.selectionFolder.findFirst({ where: { selectionId, type: media, name: { equals: name, mode: 'insensitive' } } })
     if (existing) return existing.id
     const position = await tx.selectionFolder.count({ where: { selectionId } })
-    return (await tx.selectionFolder.create({ data: { selectionId, name, position } })).id
+    return (await tx.selectionFolder.create({ data: { selectionId, name, position, type: media } })).id
   }
 
   async removePhoto(studioId: string, id: string, photoId: string) {
@@ -353,6 +579,8 @@ export class SelectionsService {
       this.prisma.photoPick.deleteMany({ where: { photoId } }),
       this.prisma.photo.update({ where: { id: photoId }, data: { deletedAt: new Date() } }),
       this.prisma.storedFile.update({ where: { id: photo.fileId }, data: { deletedAt: new Date() } }),
+      // Its kept original goes with it.
+      ...(photo.originalFileId ? [this.prisma.storedFile.update({ where: { id: photo.originalFileId }, data: { deletedAt: new Date() } })] : []),
     ])
   }
 
@@ -363,6 +591,7 @@ export class SelectionsService {
       picked,
       deadline: formatDeadline(toIso(s.deadline)),
       link: this.publicUrl(s.publicToken),
+      code: s.code,
     }
   }
 
@@ -430,14 +659,14 @@ export class SelectionsService {
     })
     const name = `${s.code}-${s.event.title.replace(/[^\w]+/g, '-')}`.replace(/-+$/, '')
     if (format === 'txt') {
-      const stems = photos.map((p) => p.file.originalName.replace(/\.[^.]+$/, ''))
+      const stems = photos.map((p) => (p.originalName ?? p.file.originalName).replace(/\.[^.]+$/, ''))
       return { filename: `${name}-lightroom.txt`, contentType: 'text/plain; charset=utf-8', body: stems.join(', ') + '\n' }
     }
     const esc = (v: string) => `"${v.replace(/"/g, '""')}"`
     const lines = [
       'filename,picked_by,comments',
       ...photos.map((p) =>
-        [p.file.originalName, p.picks.map((k) => k.member.name).join('; '), p.comments.map((c) => c.text).join(' | ')].map(esc).join(','),
+        [p.originalName ?? p.file.originalName, p.picks.map((k) => k.member.name).join('; '), p.comments.map((c) => c.text).join(' | ')].map(esc).join(','),
       ),
     ]
     return { filename: `${name}-picks.csv`, contentType: 'text/csv; charset=utf-8', body: lines.join('\n') + '\n' }
@@ -450,11 +679,7 @@ export class SelectionsService {
    * by enterPin, otherwise PIN_REQUIRED (with what the PIN screen shows).
    */
   private async byToken(token: string, key: string | null | undefined) {
-    const s = await this.prisma.selection.findFirst({
-      where: { publicToken: token, deletedAt: null },
-      include: { ...include, studio: { select: { name: true, logoFileId: true, phone: true } } },
-    })
-    if (!s) throw notFound('Selection')
+    const s = await this.openGallery({ publicToken: token })
     if (!hasAccess(s, key)) {
       throw pinRequired({
         pinRequired: true,
@@ -465,6 +690,27 @@ export class SelectionsService {
       })
     }
     return s
+  }
+
+  /**
+   * A selection the client may open (the /s link or the customer portal): Allow Client View is on
+   * and the gallery hasn't expired. A submitted selection still opens, view-only.
+   */
+  async openGallery(where: { publicToken: string } | { id: string }) {
+    const s = await this.prisma.selection.findFirst({
+      where: { ...where, deletedAt: null },
+      include: { ...include, studio: { select: { name: true, logoFileId: true, phone: true, instagramHandle: true } } },
+    })
+    if (!s) throw notFound('Selection')
+    const studio = { name: s.studio.name, logoUrl: s.studio.logoFileId ? fileUrls.public(s.studio.logoFileId) : null, phone: s.studio.phone }
+    const settings = resolveStoredSettings(s.settings)
+    if (!settings.allowClientView) {
+      throw new AppError(HttpStatus.FORBIDDEN, ERROR_CODES.GALLERY_CLOSED, `This gallery isn't open right now. Please contact ${s.studio.name}.`, undefined, { studio, eventTitle: s.event.title })
+    }
+    if (selectionStatus(s) === 'EXPIRED') {
+      throw new AppError(HttpStatus.GONE, ERROR_CODES.GALLERY_EXPIRED, `This gallery has expired. Please contact ${s.studio.name} to reopen it.`, undefined, { studio, eventTitle: s.event.title })
+    }
+    return Object.assign(s, { stored: settings })
   }
 
   /** Checks a gallery PIN. Wrong PINs are counted per selection; too many lock the gallery for a while. */
@@ -489,7 +735,7 @@ export class SelectionsService {
   }
 
   /** Counts a visit (once per VISIT_GAP_MS) and keeps "last client visit" fresh. */
-  private async recordVisit(s: { id: string; lastClientVisitAt: Date | null }) {
+  async recordVisit(s: { id: string; lastClientVisitAt: Date | null }) {
     const now = new Date()
     const isNew = !s.lastClientVisitAt || now.getTime() - s.lastClientVisitAt.getTime() > VISIT_GAP_MS
     await this.prisma.selection.update({ where: { id: s.id }, data: { lastClientVisitAt: now, ...(isNew ? { clientVisits: { increment: 1 } } : {}) } })
@@ -501,7 +747,7 @@ export class SelectionsService {
     const status = selectionStatus(s)
     const [photos, folders] = await Promise.all([
       this.prisma.photo.findMany({
-        where: { selectionId: s.id, deletedAt: null },
+        where: { selectionId: s.id, deletedAt: null, file: { mimeType: { startsWith: 'image/' } } },
         include: { file: true, picks: { include: { member: true } }, comments: { include: { member: true }, orderBy: { createdAt: 'asc' } } },
         orderBy: { position: 'asc' },
       }),
@@ -526,7 +772,7 @@ export class SelectionsService {
       photos: photos.map((p) => ({
         id: p.id,
         url: fileUrls.selectionPhoto(token, p.id) + k,
-        originalName: p.file.originalName,
+        originalName: p.originalName ?? p.file.originalName,
         size: p.file.size,
         position: p.position,
         folderId: p.folderId,
@@ -537,6 +783,9 @@ export class SelectionsService {
       folders: folders.filter((f) => perFolder.get(f.id)).map((f) => ({ id: f.id, name: f.name, photoCount: perFolder.get(f.id) ?? 0 })),
       notesAllowed: s.notesAllowed,
       allowDownload: s.allowDownload,
+      favoritesEnabled: s.stored.favoriteOption,
+      downloadAllFolder: s.allowDownload && s.stored.downloadAllFolder,
+      instagram: s.stored.instagramFollow && s.studio.instagramHandle ? { handle: s.studio.instagramHandle } : null,
     }
   }
 
@@ -544,20 +793,89 @@ export class SelectionsService {
    * What the client's browser gets for a photo: the preview (resized, watermarked when set), never
    * the original. `download` gives the original, only when the studio allows downloads.
    */
-  async publicPhotoFile(token: string, photoId: string, key?: string | null, opts: { download?: boolean } = {}) {
+  async publicPhotoFile(token: string, photoId: string, key?: string | null) {
     const s = await this.byToken(token, key)
-    const photo = await this.prisma.photo.findFirst({ where: { id: photoId, selectionId: s.id, deletedAt: null }, include: { file: true } })
+    const photo = await this.prisma.photo.findFirst({ where: { id: photoId, selectionId: s.id, deletedAt: null, file: { mimeType: { startsWith: 'image/' } } }, include: { file: true } })
     if (!photo) throw notFound('Photo')
-    if (opts.download) {
-      if (!s.allowDownload) throw new AppError(HttpStatus.FORBIDDEN, ERROR_CODES.FORBIDDEN, 'Downloads are turned off for this gallery.')
-      return photo.file
-    }
-    const preview = await this.previews.previewFor(photo.id, s.watermark ? s.studio.name : null)
+    const preview = await this.previews.previewFor(photo.id, this.watermarkFor(s, s.studio.name), this.previewPx(s))
     if (!preview) throw notFound('Photo')
     return preview
   }
 
-  private assertWritable(s: { status: SelectionWithRelations['status']; deadline: Date }) {
+  /**
+   * A client download: the original (Original Quality add-on) or a 1600 px copy, watermarked when
+   * the event's watermark is on. Only with Download On.
+   */
+  async publicDownload(token: string, photoId: string, key?: string | null) {
+    return this.downloadFrom(await this.byToken(token, key), photoId)
+  }
+
+  /**
+   * A download from an opened gallery. Videos only with the Video Download option; they are sent
+   * as they are (no watermark on video).
+   */
+  async downloadFrom(s: OpenGallery, photoId: string, opts: { videos?: boolean } = {}) {
+    if (!s.allowDownload) throw new AppError(HttpStatus.FORBIDDEN, ERROR_CODES.FORBIDDEN, 'Downloads are turned off for this gallery.')
+    const photo = await this.prisma.photo.findFirst({
+      where: { id: photoId, selectionId: s.id, deletedAt: null, ...(opts.videos ? {} : { file: { mimeType: { startsWith: 'image/' } } }) },
+      include: { file: true },
+    })
+    if (!photo) throw notFound('Photo')
+    if (isVideoMime(photo.file.mimeType)) {
+      if (!s.stored.videoDownload) throw new AppError(HttpStatus.FORBIDDEN, ERROR_CODES.FORBIDDEN, 'Video downloads are turned off for this gallery.')
+      return { file: photo.file, buffer: null }
+    }
+    const watermark = this.watermarkFor(s, s.studio.name)
+    const original = s.stored.originalQuality
+    if (!watermark && original) return { file: photo.file, buffer: null }
+    const buffer = await this.previews.downloadFor(photo.file, watermark, original)
+    if (!buffer) throw notFound('Photo')
+    return { file: photo.file, buffer, name: photo.file.originalName.replace(/\.[^.]+$/, '') + '.jpg' }
+  }
+
+  /** "Download All Folder": a folder's photos as a ZIP, each prepared like a single download. */
+  async publicFolderZip(token: string, folderId: string, key: string | null | undefined, res: Response) {
+    return this.folderZipFrom(await this.byToken(token, key), folderId, res)
+  }
+
+  async folderZipFrom(s: OpenGallery, folderId: string, res: Response) {
+    if (!s.allowDownload || !s.stored.downloadAllFolder) throw new AppError(HttpStatus.FORBIDDEN, ERROR_CODES.FORBIDDEN, 'Folder downloads are turned off for this gallery.')
+    const folder = await this.prisma.selectionFolder.findFirst({ where: { id: folderId, selectionId: s.id } })
+    if (!folder) throw notFound('Folder')
+    const photos = await this.prisma.photo.findMany({
+      where: { selectionId: s.id, folderId, deletedAt: null, file: { mimeType: { startsWith: 'image/' } } },
+      include: { file: true },
+      orderBy: { position: 'asc' },
+    })
+    if (!photos.length) throw badRequest('This folder has no photos.')
+    const watermark = this.watermarkFor(s, s.studio.name)
+    const original = s.stored.originalQuality
+    const safe = folder.name.replace(/[^\w-]+/g, '-').replace(/-+/g, '-') || 'photos'
+    res.setHeader('Content-Type', 'application/zip')
+    res.setHeader('Content-Disposition', `attachment; filename="${safe}.zip"`)
+    const zip = archiver('zip', { store: true })
+    zip.on('error', () => res.destroy())
+    zip.pipe(res)
+    const used = new Set<string>()
+    for (const p of photos) {
+      const buffer = !watermark && original ? null : await this.previews.downloadFor(p.file, watermark, original)
+      let name = buffer ? p.file.originalName.replace(/\.[^.]+$/, '') + '.jpg' : p.file.originalName
+      for (let n = 2; used.has(name.toLowerCase()); n++) name = name.replace(/(\.[^.]+)?$/, ` (${n})$1`)
+      used.add(name.toLowerCase())
+      if (buffer) zip.append(buffer, { name })
+      else {
+        const stream = await this.storage.open(p.file.storageKey)
+        if (stream) {
+          const done = new Promise<void>((resolve) => zip.once('entry', () => resolve()))
+          zip.append(stream, { name })
+          await done
+        }
+      }
+    }
+    await zip.finalize()
+  }
+
+  assertWritable(s: { status: SelectionWithRelations['status']; deadline: Date }) {
     const status = selectionStatus(s)
     if (isSelectionLocked(status)) throw readOnly('This selection has been submitted and is now read-only.')
     if (status === 'EXPIRED') throw readOnly('This gallery has expired. Please contact your photographer.')
@@ -574,10 +892,11 @@ export class SelectionsService {
   async setPick(token: string, body: { photoId: string; memberId: string; picked: boolean }, key?: string | null) {
     const s = await this.byToken(token, key)
     this.assertWritable(s)
+    if (!s.stored.favoriteOption) throw readOnly('Picking is turned off for this gallery.')
     this.assertMember(s, body.memberId)
     const result = await this.prisma.$transaction(async (tx: Tx) => {
       await tx.$queryRaw`SELECT id FROM selections WHERE id = ${s.id}::uuid FOR UPDATE`
-      const photo = await tx.photo.findFirst({ where: { id: body.photoId, selectionId: s.id, deletedAt: null } })
+      const photo = await tx.photo.findFirst({ where: { id: body.photoId, selectionId: s.id, deletedAt: null, file: { mimeType: { startsWith: 'image/' } } } })
       if (!photo) throw notFound('Photo')
       const existing = await tx.photoPick.findUnique({ where: { photoId_memberId: { photoId: photo.id, memberId: body.memberId } } })
       if (body.picked && !existing) {
@@ -602,7 +921,7 @@ export class SelectionsService {
       if (firstPick) await writeLog(tx, s.id, 'CLIENT', 'Started picking')
       const [{ n: after }] = await tx.$queryRaw<{ n: bigint }[]>`
         SELECT COUNT(DISTINCT photo_id) AS n FROM photo_picks WHERE selection_id = ${s.id}::uuid`
-      const pickedBy = (await tx.photoPick.findMany({ where: { photoId: photo.id }, select: { memberId: true } })).map((p) => p.memberId)
+      const pickedBy = (await tx.photoPick.findMany({ where: { photoId: photo.id }, select: { memberId: true }, orderBy: { createdAt: 'asc' } })).map((p) => p.memberId)
       return { firstPick, pickedCount: Number(after), pickedBy }
     })
     if (result.firstPick) {
@@ -636,23 +955,68 @@ export class SelectionsService {
     const s = await this.byToken(token, key)
     this.assertWritable(s)
     this.assertMember(s, memberId)
-    const { picked } = await this.pickCounts([s.id])
-    const count = picked.get(s.id) ?? 0
-    if (count === 0) throw badRequest('Pick at least one photo before submitting.')
-    await this.prisma.$transaction([
-      this.prisma.selection.update({ where: { id: s.id }, data: { status: 'SUBMITTED', submittedAt: new Date() } }),
-      this.prisma.event.updateMany({ where: { id: s.eventId, status: 'AWAITING_SELECTION' }, data: { status: 'IN_PROGRESS' } }),
-    ])
-    const member = s.members.find((m) => m.id === memberId)
-    await writeLog(this.prisma, s.id, 'CLIENT', 'Submitted', `${count} of ${s.quota} photos${member ? ` · by ${member.name}` : ''}`)
+    await this.submitFrom(s, s.members.find((m) => m.id === memberId)?.name)
+    return this.publicView(token, key)
+  }
+
+  /**
+   * Locks the selection as submitted (shown as "Selected"), logs it and tells the studio:
+   * "{customer} submitted {n} photos for {event}". Changes after this get 409 until the studio
+   * resets or unlocks it.
+   */
+  async submitFrom(s: OpenGallery, memberName?: string) {
+    this.assertWritable(s)
+    const count = await this.prisma.$transaction(async (tx) => {
+      // Under the row lock, so two submits (or a submit racing a pick) can't both go through.
+      await tx.$queryRaw`SELECT id FROM selections WHERE id = ${s.id}::uuid FOR UPDATE`
+      const fresh = await tx.selection.findUniqueOrThrow({ where: { id: s.id }, select: { status: true } })
+      if (isSelectionLocked(fresh.status)) throw readOnly('This selection has been submitted and is now read-only.')
+      const [{ n }] = await tx.$queryRaw<{ n: bigint }[]>`SELECT COUNT(DISTINCT photo_id) AS n FROM photo_picks WHERE selection_id = ${s.id}::uuid`
+      if (Number(n) === 0) throw badRequest('Pick at least one photo before submitting.')
+      await tx.selection.update({ where: { id: s.id }, data: { status: 'SUBMITTED', submittedAt: new Date(), reopenedAt: null } })
+      await tx.event.updateMany({ where: { id: s.eventId, status: 'AWAITING_SELECTION' }, data: { status: 'IN_PROGRESS' } })
+      return Number(n)
+    })
+    await writeLog(this.prisma, s.id, 'CLIENT', 'Submitted', `${count} of ${s.quota} photos${memberName ? ` · by ${memberName}` : ''}`)
     await this.notifications.notify(s.studioId, {
       type: 'SELECTION_SUBMITTED',
-      title: member?.name ?? s.event.client.name,
-      body: `submitted ${count} of ${s.quota} photos for ${s.event.title}`,
+      title: s.event.client.name,
+      body: `submitted ${count} photo${count === 1 ? '' : 's'} for ${s.event.title}`,
       link: `/photo-selection/${s.id}`,
       icon: 'check2-circle',
     })
-    return this.publicView(token, key)
+    return count
+  }
+
+  /**
+   * Studio side: the Send/Share card that was used (copy link, QR, SMS, WhatsApp). The first share
+   * moves the selection to Shared; every share is logged in Client Activity.
+   */
+  async markSent(studioId: string, id: string, via: SendVia) {
+    const s = await this.find(studioId, id)
+    const now = new Date()
+    const first = isSelectionUnshared(s.status)
+    await this.prisma.selection.update({
+      where: { id },
+      data: { lastSentAt: now, sentVia: via, ...(first ? { status: 'SENT', sharedAt: now } : {}) },
+    })
+    await writeLog(this.prisma, id, 'STUDIO', first ? 'Shared' : SEND_VIA_LABELS[via], `${first ? `${SEND_VIA_LABELS[via]} · ` : ''}to ${s.event.client.name}`)
+    return this.dto(studioId, id)
+  }
+
+  /** Client preview size: full size, or lighter when "Show photos in high quality" is off. */
+  previewPx(s: OpenGallery) {
+    return s.stored.highQuality ? PREVIEW_PX : LIGHT_PREVIEW_PX
+  }
+
+  /** Older selections have SEL-… codes, which the customer app can't take: give one a 6-digit code. */
+  async renewCode(studioId: string, id: string) {
+    const s = await this.find(studioId, id)
+    if (/^\d{6}$/.test(s.code)) return this.dto(studioId, id)
+    const code = await this.newCode(this.prisma)
+    await this.prisma.selection.update({ where: { id }, data: { code } })
+    await writeLog(this.prisma, id, 'STUDIO', 'New code', `${s.code} → ${code}`)
+    return this.dto(studioId, id)
   }
 }
 

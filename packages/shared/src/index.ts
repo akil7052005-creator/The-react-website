@@ -34,6 +34,10 @@ export const ERROR_CODES = {
   FILE_TOO_LARGE: 'FILE_TOO_LARGE',
   PIN_REQUIRED: 'PIN_REQUIRED',
   PIN_LOCKED: 'PIN_LOCKED',
+  GALLERY_CLOSED: 'GALLERY_CLOSED',
+  GALLERY_EXPIRED: 'GALLERY_EXPIRED',
+  /** The customer portal token is missing, expired or for another event: enter the code again. */
+  CLIENT_AUTH: 'CLIENT_AUTH_REQUIRED',
   INTERNAL: 'INTERNAL_ERROR',
 } as const
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES]

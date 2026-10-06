@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { gradientPng } from '../../apps/api/src/common/png'
 import { login, uniqueTag } from './helpers'
@@ -7,16 +10,6 @@ import { login, uniqueTag } from './helpers'
 const tag = uniqueTag()
 const couple = `Meena ${tag}`
 const eventTitle = `${couple} & Ravi Wedding`
-
-function isoInDays(n: number) {
-  const d = new Date(Date.now() + n * 86_400_000)
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(d)
-}
-
-async function pickOption(page: Page, inputId: string, text: string, option: string | RegExp) {
-  await page.locator(`#${inputId}`).fill(text)
-  await page.getByRole('option', { name: option }).first().click()
-}
 
 /** The page's width fits the viewport: nothing makes the whole page scroll sideways. */
 async function expectNoSideScroll(page: Page) {
@@ -37,108 +30,152 @@ test.beforeEach(async ({ context }) => {
 let selectionUrl = ''
 let galleryLink = ''
 
-test('create an event with a new client inline', async ({ page }) => {
+test('Add Photo Selection: Event Details validates, then adds the event at the top', async ({ page }) => {
   await login(page)
   await page.goto('/photo-selection')
-  await page.getByRole('button', { name: 'Add Photo Selection' }).click()
-  const selectionDialog = page.getByRole('dialog', { name: 'New Selection' })
-  await selectionDialog.getByRole('button', { name: '+ New event' }).click()
-  const dialog = page.getByRole('dialog', { name: 'New Event' })
+  const totalEvents = page.locator('.pl-tile', { hasText: 'Total Events' }).locator('strong')
+  await expect(totalEvents).not.toHaveText('')
+  const before = Number((await totalEvents.innerText()).replace(/,/g, ''))
+  await page.getByRole('button', { name: 'Add Photo Selection' }).first().click()
+  const dialog = page.getByRole('dialog', { name: 'Event Details' })
 
-  await dialog.getByRole('button', { name: 'Create event' }).click()
-  await expect(dialog.getByText('Select a client')).toBeVisible()
-  await expect(dialog.getByText('Event title is required')).toBeVisible()
+  await dialog.getByRole('button', { name: 'Add Event' }).click()
+  await expect(dialog.getByText('Customer name is required')).toBeVisible()
+  await expect(dialog.getByText('Event name is required')).toBeVisible()
+  await expect(dialog.getByText('Enter the selection limit')).toBeVisible()
+  await dialog.getByLabel('Customer Phone Number').fill('12345')
+  await dialog.getByRole('button', { name: 'Add Event' }).click()
+  await expect(dialog.getByText('Enter a valid 10-digit Indian mobile number')).toBeVisible()
 
-  await page.locator('#f-clientId').fill(couple)
-  await page.getByRole('option', { name: `+ Create new client “${couple}”` }).click()
-  const clientDialog = page.getByRole('dialog', { name: 'New client' })
-  await clientDialog.getByLabel('Mobile number').fill('98450 11223')
-  await clientDialog.getByRole('button', { name: 'Create client' }).click()
-  await expect(page.getByText(`Client ${couple} created`)).toBeVisible()
+  await dialog.getByLabel('Customer Name').fill(couple)
+  await dialog.getByLabel('Customer Phone Number').fill('98450 11223')
+  await dialog.getByLabel('Event Name').fill(eventTitle)
+  await dialog.getByLabel(/Selection Limit/).fill('2')
+  await dialog.getByRole('button', { name: 'Add Event' }).click()
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByText(/Event added · code \d{6}/)).toBeVisible()
 
-  await dialog.getByLabel('Event title').fill(eventTitle)
-  await dialog.getByLabel('Event date').fill(isoInDays(20))
-  await dialog.getByLabel('Venue').fill('Lotus Mahal')
-  await pickOption(page, 'f-city', 'Chennai', 'Chennai')
-  await dialog.getByRole('button', { name: 'Create event' }).click()
-  await expect(page.getByText(/Event EVT-\d+ created/)).toBeVisible()
-  // The new event is picked straight away, with its type and date shown.
-  await expect(selectionDialog.getByText(eventTitle)).toBeVisible()
-  await expect(selectionDialog.getByTestId('event-facts')).toContainText('Wedding')
-  await selectionDialog.getByRole('button', { name: 'Cancel' }).click()
-  await page.getByTestId('confirm-ok').click()
-  await expect(selectionDialog).toHaveCount(0)
+  const top = page.getByTestId('selections-table').locator('tbody tr').first()
+  await expect(top).toContainText(couple)
+  await expect(top).toContainText(eventTitle)
+  await expect(top.locator('.pl-status')).toHaveText('Pending')
+  await expect(top.locator('.pl-chip')).toHaveText(['0 Folders', '0 Images', '0 Selected', '0 Videos'])
+  await expect(top.locator('.pl-code-num')).toHaveText(/^\d{6}$/)
+  // Clicking the code copies it.
+  await top.locator('.pl-code-num').click()
+  await expect(page.getByText('Code copied')).toBeVisible()
+  const [doc, win] = await page.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth])
+  expect(doc).toBeLessThanOrEqual(win)
+  await expect(totalEvents).toHaveText(String(before + 1))
 })
 
-test('studio: create with a PIN, upload into folders, share', async ({ page }) => {
+test('studio: upload folders, block a duplicate, set a PIN, share', async ({ page }) => {
+  // Two folders on disk: "Wedding" (2 photos + a stray text file) and "Haldi" (1 photo).
+  const root = mkdtempSync(join(tmpdir(), 'wz-folders-'))
+  const wedding = join(root, 'Wedding')
+  const haldi = join(root, 'Haldi')
+  mkdirSync(wedding)
+  mkdirSync(haldi)
+  for (const [dir, f] of [
+    [wedding, photo('DSC_0001.png', 10)],
+    [wedding, photo('DSC_0002.png', 90)],
+    [haldi, photo('DSC_0003.png', 170)],
+  ] as const)
+    writeFileSync(join(dir, f.name), f.buffer)
+  writeFileSync(join(wedding, 'notes.txt'), 'hello')
   await login(page)
   await page.goto('/photo-selection')
-  await page.getByRole('button', { name: 'Add Photo Selection' }).click()
-  const dialog = page.getByRole('dialog', { name: 'New Selection' })
-  await pickOption(page, 'f-eventId', couple, new RegExp(couple))
-  await dialog.getByLabel('Photo limit').fill('2')
-  await dialog.getByLabel('Gallery expires on').fill(isoInDays(10))
-  await dialog.getByLabel('4-digit PIN (optional)').fill('12')
-  await dialog.getByRole('button', { name: 'Create & add photos' }).click()
-  await expect(dialog.getByText('The PIN must be 4 digits')).toBeVisible()
-  await dialog.getByLabel('4-digit PIN (optional)').fill('4321')
-  await dialog.getByRole('button', { name: 'Create & add photos' }).click()
-  await expect(page.getByText(/Selection SEL-\d+ created/)).toBeVisible()
+  const row = page.getByTestId('selections-table').locator('tbody tr', { hasText: couple })
+  await row.getByRole('link', { name: `Upload & Download: ${eventTitle}` }).click()
+  await expect(page).toHaveURL(/\/photo-selection\/[0-9a-f-]{36}$/)
+  selectionUrl = page.url()
+  await expect(page.getByText('No folders yet — click Upload Folder')).toBeVisible()
+  await expect(page.getByTestId('event-info')).toContainText(`Customer : ${couple}`)
 
-  // Lands on the event page with the uploader open.
-  await expect(page).toHaveURL(/\/photo-selection\/[0-9a-f-]{36}\?upload=1$/)
-  selectionUrl = page.url().split('?')[0]
-  await expect(page.getByRole('heading', { level: 1, name: eventTitle })).toBeVisible()
-  await expect(page.getByTestId('selection-status')).toHaveText('Draft')
-  await expect(page.getByTestId('picked-counter')).toHaveText('0 / 2 picked')
+  // Upload Folder opens the dialog and the folder picker together.
+  let chooser = page.waitForEvent('filechooser')
+  await page.locator('.ef-actions .ef-btn', { hasText: 'Upload Folder' }).click()
+  await (await chooser).setFiles(wedding)
+  const dialog = page.getByRole('dialog', { name: 'Select Folders to Upload' })
+  await expect(dialog.getByText('Albums (1)')).toBeVisible()
+  await expect(dialog.getByTestId('selected-folders')).toContainText('Wedding')
+  await expect(dialog.getByTestId('selected-folders')).toContainText('2 files') // the text file is ignored
+  chooser = page.waitForEvent('filechooser')
+  await dialog.getByRole('button', { name: 'Add Photo Folder' }).click()
+  await (await chooser).setFiles(haldi)
+  await expect(dialog.getByText('Albums (2)')).toBeVisible()
+  await dialog.getByTestId('start-upload').click()
+  await expect(page.getByText('Upload complete')).toBeVisible()
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByTestId('folder-grid').getByRole('button', { name: /Open photo folder Wedding, 2 images/ })).toBeVisible()
+  await expect(page.getByTestId('folder-grid').getByRole('button', { name: /Open photo folder Haldi, 1 images/ })).toBeVisible()
+  await expect(page.getByTestId('event-info')).toContainText('2 Folders')
+  await expect(page.getByTestId('event-info')).toContainText('3 Images')
 
-  await page.getByLabel('Choose photos to upload').setInputFiles([
-    photo('DSC_0001.png', 10),
-    photo('DSC_0002.png', 90),
-    { name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('hello') },
-  ])
-  await expect(page.locator('.uploader-summary')).toContainText('2 done · 1 failed')
-  await expect(page.getByText('Only JPEG, PNG or WebP images')).toBeVisible()
-  await expect(page.getByTestId('selection-status')).toHaveText('Uploading')
+  // The same folder again is blocked.
+  chooser = page.waitForEvent('filechooser')
+  await page.locator('.ef-actions .ef-btn', { hasText: 'Upload Folder' }).click()
+  await (await chooser).setFiles(haldi)
+  // The duplicate is refused with a message naming the folder.
+  const refused = page.locator('[data-sonner-toast]', { hasText: 'A folder with this name already exists' }).first()
+  await expect(refused).toBeVisible()
+  await expect(refused).toContainText('Haldi')
+  await expect(dialog.getByText('Albums (0)')).toBeVisible()
+  await expect(dialog.getByTestId('start-upload')).toBeDisabled()
+  await dialog.getByRole('button', { name: 'Cancel' }).click()
 
-  // A Haldi folder, and a photo uploaded straight into it.
-  await page.getByRole('button', { name: 'New folder' }).click()
-  await page.getByRole('dialog', { name: 'New folder' }).getByRole('button', { name: /Haldi/ }).click()
-  await expect(page.getByText('Folder Haldi created')).toBeVisible()
-  await expect(page.locator('.sw-folder.on')).toContainText('Haldi')
-  await expect(page.getByText('Uploading into')).toContainText('Haldi')
-  await page.getByLabel('Choose photos to upload').setInputFiles([photo('DSC_0003.png', 170)])
-  await expect(page.locator('.sw-folder', { hasText: 'Haldi' })).toContainText('1')
-  // The same bytes again are skipped as a duplicate.
-  await page.getByLabel('Choose photos to upload').setInputFiles([photo('copy.png', 10)])
-  await expect(page.getByText('Already uploaded').first()).toBeVisible()
-  await page.locator('.sw-folder', { hasText: 'All' }).click()
-  await expect(page.locator('.sw-grid .photo-tile')).toHaveCount(3)
+  // A folder opens its photos.
+  await page.getByTestId('folder-grid').getByRole('button', { name: /Open photo folder Wedding/ }).click()
+  await expect(page.getByTestId('folder-photos').locator('.photo-tile')).toHaveCount(2)
+  await page.getByRole('button', { name: 'All folders' }).click()
   await expectNoSideScroll(page)
 
-  // Share: QR, copy link → Shared.
-  await page.locator('.sw-tabs button', { hasText: 'Share' }).click()
-  await expect(page.locator('.sw-qr img')).toBeVisible()
-  await page.getByRole('button', { name: 'Copy link' }).click()
+  // Settings page: notes on (they start off), then Share & activity → a PIN, QR, copy link.
+  await page.locator('.ef-actions .ef-btn', { hasText: 'Settings' }).click()
+  await expect(page.getByRole('heading', { name: 'Photo Selection Settings' })).toBeVisible()
+  await page.locator('.ss-pill', { hasText: 'Photo Notes' }).click()
+  await expect(page.getByTestId('photoNotes')).toBeChecked()
+  await page.getByRole('button', { name: /Share & activity/ }).click()
+  const settings = page.getByRole('dialog', { name: 'Share & activity' })
+  await settings.getByRole('tab', { name: /Share & PIN/ }).click()
+  await expect(settings.locator('.sw-qr img')).toBeVisible()
+  await settings.getByLabel('PIN', { exact: true }).fill('4321')
+  await settings.getByRole('button', { name: 'Set PIN' }).click()
+  await expect(page.getByText(/PIN saved/)).toBeVisible()
+  await settings.getByRole('button', { name: 'Copy link' }).click()
   await expect(page.getByText('Gallery link copied')).toBeVisible()
   galleryLink = await page.evaluate(() => navigator.clipboard.readText())
   expect(galleryLink).toMatch(/\/s\/[\w-]+$/)
-  await expect(page.getByTestId('selection-status')).toHaveText('Shared')
+  await settings.getByRole('button', { name: 'Close' }).click()
+  rmSync(root, { recursive: true, force: true })
 })
 
-test('studio: a reminder from the list opens WhatsApp and uses a credit', async ({ page, context }) => {
+test('studio: Send/Share sends the code and the /select link on WhatsApp, then shows Shared', async ({ page, context }) => {
   await login(page)
   await page.goto('/photo-selection')
-  const credits = Number((await page.getByTestId('credit-chip').locator('span').innerText()).replace(/,/g, ''))
   const row = page.getByRole('row', { name: new RegExp(couple) })
-  await expect(row.getByText('Shared')).toBeVisible()
-  await row.getByRole('button', { name: /^Send / }).click()
+  // Copying the gallery link in the previous test already counted as sharing.
+  await expect(row.locator('.pl-status')).toHaveText('Shared')
+  await row.getByRole('button', { name: /^Send code/ }).click()
+  const dialog = page.getByRole('dialog', { name: 'Send/Share' })
+  await expect(dialog.locator('.sh-card')).toHaveCount(4)
+  const code = await dialog.getByTestId('share-code').innerText()
+  expect(code).toMatch(/^\d{6}$/)
   const popup = context.waitForEvent('page')
-  await page.getByTestId('confirm-ok').click()
+  await dialog.getByRole('button', { name: 'Send on WhatsApp' }).click()
   const wa = await popup
-  await wa.waitForURL(/^https:\/\/wa\.me\/919845011223\?text=/)
+  const url = new URL(wa.url())
+  expect(url.pathname).toBe('/919845011223')
+  const text = url.searchParams.get('text') ?? ''
+  expect(text).toContain(`Access code: ${code}`)
+  // The link has a line of its own, so WhatsApp makes it tappable.
+  expect(text.split('\n').some((l) => /^https?:\/\/\S+\/select\/[\w-]+$/.test(l))).toBe(true)
   await wa.close()
-  await expect(page.getByTestId('credit-chip')).toContainText((credits - 1).toLocaleString('en-IN'))
+  await expect(page.getByText('Opening WhatsApp…').first()).toBeVisible()
+  await dialog.getByRole('button', { name: 'Show QR Code' }).click()
+  await expect(dialog.locator('.sw-qr img')).toBeVisible()
+  await dialog.getByRole('button', { name: 'Close' }).click()
+  await expect(row.locator('.pl-status')).toHaveText('Shared')
 })
 
 test('client: PIN, folders, hearts up to the limit, a note, review and submit', async ({ page, context }) => {
@@ -184,38 +221,46 @@ test('client: PIN, folders, hearts up to the limit, a note, review and submit', 
   await client.close()
 })
 
-test('studio: dashboard shows the submitted picks and client activity', async ({ page }) => {
+test('studio: dashboard shows the client activity and the event in Recent Events', async ({ page }) => {
   await login(page)
   await page.goto('/')
-  await expect(page.getByTestId('needs-attention')).toContainText(`${couple} submitted their picks`)
-  await expect(page.getByTestId('client-activity')).toContainText(couple)
-  await expect(page.getByRole('link', { name: 'Create bill' })).toBeVisible()
+  const activity = page.getByTestId('client-activity')
+  await expect(activity).toContainText(couple)
+  // A table row per action: client, action, event, time and the status pill.
+  const submitted = activity.getByRole('row').filter({ hasText: couple }).filter({ has: page.getByRole('cell', { name: 'Submitted', exact: true }) })
+  await expect(submitted.first().locator('.db-pill')).toHaveText('Selected')
+  await expect(page.getByTestId('stat-cards').getByRole('link', { name: /^Total Events: / })).toBeVisible()
+  const row = page.getByTestId('recent-events').getByRole('row', { name: new RegExp(eventTitle) })
+  await expect(row.locator('.db-pill')).toHaveText('Selected')
+  await expect(row.getByRole('link', { name: /^#\d{6}$/})).toBeVisible()
   await expectNoSideScroll(page)
-  await page.getByTestId('needs-attention').getByRole('link', { name: new RegExp(`${couple} submitted`) }).click()
+  await row.getByRole('cell', { name: eventTitle }).click()
   await expect(page).toHaveURL(selectionUrl)
 })
 
-test('studio: submitted → ZIP, unlock with a reason, resubmitted → delivered', async ({ page }) => {
+test('studio: submitted → download picks (no ZIP), unlock with a reason, resubmitted → delivered, reset refused', async ({ page }) => {
   await login(page)
   await page.goto(selectionUrl)
-  await expect(page.getByTestId('selection-status')).toHaveText('Submitted')
-  await expect(page.getByTestId('picked-counter')).toHaveText('2 / 2 picked')
+  await page.locator('.ef-actions .ef-btn', { hasText: 'Settings' }).click()
+  await page.getByRole('button', { name: /Share & activity/ }).click()
+  const settings = page.getByRole('dialog', { name: 'Share & activity' })
+  await settings.getByRole('tab', { name: /Picks & activity/ }).click()
+  await expect(settings.getByText('2 of 2 picked. The client submitted their selection.')).toBeVisible()
 
-  // ZIP of the picks downloads.
-  await page.getByRole('button', { name: /Export/ }).click()
-  const download = page.waitForEvent('download')
-  await page.getByRole('menuitem', { name: 'ZIP of picked photos' }).click()
-  expect((await download).suggestedFilename()).toMatch(/^SEL-\d+-.*-picked\.zip$/)
+  // "Download picked photos" opens Download Selected (originals into a folder, never a ZIP).
+  await expect(settings.getByRole('link', { name: /ZIP/ })).toHaveCount(0)
+  await settings.getByRole('button', { name: 'Download picked photos' }).click()
+  const get = page.getByRole('dialog', { name: 'Get selected files' })
+  await expect(get.getByTestId('download-from-cloud')).toContainText('Full-quality originals, into a folder')
+  await get.getByRole('button', { name: 'Close' }).click()
 
-  // Unlock (logged with the reason), then deliver after the client submits again.
-  await page.getByRole('button', { name: /More/ }).click()
-  await page.getByRole('menuitem', { name: 'Unlock selection' }).click()
-  await page.getByLabel('Reason (for the change log)').fill('Swap one photo')
-  await page.getByRole('dialog').getByRole('button', { name: /Unlock/ }).click()
-  await expect(page.getByTestId('selection-status')).toHaveText('In progress')
-  await page.locator('.sw-tabs button', { hasText: 'Activity' }).click()
-  await expect(page.locator('.sw-log')).toContainText('Unlocked — Swap one photo')
-  await expect(page.locator('.sw-log')).toContainText('Submitted')
+  // Unlock, logged with the reason.
+  await settings.getByLabel('Reason to unlock').fill('Swap one photo')
+  await settings.getByRole('button', { name: /Unlock/ }).click()
+  await expect(page.getByText(/Unlocked — the client can change/)).toBeVisible()
+  await expect(settings.locator('.sw-log')).toContainText('Unlocked — Swap one photo')
+  await expect(settings.locator('.sw-log')).toContainText('Submitted')
+  await settings.getByRole('button', { name: 'Close' }).click()
 
   // The client submits again (through the API: PIN → key → submit); without the key it's refused.
   const token = galleryLink.split('/s/')[1]
@@ -224,26 +269,31 @@ test('studio: submitted → ZIP, unlock with a reason, resubmitted → delivered
   const view = await (await page.request.get(`/api/v1/public/selections/${token}`, { headers: { 'X-Gallery-Key': key } })).json()
   await page.request.post(`/api/v1/public/selections/${token}/submit`, { data: { memberId: view.members[0].id }, headers: { 'X-Gallery-Key': key } })
 
+  // Still on the settings page.
   await page.reload()
-  await expect(page.getByTestId('selection-status')).toHaveText('Submitted')
-  await page.getByRole('button', { name: /More/ }).click()
-  await page.getByRole('menuitem', { name: 'Mark delivered' }).click()
+  await page.getByRole('button', { name: /Share & activity/ }).click()
+  await settings.getByRole('tab', { name: /Picks & activity/ }).click()
+  await settings.getByRole('button', { name: /Mark delivered/ }).click()
   await page.getByTestId('confirm-ok').click()
-  await expect(page.getByTestId('selection-status')).toHaveText('Delivered')
+  await expect(settings.getByText(/Delivered\./)).toBeVisible()
+  await settings.getByRole('button', { name: 'Close' }).click()
+  // A delivered selection's picks are final.
+  await page.getByRole('link', { name: /Back to folders/ }).click()
+  await expect(page.locator('.ef-actions .ef-btn', { hasText: 'Reset Selection' })).toBeDisabled()
 })
 
 test('studio defaults apply to new selections', async ({ page }) => {
   await login(page)
   await page.goto('/photo-selection')
-  await page.getByRole('button', { name: 'Edit' }).click()
   const card = page.locator('.sw-defaults')
+  await card.getByRole('button', { name: /Edit/ }).click()
   await card.getByText('Watermark previews').click()
   await card.getByLabel('Gallery stays open for (days)').fill('21')
   await card.getByRole('button', { name: 'Save defaults' }).click()
   await expect(page.getByText('Studio defaults saved')).toBeVisible()
   await expect(page.getByTestId('defaults-summary')).toContainText('gallery open 21 days')
   // Put it back for the other project's run.
-  await page.getByRole('button', { name: 'Edit' }).click()
+  await card.getByRole('button', { name: /Edit/ }).click()
   await card.getByText('Watermark previews').click()
   await card.getByLabel('Gallery stays open for (days)').fill('30')
   await card.getByRole('button', { name: 'Save defaults' }).click()

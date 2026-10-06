@@ -50,6 +50,8 @@ export class StudioController {
           gstin: nullable(body.gstin),
           pan: nullable(body.pan),
           website: nullable(body.website),
+          // Left out by older clients: keep what is saved.
+          ...(body.instagramHandle !== undefined ? { instagramHandle: nullable(body.instagramHandle) } : {}),
           bio: nullable(body.bio),
         },
       }),

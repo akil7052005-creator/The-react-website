@@ -4,12 +4,17 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { createBrowserRouter, Navigate, Outlet, RouterProvider, type RouteObject } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import './index.css'
+import './styles/tokens.css'
 import './additions.css'
 import './styles/client-pages.css'
 import './styles/billing.css'
 import './styles/business.css'
 import './styles/admin.css'
 import './styles/workflow.css'
+import './styles/client-portal.css'
+import './styles/selection-flow.css'
+import './styles/selection-list.css'
+import './styles/dashboard-layout.css'
 import { queryClient } from './lib/query'
 import { features } from './lib/env'
 import { RedirectIfAuthed, RequireAdmin, RequireAuth } from './auth/AuthProvider'
@@ -29,6 +34,7 @@ const ResetPassword = page(() => import('./pages/auth/Passwords').then((m) => ({
 const Dashboard = page(() => import('./pages/Dashboard'))
 const PhotoSelection = page(() => import('./pages/PhotoSelection'))
 const SelectionEvent = page(() => import('./pages/SelectionEvent'))
+const SelectionSettings = page(() => import('./pages/SelectionSettings'))
 const FaceRecognition = page(() => import('./pages/FaceRecognition'))
 const AllSubscription = page(() => import('./pages/AllSubscription'))
 const MySubscription = page(() => import('./pages/MySubscription'))
@@ -45,6 +51,11 @@ const Logout = page(() => import('./pages/Logout'))
 const NotFound = page(() => import('./pages/NotFound'))
 const PublicSelection = page(() => import('./pages/public/PublicSelection'))
 const PublicAlbum = page(() => import('./pages/public/PublicAlbum'))
+const ClientAuth = page(() => import('./pages/public/client/ClientAuth'))
+const ClientEvent = page(() => import('./pages/public/client/ClientEvent'))
+const ClientFolder = page(() => import('./pages/public/client/ClientFolder'))
+const ClientSelected = page(() => import('./pages/public/client/ClientSelected'))
+const SelectVerify = page(() => import('./pages/public/client/SelectVerify'))
 const InvoicePrint = page(() => import('./pages/InvoicePrint'))
 const PublicSite = page(() => import('./pages/public/PublicSite'))
 const AdminTickets = page(() => import('./pages/admin/AdminTickets'))
@@ -73,6 +84,7 @@ const studioRoutes: RouteObject[] = [
   { index: true, element: <Dashboard /> },
   { path: 'photo-selection', element: <PhotoSelection /> },
   { path: 'photo-selection/:selectionId', element: <SelectionEvent /> },
+  { path: 'photo-selection/:selectionId/settings', element: <SelectionSettings /> },
   // Digital Album was removed from the studio app; old bookmarks land on the dashboard.
   { path: 'digital-album', element: <Navigate to="/" replace /> },
   // AI Face Recognition is out of scope for v1 — kept in the code, hidden behind FEATURE_FACE_RECOGNITION.
@@ -105,6 +117,12 @@ const router = createBrowserRouter([
       { path: '/reset-password', element: <ResetPassword /> },
       // Client-facing pages: no login, access by unguessable token.
       { path: '/s/:token', element: <PublicSelection /> },
+      // Customer portal: the share link (/select/<token>) and its 6-digit Customer Code, then that selection only.
+      { path: '/select/:shareToken', element: <SelectVerify /> },
+      { path: '/selection/auth', element: <ClientAuth /> },
+      { path: '/selection/:eventId', element: <ClientEvent /> },
+      { path: '/selection/:eventId/selected', element: <ClientSelected /> },
+      { path: '/selection/:eventId/folders/:folderId', element: <ClientFolder /> },
       { path: '/a/:token', element: <PublicAlbum /> },
       { path: '/w/:slug', element: <PublicSite /> },
       {

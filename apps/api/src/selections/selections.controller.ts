@@ -15,12 +15,18 @@ import {
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common'
+import { FileInterceptor } from '@nestjs/platform-express'
 import { ApiConsumes, ApiQuery, ApiTags } from '@nestjs/swagger'
 import { Throttle } from '@nestjs/throttler'
 import {
+  clientItemPatchSchema,
+  clientVerifySchema,
   commentSchema,
   createSelectionSchema,
+  eventDetailsSchema,
+  eventSettingsPatchSchema,
   listQuerySchema,
+  markSentSchema,
   pickSchema,
   selectionAccessSchema,
   selectionDefaultsSchema,
@@ -38,15 +44,18 @@ import { PublicThrottle } from '../common/throttle'
 import { ApiListQuery, ApiZodBody, zod } from '../common/zod'
 import { config } from '../config'
 import { FilesService, type UploadedFile as Upload } from '../core/files.service'
+import { ClientSelectionService, clientTokenFrom } from './client-selection.service'
+import { EventSettingsService, LOGO_MAX_BYTES } from './event-settings.service'
 import { keyFrom } from './gallery-access'
 import { SelectionWorkflowService } from './selection-workflow.service'
 import { SelectionsService } from './selections.service'
-import { cleanFolder, PlanUploadInterceptor, type UploadRequest } from './upload-limits'
+import { cleanFolder, originalMeta, PlanUploadInterceptor, type UploadRequest } from './upload-limits'
 
 const kindQuery = z.object({ type: z.enum(['invite', 'reminder']).default('reminder') })
 const exportQuery = z.object({ format: z.enum(['csv', 'txt']).default('csv') })
 const zipQuery = z.object({ scope: z.enum(['picked', 'all']).default('picked'), folderId: z.string().uuid().optional() })
-const moveSchema = z.object({ photoIds: z.array(z.string().uuid()).min(1).max(5000), folderId: z.string().uuid() })
+const resetSchema = z.object({ mode: z.enum(['shortlist', 'reject']).default('reject') })
+const moveSchema =z.object({ photoIds: z.array(z.string().uuid()).min(1).max(5000), folderId: z.string().uuid() })
 const uuidOrNull = (v: unknown) => (typeof v === 'string' && /^[0-9a-f-]{36}$/i.test(v) ? v : null)
 
 @ApiTags('selections')
@@ -55,6 +64,7 @@ export class SelectionsController {
   constructor(
     private readonly selections: SelectionsService,
     private readonly workflow: SelectionWorkflowService,
+    private readonly eventSettings: EventSettingsService,
     private readonly files: FilesService,
   ) {}
 
@@ -73,6 +83,20 @@ export class SelectionsController {
   @ApiZodBody(createSelectionSchema)
   create(@StudioId() studioId: string, @Body(zod(createSelectionSchema)) body: z.output<typeof createSelectionSchema>) {
     return this.selections.create(studioId, body)
+  }
+
+  /** "Add Photo Selection → Event Details": customer, event name and limit in one step. */
+  @Post('details')
+  @ApiZodBody(eventDetailsSchema)
+  createFromDetails(@StudioId() studioId: string, @Body(zod(eventDetailsSchema)) body: z.output<typeof eventDetailsSchema>) {
+    return this.selections.createFromDetails(studioId, body)
+  }
+
+  /** Manage: edit the customer, event name and limit. */
+  @Put(':id/details')
+  @ApiZodBody(eventDetailsSchema)
+  updateDetails(@StudioId() studioId: string, @Param('id', ParseUUIDPipe) id: string, @Body(zod(eventDetailsSchema)) body: z.output<typeof eventDetailsSchema>) {
+    return this.selections.updateDetails(studioId, id, body)
   }
 
   @Get(':id')
@@ -113,7 +137,32 @@ export class SelectionsController {
     @Req() req: UploadRequest,
   ) {
     const body = (req.body ?? {}) as Record<string, unknown>
-    return this.selections.addPhoto(studioId, id, file, { limits: req.uploadLimits, folder: cleanFolder(body.folder), folderId: uuidOrNull(body.folderId) })
+    return this.selections.addPhoto(studioId, id, file, {
+      limits: req.uploadLimits,
+      folder: cleanFolder(body.folder),
+      folderId: uuidOrNull(body.folderId),
+      original: originalMeta(body),
+    })
+  }
+
+  /**
+   * The full-quality original of a compressed upload, kept for the studio only (customers get the
+   * compressed copy). Field `sha256` (optional): the browser's hash of the file, checked on arrival.
+   */
+  @Throttle({ default: { limit: config().RATE_LIMIT_UPLOADS_PER_MIN, ttl: 60_000 } })
+  @Post(':id/photos/:photoId/original')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(PlanUploadInterceptor)
+  attachOriginal(
+    @StudioId() studioId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('photoId', ParseUUIDPipe) photoId: string,
+    @UploadedFile() file: Upload | undefined,
+    @Req() req: UploadRequest,
+  ) {
+    const body = (req.body ?? {}) as Record<string, unknown>
+    const sha = typeof body.sha256 === 'string' && /^[a-f0-9]{64}$/i.test(body.sha256) ? body.sha256 : null
+    return this.selections.attachOriginal(studioId, id, photoId, file, { limits: req.uploadLimits, sha256: sha })
   }
 
   /** Everything the event page shows: the selection, folders with counts, notes, log and albums. */
@@ -130,7 +179,7 @@ export class SelectionsController {
   @Post(':id/folders')
   @ApiZodBody(selectionFolderSchema)
   createFolder(@StudioId() studioId: string, @Param('id', ParseUUIDPipe) id: string, @Body(zod(selectionFolderSchema)) body: z.output<typeof selectionFolderSchema>) {
-    return this.workflow.createFolder(studioId, id, body.name)
+    return this.workflow.createFolder(studioId, id, body.name, body.type)
   }
 
   @Patch(':id/folders/:folderId')
@@ -156,6 +205,27 @@ export class SelectionsController {
     return this.workflow.movePhotos(studioId, id, body.photoIds, body.folderId)
   }
 
+  /** Photo Selection settings for this event (the settings page). */
+  @Get(':id/settings')
+  settings(@StudioId() studioId: string, @Param('id', ParseUUIDPipe) id: string) {
+    return this.eventSettings.get(studioId, id)
+  }
+
+  @Patch(':id/settings')
+  @ApiZodBody(eventSettingsPatchSchema)
+  patchSettings(@StudioId() studioId: string, @Param('id', ParseUUIDPipe) id: string, @Body(zod(eventSettingsPatchSchema)) body: z.output<typeof eventSettingsPatchSchema>) {
+    return this.eventSettings.patch(studioId, id, body)
+  }
+
+  /** The watermark logo (PNG, JPG or SVG, up to 2 MB). */
+  @Post(':id/settings/logo')
+  @HttpCode(200)
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: LOGO_MAX_BYTES + 1024 } }))
+  uploadLogo(@StudioId() studioId: string, @Param('id', ParseUUIDPipe) id: string, @UploadedFile() file: Upload | undefined) {
+    return this.eventSettings.uploadLogo(studioId, id, file)
+  }
+
   /** PIN, client downloads, watermark and notes. */
   @Patch(':id/access')
   @ApiZodBody(selectionAccessSchema)
@@ -170,10 +240,12 @@ export class SelectionsController {
     return this.workflow.unlock(studioId, id, body.reason)
   }
 
+  /** Reset Selection: { mode: 'shortlist' } keeps the picks and reopens; 'reject' (default) clears them. */
   @Post(':id/reset-picks')
   @HttpCode(200)
-  resetPicks(@StudioId() studioId: string, @Param('id', ParseUUIDPipe) id: string) {
-    return this.workflow.resetPicks(studioId, id)
+  @ApiZodBody(resetSchema)
+  resetPicks(@StudioId() studioId: string, @Param('id', ParseUUIDPipe) id: string, @Body(zod(resetSchema)) body: z.output<typeof resetSchema>) {
+    return this.workflow.resetPicks(studioId, id, body.mode)
   }
 
   @Post(':id/deliver')
@@ -228,6 +300,20 @@ export class SelectionsController {
     return this.selections.send(studioId, id, 'reminder')
   }
 
+  /** Send Options: records which card's WhatsApp message was opened (the browser opens WhatsApp itself). */
+  @Patch(':id/sent')
+  @ApiZodBody(markSentSchema)
+  markSent(@StudioId() studioId: string, @Param('id', ParseUUIDPipe) id: string, @Body(zod(markSentSchema)) body: z.output<typeof markSentSchema>) {
+    return this.selections.markSent(studioId, id, body.via)
+  }
+
+  /** Gives an older selection (SEL-… code) a 6-digit code the customer app accepts. */
+  @Post(':id/new-code')
+  @HttpCode(200)
+  renewCode(@StudioId() studioId: string, @Param('id', ParseUUIDPipe) id: string) {
+    return this.selections.renewCode(studioId, id)
+  }
+
   @Post(':id/mark-shared')
   @HttpCode(200)
   markShared(@StudioId() studioId: string, @Param('id', ParseUUIDPipe) id: string) {
@@ -280,11 +366,25 @@ export class PublicSelectionsController {
     await this.files.send(res, file)
   }
 
-  /** The original file, only when the studio allows downloads. */
+  /**
+   * A download, only when the studio allows downloads: the original or a 1600 px copy (Original
+   * Quality), watermarked when the event's watermark is on.
+   */
   @Get(':token/photos/:photoId/download')
   async download(@Param('token') token: string, @Param('photoId', ParseUUIDPipe) photoId: string, @Req() req: Request, @Res() res: Response) {
-    const file = await this.selections.publicPhotoFile(token, photoId, keyFrom(req), { download: true })
-    await this.files.send(res, file, { download: true })
+    const out = await this.selections.publicDownload(token, photoId, keyFrom(req))
+    if (!out.buffer) return this.files.send(res, out.file, { download: true })
+    res.setHeader('Content-Type', 'image/jpeg')
+    res.setHeader('Content-Length', String(out.buffer.length))
+    res.setHeader('Cache-Control', 'private, no-store')
+    res.setHeader('Content-Disposition', `attachment; filename="${(out.name ?? 'photo.jpg').replace(/[^\w.\- ]/g, '_')}"`)
+    res.end(out.buffer)
+  }
+
+  /** "Download All Folder": the folder's photos as a ZIP. */
+  @Get(':token/folders/:folderId/zip')
+  folderZip(@Param('token') token: string, @Param('folderId', ParseUUIDPipe) folderId: string, @Req() req: Request, @Res() res: Response) {
+    return this.selections.publicFolderZip(token, folderId, keyFrom(req), res)
   }
 
   @Post(':token/picks')
@@ -309,6 +409,82 @@ export class PublicSelectionsController {
   @ApiZodBody(submitSelectionSchema)
   submit(@Param('token') token: string, @Body(zod(submitSelectionSchema)) body: z.output<typeof submitSelectionSchema>, @Req() req: Request) {
     return this.selections.submit(token, body.memberId, keyFrom(req))
+  }
+}
+
+const pageQuery = z.object({ page: z.coerce.number().int().min(1).max(10_000).default(1) })
+
+/** The customer portal: a 6-digit code gives a short-lived token for one selection (X-Client-Token or ?t=). */
+@ApiTags('public')
+@Public()
+@PublicThrottle()
+@Controller('public/selection')
+export class ClientSelectionController {
+  constructor(private readonly client: ClientSelectionService) {}
+
+  /** Tight per-IP limit (RATE_LIMIT_CODE_PER_MIN, 5 by default): codes are only six digits. */
+  @Throttle({ default: { limit: config().RATE_LIMIT_CODE_PER_MIN, ttl: 60_000 } })
+  @Post('verify')
+  @HttpCode(200)
+  @ApiZodBody(clientVerifySchema)
+  verify(@Body(zod(clientVerifySchema)) body: z.output<typeof clientVerifySchema>) {
+    return this.client.verify(body.code, body.pin, body.shareToken)
+  }
+
+  /** The share link's verification screen: studio, event name and any lockout. */
+  @Get('link/:token')
+  link(@Param('token') token: string) {
+    return this.client.linkInfo(token)
+  }
+
+  @Get(':id')
+  view(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
+    return this.client.view(id, clientTokenFrom(req))
+  }
+
+  @Get(':id/folders/:folderId/items')
+  @ApiQuery({ name: 'page', required: false })
+  items(@Param('id', ParseUUIDPipe) id: string, @Param('folderId', ParseUUIDPipe) folderId: string, @Query(zod(pageQuery)) q: z.output<typeof pageQuery>, @Req() req: Request) {
+    return this.client.items(id, clientTokenFrom(req), folderId, q.page)
+  }
+
+  /** The Selection tab: the picks grouped by album. */
+  @Get(':id/selected')
+  selected(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
+    return this.client.selected(id, clientTokenFrom(req))
+  }
+
+  @Patch(':id/items/:itemId')
+  @ApiZodBody(clientItemPatchSchema)
+  patchItem(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('itemId', ParseUUIDPipe) itemId: string,
+    @Body(zod(clientItemPatchSchema)) body: z.output<typeof clientItemPatchSchema>,
+    @Req() req: Request,
+  ) {
+    return this.client.patchItem(id, clientTokenFrom(req), itemId, body)
+  }
+
+  @Post(':id/submit')
+  @HttpCode(200)
+  submit(@Param('id', ParseUUIDPipe) id: string, @Req() req: Request) {
+    return this.client.submit(id, clientTokenFrom(req))
+  }
+
+  /** Photo preview (watermarked when on) or the video, with byte ranges. */
+  @Get(':id/items/:itemId/file')
+  file(@Param('id', ParseUUIDPipe) id: string, @Param('itemId', ParseUUIDPipe) itemId: string, @Req() req: Request, @Res() res: Response) {
+    return this.client.sendFile(id, clientTokenFrom(req), itemId, req, res)
+  }
+
+  @Get(':id/items/:itemId/download')
+  download(@Param('id', ParseUUIDPipe) id: string, @Param('itemId', ParseUUIDPipe) itemId: string, @Req() req: Request, @Res() res: Response) {
+    return this.client.download(id, clientTokenFrom(req), itemId, res)
+  }
+
+  @Get(':id/folders/:folderId/zip')
+  folderZip(@Param('id', ParseUUIDPipe) id: string, @Param('folderId', ParseUUIDPipe) folderId: string, @Req() req: Request, @Res() res: Response) {
+    return this.client.folderZip(id, clientTokenFrom(req), folderId, res)
   }
 }
 
