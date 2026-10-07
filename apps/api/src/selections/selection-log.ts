@@ -5,8 +5,10 @@ export type LogActor = SelectionLogDto['actor']
 
 /** Client Activity entry for Reset Selection (Shortlist or Reject all). */
 export const REOPENED_ACTION = 'Selection reopened by studio'
-/** Log actions of studio resets shown in Client Activity: the current one and the older wording. */
-export const RESET_ACTIONS = [REOPENED_ACTION, 'Selection reset — shortlist kept', 'Selection reset — all picks rejected'] as const
+/** The same, for a selection the studio had already downloaded. */
+export const REOPENED_AFTER_DOWNLOAD_ACTION = 'Selection reopened by studio (after download)'
+/** Log actions of studio resets shown in Client Activity (status Pending): the current ones and the older wording. */
+export const RESET_ACTIONS = [REOPENED_ACTION, REOPENED_AFTER_DOWNLOAD_ACTION, 'Selection reset — shortlist kept', 'Selection reset — all picks rejected'] as const
 
 /**
  * The status a Client Activity entry shows, saved with it: In Progress when the client opens the

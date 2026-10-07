@@ -1,0 +1,67 @@
+/* Download Selected on a phone or tablet (MobileDownload.tsx). Only the .dl-mobile dialog uses these
+   rules, so the computer dialog is unchanged. */
+
+/* The event page's button colours (workflow.css sets them on .ef-page and a few dialogs only). */
+.dl-mobile {
+  --ef-red: #e8174a;
+  --ef-grad: linear-gradient(135deg, #f0426b, #d30c3d);
+}
+.dl-mobile .dl-choice:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+  filter: none;
+}
+.dlm-panel {
+  display: grid;
+  gap: 12px;
+}
+.dlm-batch {
+  margin: 0;
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--flow-maroon);
+}
+.dlm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+/* Phones: a full-width bottom sheet, 48px tap targets, nothing wider than the screen. */
+@media (max-width: 599px) {
+  .wz-modal.dl-mobile {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    max-width: none;
+    max-height: 88vh;
+    border-radius: 18px 18px 0 0;
+    border-bottom: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    overflow-x: hidden;
+  }
+  .dl-mobile .wz-modal-body {
+    padding: 16px;
+    overflow-x: hidden;
+  }
+  .dl-mobile .dl-choice,
+  .dl-mobile .ef-btn,
+  .dl-mobile .icon-btn {
+    min-height: 48px;
+  }
+  .dl-mobile .icon-btn {
+    min-width: 48px;
+  }
+  .dlm-actions > * {
+    flex: 1 1 140px;
+    justify-content: center;
+  }
+  .dl-mobile .dl-note-online,
+  .dl-mobile .dl-fine,
+  .dl-mobile .notice {
+    overflow-wrap: anywhere;
+  }
+}

@@ -20,6 +20,7 @@ import {
   type SelectedPhoto,
 } from './localCopy'
 import { returnOriginals, type CloudPick, type ReturnResult } from './cloudReturn'
+import { isPhone, MobileDownload } from './MobileDownload'
 import { refreshSelection } from './selectionUi'
 
 type Step =
@@ -67,6 +68,8 @@ export function DownloadSelectedModal({
   const stop = useRef({ cancelled: false })
   const abort = useRef<AbortController | null>(null)
   useEffect(() => () => abort.current?.abort(), [])
+  // Phones and tablets save to the phone instead (no folder picker); computers continue below unchanged.
+  if (isPhone()) return <MobileDownload selection={selection} folders={folders} onClose={onClose} onDone={onDone} />
 
   const busy = step.at === 'scanning' || step.at === 'copying' || step.at === 'online'
 

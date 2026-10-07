@@ -26,15 +26,13 @@ module.exports = {
       args: '-w -p tsconfig.build.json --preserveWatchOutput',
     },
     {
-      // The API itself, restarted by pm2 whenever dist/ changes.
+      // The API itself, restarted by Node's own --watch-path whenever dist/ changes. (pm2's `watch`
+      // missed rebuilds here, inside OneDrive, and kept old code running for hours.)
       ...common,
       name: 'api',
       cwd: path.join(__dirname, 'apps/api'),
       script: 'dist/main.js',
-      node_args: '--enable-source-maps',
-      watch: ['dist'],
-      // Wait for tsc to finish writing every file of a rebuild before restarting.
-      watch_delay: 2000,
+      node_args: '--enable-source-maps --watch-path=dist --watch-preserve-output',
     },
     {
       ...common,

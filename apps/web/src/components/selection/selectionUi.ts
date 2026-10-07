@@ -30,8 +30,8 @@ export function selectionPill(s: { status: SelectionEffectiveStatus; reopened?: 
   return SELECTION_STATUS_PILL[s.status]
 }
 
-/** Selected (submitted, not yet downloaded): the studio can click it to reopen the selection. */
-export const canReopen = (s: SelectionEffectiveStatus) => s === 'SUBMITTED'
+/** Selected or Downloaded: the studio can click it to reopen the selection. */
+export const canReopen = (s: SelectionEffectiveStatus) => s === 'SUBMITTED' || s === 'DELIVERED'
 export const REOPEN_HINT = 'Give the customer another chance to select'
 
 /** How often the selection pages check for the customer's picks and submit (no manual refresh). */

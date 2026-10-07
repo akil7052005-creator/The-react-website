@@ -1,12 +1,14 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { SelectionFolderDto, SelectionOverviewDto } from '@weddyzone/shared'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { toast } from 'sonner'
+import { useConfirm } from '../components/Modal'
 import { CreateFolderModal } from '../components/selection/CreateFolderModal'
 import { DownloadSelectedModal } from '../components/selection/DownloadSelectedModal'
 import { FolderView } from '../components/selection/FolderView'
 import { SelectedPhotosView } from '../components/selection/SelectedPhotosView'
-import { count, hasSubmitted, LIVE_POLL_MS } from '../components/selection/selectionUi'
+import { count, hasSubmitted, LIVE_POLL_MS, refreshSelection } from '../components/selection/selectionUi'
 import { SelectionStatusPill } from '../components/selection/SelectionStatusPill'
 import { ResetSelectionModal } from '../components/selection/ResetSelectionModal'
 import { ShareModal } from '../components/selection/ShareModal'
@@ -14,6 +16,7 @@ import { UploadFoldersModal, type UploadFoldersHandle } from '../components/sele
 import { EmptyState, ErrorState, Skeleton } from '../components/ui'
 import { useUrlState } from '../hooks/useUrlState'
 import { api, isApiError } from '../lib/api'
+import { toastError } from '../lib/query'
 
 /** A yellow folder with a pink photo (or video camera) badge, drawn here, no image files. */
 function FolderArt({ video }: { video: boolean }) {
@@ -38,12 +41,25 @@ function FolderArt({ video }: { video: boolean }) {
   )
 }
 
-function FolderCard({ folder, onOpen }: { folder: SelectionFolderDto; onOpen: () => void }) {
+/** A "Selected - …" folder: Download Selected's output folder, uploaded back into the event. */
+const isSelectedFolder = (f: SelectionFolderDto) => f.name.startsWith('Selected - ')
+
+/**
+ * A folder card. With `onDelete` (an empty "Selected - …" folder, nothing to open) a click offers to
+ * delete it instead, like the clickable status pill: the option only shows once it is clicked.
+ */
+function FolderCard({ folder, onOpen, onDelete }: { folder: SelectionFolderDto; onOpen: () => void; onDelete?: () => void }) {
   const video = folder.type === 'video'
   const n = video ? (folder.videoCount ?? 0) : folder.photoCount
   const unit = video ? 'Videos' : 'Images'
   return (
-    <button type="button" className="ef-card" onClick={onOpen} aria-label={`Open ${video ? 'video' : 'photo'} folder ${folder.name}, ${n} ${unit.toLowerCase()}`}>
+    <button
+      type="button"
+      className="ef-card"
+      onClick={onDelete ?? onOpen}
+      title={onDelete ? 'Empty folder: click to delete it' : undefined}
+      aria-label={onDelete ? `Empty folder ${folder.name}: delete` : `Open ${video ? 'video' : 'photo'} folder ${folder.name}, ${n} ${unit.toLowerCase()}`}
+    >
       <FolderArt video={video} />
       <span className="ef-name">
         <i className={`bi bi-${video ? 'camera-video' : 'image'}`} aria-hidden="true" /> <span title={folder.name} aria-label={folder.name}>
@@ -71,6 +87,8 @@ export default function SelectionEvent() {
   const [resetting, setResetting] = useState(false)
   const navigate = useNavigate()
   const uploader = useRef<UploadFoldersHandle>(null)
+  const qc = useQueryClient()
+  const confirm = useConfirm()
 
   const q = useQuery({
     queryKey: ['selection-overview', selectionId],
@@ -128,6 +146,27 @@ export default function SelectionEvent() {
 
   const submitted = hasSubmitted(s.status)
 
+  /** Same as Delete folder inside a folder (FolderView), from the card. */
+  const deleteFolder = (f: SelectionFolderDto) =>
+    confirm({
+      title: `Delete folder ${f.name}?`,
+      message: f.photoCount + (f.videoCount ?? 0) ? `Its ${f.photoCount + (f.videoCount ?? 0)} files are kept and move to General.` : 'The folder is empty.',
+      confirmLabel: 'Delete folder',
+      tone: 'danger',
+      onConfirm: async () => {
+        try {
+          await api.delete(`/selections/${s.id}/folders/${f.id}`)
+          toast.success(`Folder ${f.name} deleted`)
+          refreshSelection(qc, s.id)
+        } catch (e) {
+          toastError(e)
+          throw e
+        }
+      },
+    })
+  // Only empty ones: deleting moves a folder's photos into General, which would show copies twice.
+  const canDeleteFromCard = (f: SelectionFolderDto) => isSelectedFolder(f) && f.photoCount + (f.videoCount ?? 0) === 0
+
   return (
     <div className="stack ef-page">
       <Link to="/photo-selection" className="sw-back">
@@ -154,8 +193,8 @@ export default function SelectionEvent() {
             type="button"
             className="ef-btn outline"
             onClick={() => setResetting(true)}
-            disabled={s.pickedCount === 0 || s.status === 'DELIVERED'}
-            title={s.status === 'DELIVERED' ? 'Already downloaded' : s.pickedCount === 0 ? 'Nothing picked yet' : undefined}
+            disabled={s.pickedCount === 0}
+            title={s.pickedCount === 0 ? 'Nothing picked yet' : undefined}
           >
             <i className="bi bi-arrow-counterclockwise" /> Reset Selection
           </button>
@@ -213,7 +252,7 @@ export default function SelectionEvent() {
       ) : (
         <div className="ef-grid" data-testid="folder-grid">
           {folders.map((f) => (
-            <FolderCard key={f.id} folder={f} onOpen={() => setUrl({ folder: f.id })} />
+            <FolderCard key={f.id} folder={f} onOpen={() => setUrl({ folder: f.id })} onDelete={canDeleteFromCard(f) ? () => void deleteFolder(f) : undefined} />
           ))}
         </div>
       )}

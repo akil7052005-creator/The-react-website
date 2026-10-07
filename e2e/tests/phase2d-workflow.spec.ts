@@ -67,12 +67,8 @@ test('Send options: web sign-in and personal links, the full message, never loca
   const sentPage = await sent
   expect(new URL(sentPage.url()).searchParams.get('text')).toBe(full)
   await sentPage.close()
-  await dialog.getByTestId('copy-link-only').click()
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`https://studio.weddyzone.example/select/${sel.publicToken}`)
-  await dialog.getByTestId('copy-wa-link').click()
-  const waLink = await page.evaluate(() => navigator.clipboard.readText())
-  expect(waLink).toMatch(/^https:\/\/wa\.me\/\d*\?text=/)
-  expect(new URL(waLink).searchParams.get('text')).toBe(full)
+  // The Copy Link card has a single button.
+  await expect(dialog.locator('.sh-card').first().getByRole('button')).toHaveText([/^(Copy Link|Copied ✓)$/])
 
   const popup = context.waitForEvent('page')
   await options.getByRole('button', { name: 'Send Web link via WhatsApp' }).click()

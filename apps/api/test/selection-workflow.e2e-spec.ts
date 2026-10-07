@@ -270,7 +270,12 @@ describe('Studio workflow: Photo Selection', () => {
       const delivered = await A.agent.post(`/api/v1/selections/${s.id}/deliver`).expect(200)
       expect(delivered.body.status).toBe('DELIVERED')
       await A.agent.post(`/api/v1/selections/${s.id}/unlock`).expect(400)
-      expectError((await A.agent.post(`/api/v1/selections/${s.id}/reset-picks`).expect(409)).body, 'READ_ONLY') // delivered is final
+      // Delivered selections count as completed and are not active.
+      const list = (await A.agent.get('/api/v1/selections').query({ status: 'DELIVERED' }).expect(200)).body
+      expect(list.data.map((x: { id: string }) => x.id)).toContain(s.id)
+      // Downloaded can be reopened too, the same way as Selected (shortlist keeps the pick).
+      const reopened = (await A.agent.post(`/api/v1/selections/${s.id}/reset-picks`).send({ mode: 'shortlist' }).expect(200)).body
+      expect(reopened).toMatchObject({ kept: 1, selection: { status: 'SENT', submittedAt: null, deliveredAt: null, reopened: true, pickedCount: 1 } })
 
       const log = (await A.agent.get(`/api/v1/selections/${s.id}/overview`).expect(200)).body.log.map((l: { actor: string; action: string; detail: string | null }) => [l.actor, l.action, l.detail])
       expect(log).toEqual(
@@ -279,11 +284,10 @@ describe('Studio workflow: Photo Selection', () => {
           ['STUDIO', 'Selection reopened by studio', 'Reject all · 1 photo cleared · status Pending'],
           ['CLIENT', 'Submitted', expect.stringContaining('1 of 1 photos')],
           ['STUDIO', 'Delivered', null],
+          // Reopened after a download: says so and when it was downloaded; the Delivered entry above stays.
+          ['STUDIO', 'Selection reopened by studio (after download)', expect.stringMatching(/^Shortlist · 1 photo kept · status Pending · downloaded \d{1,2} \w{3} \d{4}$/)],
         ]),
       )
-      // Delivered selections count as completed and are not active.
-      const list = (await A.agent.get('/api/v1/selections').query({ status: 'DELIVERED' }).expect(200)).body
-      expect(list.data.map((x: { id: string }) => x.id)).toContain(s.id)
     })
 
     it('reset as shortlist keeps the picks and reopens the selection; both resets show in Client Activity', async () => {

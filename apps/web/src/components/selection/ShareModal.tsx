@@ -9,7 +9,7 @@ import { Modal } from '../Modal'
 import { QrCode } from './QrCode'
 import { refreshSelection } from './selectionUi'
 import { appLinks, isPrivateNetworkUrl, lanLinksAllowed } from '../../lib/env'
-import { buildCustomerMessage, buildOptionMessage, shareLink, smsUrl, whatsappMeUrl, whatsappSendUrl, type ShareLinkKey, type ShareLinks } from './sendMessage'
+import { buildCustomerMessage, buildOptionMessage, shareLink, smsUrl, whatsappSendUrl, type ShareLinkKey, type ShareLinks } from './sendMessage'
 
 /**
  * Clipboard API, or a hidden textarea where it isn't available (plain http, older browsers). Plain
@@ -166,22 +166,8 @@ export function ShareModal({ selection, onClose }: { selection: SelectionDto; on
           </p>
           {/* The same message Send on WhatsApp sends, to paste in any chat. */}
           <button type="button" className="sh-btn" onClick={() => copyMessage('card')} disabled={blocked} data-testid="copy-message">
-            {copied === 'card' ? 'Copied ✓' : 'Copy message'}
+            {copied === 'card' ? 'Copied ✓' : 'Copy Link'}
           </button>
-          <div className="sh-card-more">
-            <button type="button" className="sh-mini" onClick={() => link && void copy(link, 'link-only', 'Link')} disabled={blocked} data-testid="copy-link-only">
-              {copied === 'link-only' ? 'Copied ✓' : 'Copy link only'}
-            </button>
-            <button
-              type="button"
-              className="sh-mini"
-              onClick={() => void copy(whatsappMeUrl(phone, message), 'wa-link', 'WhatsApp link', 'WhatsApp link copied. Opening it starts WhatsApp with the message ready.')}
-              disabled={blocked}
-              data-testid="copy-wa-link"
-            >
-              {copied === 'wa-link' ? 'Copied ✓' : 'Copy WhatsApp link'}
-            </button>
-          </div>
         </section>
         <section className="sh-card" aria-labelledby="sh-qr">
           <i className="bi bi-qr-code sh-icon" aria-hidden="true" />

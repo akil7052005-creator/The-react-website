@@ -1,8 +1,7 @@
-import { HttpStatus, Injectable, Logger } from '@nestjs/common'
+import { Injectable, Logger } from '@nestjs/common'
 import archiver from 'archiver'
 import type { Response } from 'express'
 import {
-  ERROR_CODES,
   isSelectionLocked,
   resolveSelectionDefaults,
   type SelectionAccessInput,
@@ -10,16 +9,14 @@ import {
   type SelectionFolderDto,
   type SelectionOverviewDto,
 } from '@weddyzone/shared'
-import { AppError, badRequest, conflict, notFound } from '../common/errors'
+import { badRequest, conflict, notFound } from '../common/errors'
 import { selectionStatus } from '../core/mappers'
 import { StorageService } from '../infra/storage.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { hashPin } from './gallery-access'
 import { PhotoPreviewService } from './previews.service'
-import { logDto, REOPENED_ACTION, RESET_ACTIONS, writeLog } from './selection-log'
+import { logDto, REOPENED_ACTION, REOPENED_AFTER_DOWNLOAD_ACTION, RESET_ACTIONS, writeLog } from './selection-log'
 import { GENERAL_FOLDER, SelectionsService } from './selections.service'
-
-const readOnly = (message: string) => new AppError(HttpStatus.CONFLICT, ERROR_CODES.READ_ONLY, message)
 
 export type ResetMode = 'shortlist' | 'reject'
 /** Log actions of the two resets; the dashboard's Client Activity lists them too. */
@@ -198,24 +195,33 @@ export class SelectionWorkflowService {
    * they submit again):
    * - shortlist: the client's picks stay, so they can change them and submit again;
    * - reject: every pick is cleared (the photos and notes are kept).
-   * A delivered selection is final. Logged so it shows in Client Activity.
+   * A Downloaded (delivered) selection reopens the same way as a Selected one; it is no longer
+   * marked downloaded, and its event goes back to awaiting selection. Logged so it shows in Client Activity.
    */
   async resetPicks(studioId: string, id: string, mode: ResetMode = 'reject') {
     const s = await this.selections.find(studioId, id)
-    if (s.status === 'DELIVERED') throw readOnly('This selection was delivered. Its picks can no longer be reset.')
+    const delivered = s.status === 'DELIVERED'
     const result = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM selections WHERE id = ${id}::uuid FOR UPDATE`
       const kept = mode === 'shortlist' ? (await this.selections.pickCounts([id])).picked.get(id) ?? 0 : 0
       const cleared = mode === 'reject' ? (await tx.photoPick.deleteMany({ where: { selectionId: id } })).count : 0
-      const reopen = s.status === 'IN_PROGRESS' || s.status === 'SUBMITTED' ? { status: 'SENT' as const, submittedAt: null } : {}
+      const reopen =
+        s.status === 'IN_PROGRESS' || s.status === 'SUBMITTED' || delivered
+          ? { status: 'SENT' as const, submittedAt: null, ...(delivered ? { deliveredAt: null } : {}) }
+          : {}
       await tx.selection.update({ where: { id }, data: { ...reopen, reopenedAt: new Date() } })
+      // Mark delivered moved the event to DELIVERED: back to waiting for the client's selection.
+      if (delivered) await tx.event.updateMany({ where: { id: s.eventId, status: 'DELIVERED' }, data: { status: 'AWAITING_SELECTION' } })
       const n = (k: number) => `${k} photo${k === 1 ? '' : 's'}`
+      // After a download the earlier "Delivered" / "Downloaded ZIP" entries stay in the log; this one
+      // also says when it had been downloaded.
+      const downloaded = delivered && s.deliveredAt ? ` · downloaded ${s.deliveredAt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })}` : ''
       await writeLog(
         tx,
         id,
         'STUDIO',
-        REOPENED_ACTION,
-        mode === 'shortlist' ? `Shortlist · ${n(kept)} kept · status Pending` : `Reject all · ${n(cleared)} cleared · status Pending`,
+        delivered ? REOPENED_AFTER_DOWNLOAD_ACTION : REOPENED_ACTION,
+        (mode === 'shortlist' ? `Shortlist · ${n(kept)} kept · status Pending` : `Reject all · ${n(cleared)} cleared · status Pending`) + downloaded,
       )
       return { cleared, kept }
     })

@@ -102,7 +102,7 @@ test('studio: an event with two albums, shared', async ({ page, context }) => {
   await page.locator('.ef-info-end').getByRole('button', { name: 'Share' }).click()
   const share = page.getByRole('dialog', { name: 'Send/Share' })
   await expect(share.getByTestId('share-code')).toHaveText(sel.code)
-  await share.getByRole('button', { name: 'Copy message' }).click()
+  await share.getByRole('button', { name: 'Copy Link' }).click()
   await expect(page.getByText('Message copied. Paste it in WhatsApp.')).toBeVisible()
   await share.getByRole('button', { name: 'Close' }).click()
   await expect(page.locator('.ef-info-end .psx-status')).toHaveText('Shared')
