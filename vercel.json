@@ -5,11 +5,11 @@
   "outputDirectory": "apps/web/dist",
   "framework": null,
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://the-react-website-9.onrender.com/api/:path*" },
+    { "source": "/api/:path*", "destination": "https://the-react-website-production.up.railway.app/api/:path*" },
     {
       "source": "/select/:token",
       "has": [{ "type": "header", "key": "user-agent", "value": ".*(WhatsApp|facebookexternalhit|Facebot|TelegramBot|Twitterbot|Slackbot|LinkedInBot|Discordbot|SkypeUriPreview|Pinterest|Applebot).*" }],
-      "destination": "https://the-react-website-9.onrender.com/api/v1/public/og/select/:token"
+      "destination": "https://the-react-website-production.up.railway.app/api/v1/public/og/select/:token"
     },
     { "source": "/(.*)", "destination": "/index.html" }
   ]

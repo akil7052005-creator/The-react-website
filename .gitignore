@@ -38,3 +38,6 @@ packages/shared/dist
 apps/api/dist-e2e
 apps/api/e2e-uploads
 apps/api/e2e-mail
+
+# database backups (contain customer data)
+*.dump

@@ -139,7 +139,7 @@ Choices made where the build brief was ambiguous or where the environment forced
 | **Storage is checked under the selection lock** | Parallel uploads can't overshoot the plan together. Usage is the live sum of the studio's files, so My Subscription → Storage needs no separate counter. |
 | **Uploads have their own rate-limit bucket** (`RATE_LIMIT_UPLOADS_PER_MIN`, default 6,000) | A 600+ photo folder hit the general 600/min limit and the rest failed with 429. 429s are also retried by the uploader. |
 | **Folders keep their path** (`photos.folder`, e.g. "Wedding/Stage") | Relative to the folder that was picked or dropped. |
-| **Production body size** | No nginx in this repo and the Vite dev proxy has no body limit. Uploads in production go Vercel → Render via the `/api` rewrite: check a 100 MB upload there, or point `VITE_API_URL` straight at the API if the rewrite limits bodies. |
+| **Production body size** | No nginx in this repo and the Vite dev proxy has no body limit. Uploads in production go Vercel → Railway via the `/api` rewrite: check a 100 MB upload there, or point `VITE_API_URL` straight at the API if the rewrite limits bodies. |
 
 ## Studio workflow (selections, dashboard)
 
