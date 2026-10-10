@@ -254,7 +254,9 @@ export class ClientSelectionService {
         folders: folderDtos.length,
       },
       folders: folderDtos,
-      permissions: { select: s.stored.allowSelection, favorites: s.stored.favoriteOption, notes: s.notesAllowed, download: s.allowDownload, downloadAllFolder: zipOn },
+      permissions: { select: s.stored.allowSelection, favorites: s.stored.favoriteOption && s.planFavourites, notes: s.notesAllowed, download: s.allowDownload, downloadAllFolder: zipOn },
+      // Trial and Pro pick with a heart (no favourites); VIP picks with a tick and favourites with a heart.
+      pickIcon: s.planFavourites ? ('tick' as const) : ('heart' as const),
       // A banner's button text isn't a caption, so banners show their title only.
       showcase: banners.map((b) => ({ imageUrl: fileUrls.public(b.imageFileId), title: b.title, subtitle: null })),
     }
@@ -323,7 +325,7 @@ export class ClientSelectionService {
   async patchItem(id: string, token: string | null, itemId: string, body: z.output<typeof clientItemPatchSchema>): Promise<ClientItemResult> {
     const s = await this.open(id, token)
     this.selections.assertWritable(s)
-    if (body.favorite !== undefined && !s.stored.favoriteOption) throw readOnly('Favourites are turned off for this gallery.')
+    if (body.favorite !== undefined && !(s.stored.favoriteOption && s.planFavourites)) throw readOnly('Favourites are turned off for this gallery.')
     if (body.note !== undefined && !s.notesAllowed) throw readOnly('Notes are turned off for this gallery.')
     const result = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM selections WHERE id = ${s.id}::uuid FOR UPDATE`

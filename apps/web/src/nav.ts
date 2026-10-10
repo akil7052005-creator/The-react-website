@@ -26,7 +26,7 @@ const allSections: { label: string; items: NavItem[] }[] = [
     items: [
       { to: '/subscriptions', label: 'All Subscriptions', icon: 'box-seam', featureKey: 'subscriptions' },
       { to: '/my-subscription', label: 'My Subscription', icon: 'patch-check', featureKey: 'mySubscription' },
-      { to: '/all-access', label: 'All-Access', icon: 'stars', badge: 'New', featureKey: 'allAccess' },
+      { to: '/all-access', label: 'VIP', icon: 'stars', badge: 'New', featureKey: 'allAccess' },
       { to: '/refer-and-earn', label: 'Refer & Earn', icon: 'wallet2', featureKey: 'referAndEarn' },
       { to: '/whatsapp-credit', label: 'WhatsApp Credit', icon: 'whatsapp', featureKey: 'whatsappCredit' },
     ],

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common'
-import type { Plan, Subscription } from '@prisma/client'
+import type { BillingCycle, Plan, Subscription } from '@prisma/client'
 import {
   computeStatus,
   daysLeft,
@@ -40,6 +40,25 @@ export function stateOf(s: Subscription): SubscriptionState {
   }
 }
 
+/**
+ * Price of each billing period in paise, from the plan's `prices`; plans saved before it existed
+ * fall back to their monthly and yearly prices.
+ */
+export function pricesOf(plan: Pick<Plan, 'prices' | 'monthlyPrice' | 'yearlyPrice'>): Record<BillingCycle, number | null> {
+  const p = (plan.prices && typeof plan.prices === 'object' ? plan.prices : {}) as Partial<Record<BillingCycle, unknown>>
+  const n = (v: unknown) => (typeof v === 'number' && v > 0 ? v : null)
+  const hasAny = Object.values(p).some((v) => n(v) !== null)
+  return {
+    MONTHLY: n(p.MONTHLY) ?? (hasAny ? null : plan.monthlyPrice),
+    QUARTERLY: n(p.QUARTERLY),
+    HALF_YEARLY: n(p.HALF_YEARLY),
+    YEARLY: n(p.YEARLY) ?? (hasAny ? null : plan.yearlyPrice > 0 ? plan.yearlyPrice : null),
+  }
+}
+
+/** The list price of one billing period, or null when the plan isn't sold for that period. */
+export const priceFor = (plan: Pick<Plan, 'prices' | 'monthlyPrice' | 'yearlyPrice'>, cycle: BillingCycle) => pricesOf(plan)[cycle]
+
 export function statusOf(s: Subscription, settings: Pick<AlertSettings, 'reminderDays' | 'graceDays'>, now = new Date()): SubscriptionStatus {
   return computeStatus(stateOf(s), now, settings)
 }
@@ -63,6 +82,7 @@ export class PlansService {
       tagline: plan.tagline,
       monthlyPricePaise: plan.monthlyPrice,
       yearlyPricePaise: plan.yearlyPrice,
+      prices: pricesOf(plan),
       limits: this.limits(plan),
       features: plan.features as string[],
       comingSoon: plan.comingSoon as string[],
@@ -99,7 +119,7 @@ export class PlansService {
 
   subscriptionDto(eff: EffectiveSubscription): SubscriptionDto {
     const { subscription: s, plan, status, readOnly } = eff
-    const price = s.cycle === 'YEARLY' ? plan.yearlyPrice : (plan.monthlyPrice ?? plan.yearlyPrice)
+    const price = priceFor(plan, s.cycle) ?? plan.yearlyPrice
     return {
       plan: this.toDto(plan),
       cycle: s.cycle,

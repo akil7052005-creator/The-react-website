@@ -132,7 +132,8 @@ export class EventsController {
   async create(@StudioId() studioId: string, @Body(zod(createEventSchema)) body: z.output<typeof createEventSchema>) {
     await this.clientOf(studioId, body.clientId)
     const e = await this.prisma.$transaction(async (tx) => {
-      await this.usage.assertCanCreateEvent(studioId, tx)
+      // Bookings need an active plan; the plan's event limit counts customer photo selections.
+      await this.usage.assertWritable(studioId, tx)
       const seq = await nextSequence(tx, studioId, 'EVT', 1001)
       const created = await tx.event.create({
         data: { studioId, code: `EVT-${seq}`, ...body, date: toDate(body.date) },

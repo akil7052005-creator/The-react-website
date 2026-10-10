@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ERROR_CODES, type ClientSelectionDto, type ClientShowcaseCard } from '@weddyzone/shared'
+import { ERROR_CODES, type ClientSelectionDto } from '@weddyzone/shared'
 import { useState, type ReactNode } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { Modal } from '../../../components/Modal'
@@ -7,9 +7,6 @@ import { isApiError } from '../../../lib/api'
 import { clientApi, clientAuthPath, clientSession, hasClientToken } from '../../../lib/clientSession'
 import { APP_NAME, fileUrl } from '../../../lib/env'
 import { toastError } from '../../../lib/query'
-import showcaseCouple from '../../../assets/showcase-couple.jpg'
-import showcaseHands from '../../../assets/showcase-hands.jpg'
-import showcaseMandap from '../../../assets/showcase-mandap.jpg'
 
 export const clientKey = (id: string) => ['client-selection', id] as const
 export const itemsKey = (id: string, folderId: string) => ['client-items', id, folderId] as const
@@ -181,7 +178,8 @@ export function ThankYou({ selection, onContinue }: { selection: ClientSelection
         Thank you, {selection.customerName}! Your selection has been sent to {selection.studio.name}.
       </h1>
       <p>
-        {selected} {selected === 1 ? 'photo' : 'photos'} selected • {favorites} {favorites === 1 ? 'favourite' : 'favourites'}
+        {selected} {selected === 1 ? 'photo' : 'photos'} selected
+        {selection.permissions.favorites ? ` • ${favorites} ${favorites === 1 ? 'favourite' : 'favourites'}` : ''}
       </p>
       <button type="button" className="cp-pill" onClick={onContinue} autoFocus>
         View my photos
@@ -191,37 +189,6 @@ export function ThankYou({ selection, onContinue }: { selection: ClientSelection
 }
 
 /** Shown when the studio hasn't added three Gallery Banners of its own. */
-const DEFAULT_SHOWCASE: ClientShowcaseCard[] = [
-  { imageUrl: showcaseCouple, title: 'Your Wedding', subtitle: 'In Every Frame' },
-  { imageUrl: showcaseMandap, title: 'Cinematic Films', subtitle: 'Made to Remember' },
-  { imageUrl: showcaseHands, title: 'Fine Art Albums', subtitle: 'Crafted with Love' },
-]
-
-/** The studio's showcase, scrolling sideways forever (pauses on hover; still when motion is reduced). */
-export function ShowcaseStrip({ selection }: { selection: ClientSelectionDto }) {
-  const own = selection.showcase.map((c) => ({ ...c, imageUrl: fileUrl(c.imageUrl)! }))
-  let cards = [...own, ...DEFAULT_SHOWCASE.slice(0, Math.max(0, 3 - own.length))]
-  // Enough cards to fill a wide screen before the loop repeats.
-  while (cards.length < 6) cards = [...cards, ...cards]
-  const card = (c: ClientShowcaseCard, i: number, hidden: boolean) => (
-    <figure className="cp-show-card" key={`${hidden ? 'b' : 'a'}${i}`} aria-hidden={hidden || undefined}>
-      <img src={c.imageUrl} alt="" loading="lazy" draggable={false} />
-      <figcaption>
-        <span>{c.title}</span>
-        {c.subtitle && <strong>{c.subtitle}</strong>}
-      </figcaption>
-    </figure>
-  )
-  return (
-    <section className="cp-showcase" aria-label={`${selection.studio.name} showcase`}>
-      <div className="cp-show-track">
-        {cards.map((c, i) => card(c, i, false))}
-        {cards.map((c, i) => card(c, i, true))}
-      </div>
-    </section>
-  )
-}
-
 /** Stops "Save image as…" and dragging photos out (a deterrent, not protection: previews are watermarked). */
 export const noSave = {
   onContextMenu: (e: { preventDefault: () => void }) => e.preventDefault(),

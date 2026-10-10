@@ -59,7 +59,8 @@ export class UploadLimitsService {
       storageGb,
       storageUsedBytes: used,
       storageLeftBytes: storageGb === null ? null : Math.max(0, storageGb * GB - used),
-      readOnly: eff.readOnly,
+      // Grace: galleries stay view-only for 7 days, with no new uploads.
+      readOnly: eff.readOnly || eff.status === 'GRACE',
       status: eff.status,
       graceEndsAt: grace,
       renewLink: renewPath(eff.plan.code, eff.subscription.cycle),

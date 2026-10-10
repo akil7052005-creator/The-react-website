@@ -36,7 +36,7 @@ describe('Photo uploads: plan-based limits', () => {
   beforeAll(async () => {
     ;({ app, prisma } = await createTestApp())
     await resetDb(prisma)
-    A = await signup(app)
+    A = await signup(app, { plan: 'trial' })
     const client = await A.agent.post('/api/v1/clients').send({ name: 'Upload Client', phone: '98400 12345' }).expect(201)
     const event = await A.agent.post('/api/v1/events').send({ clientId: client.body.id, title: 'Upload Wedding', type: 'WEDDING', date: isoDaysFromToday(10), venue: 'Hall', city: 'Chennai' }).expect(201)
     selectionId = (await A.agent.post('/api/v1/selections').send({ eventId: event.body.id, quota: 20, deadline: isoDaysFromToday(7) }).expect(201)).body.id
@@ -44,15 +44,14 @@ describe('Photo uploads: plan-based limits', () => {
   afterAll(() => app.close())
 
   describe('GET /me/upload-limits', () => {
-    it("gives the plan's limits and the storage left (trial = Starter)", async () => {
+    it("gives the plan's limits (trial: up to 100 photos at a time, no storage cap)", async () => {
       const res = await A.agent.get('/api/v1/me/upload-limits').expect(200)
-      expect(res.body).toMatchObject({ planCode: 'STARTER', planName: 'Starter', maxPhotoMb: 25, maxFilesPerUpload: 300, uploadConcurrency: 3, storageGb: 100, readOnly: false, status: 'TRIAL', graceEndsAt: null })
-      expect(res.body.storageLeftBytes).toBe(100 * GB - res.body.storageUsedBytes)
+      expect(res.body).toMatchObject({ planCode: 'STARTER', planName: 'Trial', maxPhotoMb: 100, maxFilesPerUpload: 100, uploadConcurrency: 4, storageGb: null, storageLeftBytes: null, readOnly: false, status: 'TRIAL', graceEndsAt: null })
       expect(res.body.renewLink).toBe('/subscriptions?renew=STARTER&cycle=MONTHLY')
     })
 
     it('follows the plan (seeded values for every plan)', async () => {
-      const expected = { PRO: [50, 1000, 4, 500], STUDIO: [80, 3000, 5, 2048], ALL_ACCESS: [100, 5000, 6, 5120] } as const
+      const expected = { PRO: [100, 2000, 4, null], ALL_ACCESS: [100, 5000, 6, null] } as const
       for (const [code, [maxPhotoMb, maxFilesPerUpload, uploadConcurrency, storageGb]] of Object.entries(expected)) {
         await setPlan(code as PlanCode, code === 'ALL_ACCESS' ? { cycle: 'YEARLY' } : {})
         const res = await A.agent.get('/api/v1/me/upload-limits').expect(200)
@@ -64,20 +63,20 @@ describe('Photo uploads: plan-based limits', () => {
     it('uses the Starter values for fields a plan lacks', async () => {
       const pro = await prisma.plan.findUniqueOrThrow({ where: { code: 'PRO' } })
       const { maxPhotoMb, maxFilesPerUpload, uploadConcurrency, ...rest } = pro.limits as Record<string, unknown>
-      expect([maxPhotoMb, maxFilesPerUpload, uploadConcurrency]).toEqual([50, 1000, 4])
+      expect([maxPhotoMb, maxFilesPerUpload, uploadConcurrency]).toEqual([100, 2000, 4])
       await prisma.plan.update({ where: { id: pro.id }, data: { limits: rest as object } })
       await setPlan('PRO')
       const res = await A.agent.get('/api/v1/me/upload-limits').expect(200)
-      expect(res.body).toMatchObject({ planCode: 'PRO', maxPhotoMb: 25, maxFilesPerUpload: 300, uploadConcurrency: 3, storageGb: 500 })
+      expect(res.body).toMatchObject({ planCode: 'PRO', maxPhotoMb: 25, maxFilesPerUpload: 300, uploadConcurrency: 3, storageGb: null })
       await prisma.plan.update({ where: { id: pro.id }, data: { limits: pro.limits as object } })
     })
 
-    it('in grace: uploads allowed, with the grace end date', async () => {
+    it('in grace (7 days after the plan ends): galleries view-only, no new uploads', async () => {
       const end = addDays(new Date(), -1)
       await setPlan('PRO', { currentPeriodEnd: end, currentPeriodStart: addDays(end, -30) })
       const res = await A.agent.get('/api/v1/me/upload-limits').expect(200)
-      expect(res.body).toMatchObject({ status: 'GRACE', readOnly: false, graceEndsAt: addDays(end, 3).toISOString() })
-      await upload(photo()).expect(201)
+      expect(res.body).toMatchObject({ status: 'GRACE', readOnly: true, graceEndsAt: addDays(end, 7).toISOString() })
+      expect((await upload(photo()).expect(403)).body.error).toMatchObject({ code: 'PLAN_LIMIT', message: 'Renew your plan to upload' })
     })
 
     it('expired past grace: read-only, and the upload is refused with 403 PLAN_LIMIT', async () => {
@@ -98,9 +97,11 @@ describe('Photo uploads: plan-based limits', () => {
   })
 
   describe('POST /selections/:id/photos enforces the plan', () => {
-    it('rejects a photo over the plan size with 413 FILE_TOO_LARGE (Starter: 25 MB)', async () => {
+    it('rejects a photo over the plan size with 413 FILE_TOO_LARGE (a plan set to 25 MB)', async () => {
+      await setLimits('STARTER', { maxPhotoMb: 25 })
       const res = await upload(photo(26 * MB), 'big.png').expect(413)
-      expect(res.body.error).toMatchObject({ code: 'FILE_TOO_LARGE', message: 'Larger than 25 MB on your Starter plan', fields: { file: 'Larger than 25 MB on your Starter plan' } })
+      expect(res.body.error).toMatchObject({ code: 'FILE_TOO_LARGE', message: 'Larger than 25 MB on your Trial plan', fields: { file: 'Larger than 25 MB on your Trial plan' } })
+      await setLimits('STARTER', { maxPhotoMb: 100 })
       // Under the plan size but over 2 MB: refused too, only previews are stored online.
       expect((await upload(photo(24 * MB), 'under-limit.png').expect(422)).body.error.message).toMatch(/larger than 2 MB/)
       await upload(photo(1 * MB), 'small.png').expect(201)
@@ -110,12 +111,12 @@ describe('Photo uploads: plan-based limits', () => {
       await setLimits('STARTER', { maxPhotoMb: 1 })
       await setLimits('PRO', { maxPhotoMb: 2 })
       const file = photo(Math.round(1.5 * MB))
-      expect((await upload(file, 'one-and-a-half.png').expect(413)).body.error.message).toBe('Larger than 1 MB on your Starter plan')
+      expect((await upload(file, 'one-and-a-half.png').expect(413)).body.error.message).toBe('Larger than 1 MB on your Trial plan')
       await setPlan('PRO')
       await upload(file, 'one-and-a-half.png').expect(201)
       expect((await upload(photo(3 * MB), 'three.png').expect(413)).body.error.message).toBe('Larger than 2 MB on your Pro plan')
-      await setLimits('STARTER', { maxPhotoMb: 25 })
-      await setLimits('PRO', { maxPhotoMb: 50 })
+      await setLimits('STARTER', { maxPhotoMb: 100 })
+      await setLimits('PRO', { maxPhotoMb: 100 })
       await setPlan('STARTER')
     })
 
@@ -131,7 +132,7 @@ describe('Photo uploads: plan-based limits', () => {
       expect(full.body.error.message).toBe('Storage full: 1 of 1 GB used. Upgrade for more space.')
       expect(full.body.error.details).toMatchObject({ resource: 'storage', limit: 1 })
       await prisma.storedFile.deleteMany({ where: { checksum: 'filler' } })
-      await setLimits('STARTER', { storageGb: 100 })
+      await setLimits('STARTER', { storageGb: null })
     })
 
     it('saves the folder each photo came from (cleaned), and lists it', async () => {

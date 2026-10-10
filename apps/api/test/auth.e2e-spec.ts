@@ -18,8 +18,11 @@ describe('Auth & profile', () => {
   afterAll(() => app.close())
 
   describe('signup', () => {
-    it('creates a studio on a Starter trial with bonus credits and logs in', async () => {
-      const { agent, studioId } = await signup(app)
+    it('creates a studio on a 14-day Trial with bonus credits and logs in', async () => {
+      const { agent, studioId } = await signup(app, { plan: 'trial' })
+      const sub = await prisma.subscription.findUniqueOrThrow({ where: { studioId } })
+      expect(sub).toMatchObject({ isTrial: true, status: 'TRIAL' })
+      expect(Math.round((sub.currentPeriodEnd.getTime() - sub.currentPeriodStart.getTime()) / 86_400_000)).toBe(14)
       const me = await agent.get('/api/v1/auth/me').expect(200)
       expect(me.body.user.role).toBe('OWNER')
       expect(me.body.studio.plan.code).toBe('STARTER')

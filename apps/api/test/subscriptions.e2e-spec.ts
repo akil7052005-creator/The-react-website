@@ -40,7 +40,7 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
   }
 
   /** A pending plan order, as a live gateway checkout would leave it before payment. */
-  async function pendingOrder(studioId: string, code: 'PRO' | 'STUDIO', cycle: 'MONTHLY' | 'YEARLY') {
+  async function pendingOrder(studioId: string, code: 'PRO' | 'ALL_ACCESS', cycle: 'MONTHLY' | 'YEARLY') {
     const plan = await prisma.plan.findUniqueOrThrow({ where: { code } })
     const sub = await prisma.subscription.findUniqueOrThrow({ where: { studioId } })
     const base = cycle === 'YEARLY' ? plan.yearlyPrice : plan.monthlyPrice!
@@ -89,7 +89,7 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
     adminPassword = created.password
     admin = request.agent(app.getHttpServer())
     await admin.post('/api/v1/auth/login').send({ email: adminEmail, password: adminPassword }).expect(200)
-    A = await signup(app, { studioName: 'StudioRed' })
+    A = await signup(app, { plan: 'trial', studioName: 'StudioRed' })
   })
   afterAll(() => app.close())
 
@@ -122,7 +122,7 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
 
     it('starts every new studio on a trial with a CREATED event', async () => {
       const res = await A.agent.get('/api/v1/me/subscription').expect(200)
-      expect(res.body).toMatchObject({ planCode: 'STARTER', status: 'TRIAL', readOnly: false, daysLeft: 30 })
+      expect(res.body).toMatchObject({ planCode: 'STARTER', planName: 'Trial', status: 'TRIAL', readOnly: false, daysLeft: 14 })
       const sub = await prisma.subscription.findUniqueOrThrow({ where: { studioId: A.studioId }, include: { events: true } })
       expect(sub.events.map((e) => e.type)).toEqual(['CREATED'])
     })
@@ -142,7 +142,7 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
 
     it('activates the plan, issues a GST invoice and alerts studio and admin — once', async () => {
       const order = await pendingOrder(A.studioId, 'PRO', 'YEARLY')
-      expect(order.amount).toBe(2_948_820) // ₹24,990 + 18% GST
+      expect(order.amount).toBe(2_359_882) // ₹19,999 + 18% GST
       mails.length = 0
       const body = captured(order.gatewayOrderId!, order.amount, 'pay_studiored_1')
       const first = await hook(body, { eventId: 'evt_1' }).expect(200)
@@ -153,7 +153,7 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
       expect((await hook(body, { eventId: 'evt_2' }).expect(200)).body.handled).toBe('already_paid')
 
       const sub = await prisma.subscription.findUniqueOrThrow({ where: { studioId: A.studioId }, include: { plan: true } })
-      expect(sub).toMatchObject({ status: 'ACTIVE', isTrial: false, cycle: 'YEARLY', amountPaid: 2_948_820, gstAmount: 449_820 })
+      expect(sub).toMatchObject({ status: 'ACTIVE', isTrial: false, cycle: 'YEARLY', amountPaid: 2_359_882, gstAmount: 359_982 })
       expect(sub.plan.code).toBe('PRO')
       // Deadline = +1 year in IST.
       const s = istParts(sub.currentPeriodStart)
@@ -166,29 +166,29 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
 
       const events = await prisma.subscriptionEvent.findMany({ where: { subscriptionId: sub.id }, orderBy: { createdAt: 'asc' } })
       expect(events.map((x) => x.type)).toEqual(['CREATED', 'CREATED'])
-      expect(events[1]).toMatchObject({ fromPlan: 'Starter (trial)', toPlan: 'Pro', amount: 2_948_820 })
+      expect(events[1]).toMatchObject({ fromPlan: 'Trial (trial)', toPlan: 'Pro', amount: 2_359_882 })
 
       const adminAlerts = await prisma.notification.findMany({ where: { recipientType: 'ADMIN', type: 'SUBSCRIPTION_PURCHASED' } })
       expect(adminAlerts.map((n) => n.channel).sort()).toEqual(['EMAIL', 'IN_APP'])
       expect(adminAlerts[0].title).toBe('StudioRed chose Pro (Yearly)')
       // Admin amounts exclude GST.
-      expect(adminAlerts[0].body).toMatch(/^₹24,990 \+ GST · created · expires \d{2} \w{3} \d{4}$/)
+      expect(adminAlerts[0].body).toMatch(/^₹19,999 \+ GST · created · expires \d{2} \w{3} \d{4}$/)
       // Instant admin email + studio confirmation with the invoice, each sent once despite the retries.
       expect(mails.filter((m) => m.to === adminEmail && /StudioRed chose Pro \(Yearly\)/.test(m.subject))).toHaveLength(1)
       const confirmation = mails.filter((m) => m.to === A.email)
       expect(confirmation).toHaveLength(1)
       expect(confirmation[0].text).toContain(payment.invoiceNumber!)
-      expect(confirmation[0].text).toContain('GST @ 18%: ₹4,498.20')
+      expect(confirmation[0].text).toContain('GST @ 18%: ₹3,599.82')
 
       const invoice = await A.agent.get(`/api/v1/subscription/payments/${payment.id}/invoice`).expect(200)
-      expect(invoice.body).toMatchObject({ number: payment.invoiceNumber, taxablePaise: 2_499_000, totalPaise: 2_948_820, igstPaise: 449_820 })
+      expect(invoice.body).toMatchObject({ number: payment.invoiceNumber, taxablePaise: 1_999_900, totalPaise: 2_359_882, igstPaise: 359_982 })
     })
 
     it('shows the new purchase in the admin table and bell straight away', async () => {
       const list = await admin.get('/api/v1/admin/subscriptions').query({ search: 'studiored' }).expect(200)
       expect(list.body.meta.total).toBe(1)
-      // Admin amounts exclude GST: ₹24,990, not the ₹29,488.20 charged.
-      expect(list.body.data[0]).toMatchObject({ studio: { name: 'StudioRed' }, plan: { code: 'PRO' }, cycle: 'YEARLY', amountPaise: 2_499_000, status: 'ACTIVE', tone: 'green' })
+      // Admin amounts exclude GST: ₹19,999, not the ₹23,598.82 charged.
+      expect(list.body.data[0]).toMatchObject({ studio: { name: 'StudioRed' }, plan: { code: 'PRO' }, cycle: 'YEARLY', amountPaise: 1_999_900, status: 'ACTIVE', tone: 'green' })
       expect(list.body.data[0].owner).toMatchObject({ email: A.email, phone: '+919876543210' })
       const bell = await admin.get('/api/v1/admin/notifications').expect(200)
       expect(bell.body.unreadCount).toBeGreaterThanOrEqual(1)
@@ -200,9 +200,9 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
     })
 
     it('never takes a plan from the browser: test-mode checkout goes through the same webhook handler', async () => {
-      const B = await signup(app)
-      const res = await B.agent.post('/api/v1/subscription/change').send({ planCode: 'STUDIO', cycle: 'MONTHLY' }).expect(200)
-      expect(res.body.subscription.plan.code).toBe('STUDIO')
+      const B = await signup(app, { plan: 'trial' })
+      const res = await B.agent.post('/api/v1/subscription/change').send({ planCode: 'ALL_ACCESS', cycle: 'MONTHLY' }).expect(200)
+      expect(res.body.subscription.plan.code).toBe('ALL_ACCESS')
       const payment = await prisma.payment.findUniqueOrThrow({ where: { id: res.body.payment.id } })
       expect(payment.gatewayOrderId).toMatch(/^order_mock_/)
       expect(payment.gatewayPaymentId).toMatch(/^pay_mock_/)
@@ -210,13 +210,13 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
     })
 
     it('marks a failed payment, alerts the studio with a retry link and the admin', async () => {
-      const order = await pendingOrder(A.studioId, 'STUDIO', 'YEARLY')
+      const order = await pendingOrder(A.studioId, 'ALL_ACCESS', 'YEARLY')
       await hook({ event: 'payment.failed', payload: { payment: { entity: { id: 'pay_fail_1', order_id: order.gatewayOrderId, amount: order.amount, error_description: 'Card declined' } } } }, { eventId: 'evt_fail_1' }).expect(200)
       expect((await prisma.payment.findUniqueOrThrow({ where: { id: order.id } })).status).toBe('FAILED')
       const sub = await prisma.subscription.findUniqueOrThrow({ where: { studioId: A.studioId } })
       expect(sub.status).toBe('PAYMENT_FAILED')
       const studioAlert = await prisma.notification.findFirstOrThrow({ where: { studioId: A.studioId, type: 'PAYMENT_FAILED', channel: 'IN_APP' } })
-      expect(studioAlert.link).toBe('/subscriptions?renew=STUDIO&cycle=YEARLY')
+      expect(studioAlert.link).toBe('/subscriptions?renew=ALL_ACCESS&cycle=YEARLY')
       expect(await prisma.notification.count({ where: { recipientType: 'ADMIN', type: 'PAYMENT_FAILED' } })).toBe(2)
       const failedTab = await admin.get('/api/v1/admin/subscriptions').query({ tab: 'failed' }).expect(200)
       expect(failedTab.body.data.map((r: { studio: { name: string } }) => r.studio.name)).toContain('StudioRed')
@@ -231,10 +231,10 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
     let end: Date
 
     beforeAll(async () => {
-      S = await signup(app, { studioName: 'Deadline Studio' })
+      S = await signup(app, { plan: 'trial', studioName: 'Deadline Studio' })
       const plan = await prisma.plan.findUniqueOrThrow({ where: { code: 'PRO' } })
-      // Deadline 4 days ago at 10:00 IST, so "now" (real time) is past the 3 grace days.
-      const p = istParts(addDays(new Date(), -4))
+      // Deadline 8 days ago at 10:00 IST, so "now" (real time) is past the 7 grace days.
+      const p = istParts(addDays(new Date(), -8))
       end = fromIst({ year: p.year, month: p.month, day: p.day, hour: 10 })
       const sub = await prisma.subscription.update({
         where: { studioId: S.studioId },
@@ -291,18 +291,18 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
       await jobs.run(at(3_600_000))
       const sub = await prisma.subscription.findUniqueOrThrow({ where: { id: subId } })
       expect(sub.status).toBe('GRACE')
-      expect(sub.graceEndsAt).toEqual(new Date(end.getTime() + 3 * DAY))
+      expect(sub.graceEndsAt).toEqual(new Date(end.getTime() + 7 * DAY))
       expect(await stageKeys('T')).toEqual(set('T:STUDIO:IN_APP', 'T:STUDIO:EMAIL', 'T:STUDIO:WHATSAPP', 'T:ADMIN:IN_APP', 'T:ADMIN:EMAIL'))
       expect(await keys()).toHaveLength(15)
       const grace = (await alertsFor(subId)).find((n) => n.dedupeKey?.endsWith('T:STUDIO:IN_APP'))!
-      expect(grace.body).toMatch(/renew within 3 days/i)
+      expect(grace.body).toMatch(/renew within 7 days/i)
       const types = (await prisma.subscriptionEvent.findMany({ where: { subscriptionId: subId } })).map((e) => e.type)
       expect(types.filter((t) => t === 'GRACE_STARTED')).toHaveLength(1)
     })
 
-    it('moves GRACE → EXPIRED when grace ends: read-only, data kept, clients still served', async () => {
-      await jobs.run(at(3 * DAY + 60_000))
-      await jobs.run(at(3 * DAY + 2 * 3_600_000))
+    it('moves GRACE → EXPIRED when grace ends: read-only, data kept', async () => {
+      await jobs.run(at(7 * DAY + 60_000))
+      await jobs.run(at(7 * DAY + 2 * 3_600_000))
       const sub = await prisma.subscription.findUniqueOrThrow({ where: { id: subId } })
       expect(sub.status).toBe('EXPIRED')
       expect(await stageKeys('GRACE_END')).toEqual(set('GRACE_END:STUDIO:IN_APP', 'GRACE_END:STUDIO:EMAIL', 'GRACE_END:STUDIO:WHATSAPP', 'GRACE_END:ADMIN:IN_APP', 'GRACE_END:ADMIN:EMAIL'))
@@ -326,7 +326,7 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
       const rows = await alertsFor(subId)
       expect(new Set(rows.map((r) => r.dedupeKey)).size).toBe(rows.length)
       expect(rows).toHaveLength(20)
-      await jobs.run(at(3 * DAY + 5 * 3_600_000))
+      await jobs.run(at(7 * DAY + 5 * 3_600_000))
       expect(await alertsFor(subId)).toHaveLength(20)
     })
 
@@ -361,7 +361,7 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
       ])
       const detail = await admin.get(`/api/v1/admin/subscriptions/${subId}`).expect(200)
       expect(detail.body.notifications[0]).toMatchObject({ type: 'SUBSCRIPTION_REMINDER' })
-      expect(detail.body.usage.map((u: { key: string }) => u.key)).toEqual(['events', 'albums', 'storage', 'credits'])
+      expect(detail.body.usage.map((u: { key: string }) => u.key)).toEqual(['events', 'storage', 'albums', 'credits'])
       // WhatsApp credits are a prepaid balance, not a plan limit.
       const balance = (await prisma.studio.findUniqueOrThrow({ where: { id: S.studioId } })).creditBalance
       expect(detail.body.usage[3]).toMatchObject({ key: 'credits', label: 'WhatsApp credits used this month', used: 0, limit: null, remaining: balance })
@@ -385,7 +385,7 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
     })
 
     it('does not attempt WhatsApp alerts, and says so in settings', async () => {
-      const N = await signup(app, { studioName: 'No WhatsApp Studio' })
+      const N = await signup(app, { plan: 'trial', studioName: 'No WhatsApp Studio' })
       const sub = await prisma.subscription.findUniqueOrThrow({ where: { studioId: N.studioId } })
       const before = waSent.length
       await jobs.run(new Date(sub.currentPeriodEnd.getTime() - 7 * DAY))
@@ -410,7 +410,7 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
 
   describe('grace rows', () => {
     it('list "Grace ends" for plans in grace even before the job has saved it', async () => {
-      const G = await signup(app, { studioName: 'Grace Row Studio' })
+      const G = await signup(app, { plan: 'trial', studioName: 'Grace Row Studio' })
       const end = new Date(Date.now() - 26 * 3_600_000)
       await prisma.subscription.update({
         where: { studioId: G.studioId },
@@ -419,7 +419,7 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
       await jobs.refreshStatuses(new Date(), true)
       const list = await admin.get('/api/v1/admin/subscriptions').query({ tab: 'grace', search: 'Grace Row' }).expect(200)
       expect(list.body.data).toHaveLength(1)
-      expect(list.body.data[0]).toMatchObject({ status: 'GRACE', graceEndsAt: new Date(end.getTime() + 3 * DAY).toISOString(), tone: 'red' })
+      expect(list.body.data[0]).toMatchObject({ status: 'GRACE', graceEndsAt: new Date(end.getTime() + 7 * DAY).toISOString(), tone: 'red' })
       expect(list.body.data[0].daysLeft).toBeLessThan(0)
       const csv = await admin.get('/api/v1/admin/subscriptions/export.csv').query({ tab: 'grace', search: 'Grace Row' }).expect(200)
       expect(csv.text).toMatch(/Grace ends \(IST\)/)
@@ -436,7 +436,7 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
     }
 
     it('backfills old payments per financial year (IST), continues the series, and is safe to re-run', async () => {
-      const I = await signup(app, { studioName: 'Invoice Backfill Studio' })
+      const I = await signup(app, { plan: 'trial', studioName: 'Invoice Backfill Studio' })
       const sub = await prisma.subscription.findUniqueOrThrow({ where: { studioId: I.studioId } })
       const pay = (paidAt: string, invoiceNumber: string | null = null, status: 'SUCCESS' | 'FAILED' = 'SUCCESS') =>
         prisma.payment.create({
@@ -490,7 +490,7 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
       expect(res.body).toMatchObject({ number: p.invoiceNumber, totalPaise: p.amount, taxablePaise: p.amount - p.gst, sac: '998314' })
       await A.agent.get(`/api/v1/subscription/payments/${p.id}/invoice`).expect(200)
       await A.agent.get(`/api/v1/admin/payments/${p.id}/invoice`).expect(403)
-      const other = await signup(app)
+      const other = await signup(app, { plan: 'trial' })
       await other.agent.get(`/api/v1/subscription/payments/${p.id}/invoice`).expect(404)
       const detail = await admin.get(`/api/v1/admin/subscriptions/${p.subscriptionId}`).expect(200)
       const unnumbered = detail.body.payments.filter((x: { status: string; invoiceNumber: string | null }) => x.status === 'SUCCESS' && !x.invoiceNumber)
@@ -500,7 +500,7 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
 
   describe('auto-renew (test-mode gateway)', () => {
     it('skips expiry reminders and renews at the deadline with "Renewed successfully"', async () => {
-      const R = await signup(app, { studioName: 'AutoRenew Studio' })
+      const R = await signup(app, { plan: 'trial', studioName: 'AutoRenew Studio' })
       await R.agent.post('/api/v1/subscription/change').send({ planCode: 'PRO', cycle: 'MONTHLY' }).expect(200)
       await R.agent.post('/api/v1/subscription/auto-renew').send({ autoRenew: true }).expect(200)
       const sub = await prisma.subscription.findUniqueOrThrow({ where: { studioId: R.studioId } })
@@ -526,7 +526,7 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
 
   describe('win-back coupon', () => {
     it('is sent once a week after expiry and gives the discount at checkout', async () => {
-      const W = await signup(app, { studioName: 'Winback Studio' })
+      const W = await signup(app, { plan: 'trial', studioName: 'Winback Studio' })
       const sub = await prisma.subscription.findUniqueOrThrow({ where: { studioId: W.studioId } })
       const end = addDays(new Date(), -20)
       await prisma.subscription.update({ where: { id: sub.id }, data: { currentPeriodEnd: end, currentPeriodStart: addDays(end, -30), status: 'EXPIRED', graceEndsAt: addDays(end, 3) } })
@@ -536,9 +536,9 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
       expect(coupons).toHaveLength(1)
       expect(coupons[0].percentOff).toBe(20)
       const res = await W.agent.post('/api/v1/subscription/change').send({ planCode: 'PRO', cycle: 'MONTHLY', couponCode: coupons[0].code.toLowerCase() }).expect(200)
-      // ₹2,499 − 20% = ₹1,999.20, + 18% GST
-      expect(res.body.payment.amountPaise).toBe(199_920 + Math.round(199_920 * 0.18))
-      await W.agent.post('/api/v1/subscription/change').send({ planCode: 'STUDIO', cycle: 'MONTHLY', couponCode: coupons[0].code }).expect(400)
+      // ₹1,999 − 20% = ₹1,599.20, + 18% GST
+      expect(res.body.payment.amountPaise).toBe(159_920 + Math.round(159_920 * 0.18))
+      await W.agent.post('/api/v1/subscription/change').send({ planCode: 'ALL_ACCESS', cycle: 'MONTHLY', couponCode: coupons[0].code }).expect(400)
     })
   })
 
@@ -560,16 +560,16 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
     })
 
     it('alerts the admin once when a studio passes 80% of its monthly events', async () => {
-      const U = await signup(app, { studioName: 'Busy Studio' })
-      const client = await U.agent.post('/api/v1/clients').send({ name: 'Client', phone: '98400 12345' }).expect(201)
+      const U = await signup(app, { plan: 'PRO', studioName: 'Busy Studio' })
       for (let i = 0; i < 8; i++) {
-        await U.agent.post('/api/v1/events').send({ clientId: client.body.id, title: `Event ${i}`, type: 'WEDDING', date: isoDaysFromToday(10 + i), venue: 'Hall', city: 'Chennai' }).expect(201)
+        await U.agent.post('/api/v1/selections/details').send({ customerName: `Client ${i}`, customerPhone: '98400 12345', eventName: `Event ${i}`, quota: 5 }).expect(201)
       }
       await jobs.run()
       await jobs.run()
       const alerts = await prisma.notification.findMany({ where: { recipientType: 'ADMIN', type: 'USAGE_HIGH', title: { startsWith: 'Busy Studio' } } })
       expect(alerts).toHaveLength(1)
       expect(alerts[0].title).toBe('Busy Studio used 80% of events this month')
+      expect(alerts[0].body).toBe('8 of 10 on Pro · upsell opportunity')
     })
 
     it('returns dashboard stats', async () => {
@@ -578,7 +578,7 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
       expect(res.body.arrPaise).toBe(res.body.mrrPaise * 12)
       expect(res.body.mrrTrend).toHaveLength(12)
       expect(res.body.newVsChurned).toHaveLength(12)
-      expect(res.body.activeByPlan.map((p: { code: string }) => p.code)).toEqual(['STARTER', 'PRO', 'STUDIO', 'ALL_ACCESS'])
+      expect(res.body.activeByPlan.map((p: { code: string }) => p.code)).toEqual(['STARTER', 'PRO', 'ALL_ACCESS', 'STUDIO'])
       expect(res.body.newThisMonth).toBeGreaterThanOrEqual(2)
       // The MRR card and the trend's current month are the same calculation.
       expect(res.body.mrrTrend.at(-1).mrrPaise).toBe(res.body.mrrPaise)

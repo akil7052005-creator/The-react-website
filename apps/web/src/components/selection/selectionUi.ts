@@ -48,6 +48,8 @@ export function refreshSelection(qc: QueryClient, id?: string) {
   qc.invalidateQueries({ queryKey: ['selections'] })
   qc.invalidateQueries({ queryKey: ['selections-summary'] })
   qc.invalidateQueries({ queryKey: ['dashboard'] })
+  // The plan meter (events and uploads used this month).
+  qc.invalidateQueries({ queryKey: ['subscription', 'usage'] })
   if (id) {
     qc.invalidateQueries({ queryKey: ['selection', id] })
     qc.invalidateQueries({ queryKey: ['selection-overview', id] })

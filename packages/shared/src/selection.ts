@@ -122,8 +122,8 @@ export interface EventSettings {
   /** Videos can be picked too (they always play). */
   videoSelection: boolean
   watermark: WatermarkSettings
-  /** What the studio's plan includes. */
-  addons: { videoDownload: boolean }
+  /** What the studio's plan includes: favourites on VIP only; Trial galleries stay open at most galleryDaysMax days. */
+  addons: { videoDownload: boolean; favourites: boolean; galleryDaysMax: number | null }
 }
 
 export const DEFAULT_WATERMARK: Omit<WatermarkSettings, 'logoUrl' | 'enabled'> = { position: 'bottom-right', sizePct: 20, spacingPct: 2, opacityPct: 80 }
@@ -293,6 +293,8 @@ export interface ClientSelectionDto {
   counts: { photos: number; videos: number; favorites: number; selected: number; folders: number }
   folders: ClientFolderDto[]
   permissions: { select: boolean; favorites: boolean; notes: boolean; download: boolean; downloadAllFolder: boolean }
+  /** The pick button's icon: a heart on Trial and Pro (no favourites there), a tick on VIP (the heart favourites). */
+  pickIcon: 'heart' | 'tick'
   /** The studio's Gallery Banners; the web app fills in its own when there are fewer than three. */
   showcase: ClientShowcaseCard[]
 }

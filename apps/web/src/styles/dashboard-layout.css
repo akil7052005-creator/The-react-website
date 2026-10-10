@@ -114,3 +114,59 @@
     max-width: 200px;
   }
 }
+
+/* ---- Plan usage meter (Update 2) ---- */
+.usage-meter {
+  display: grid;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-border, #ececec);
+}
+.usage-meter.tone-amber {
+  border-color: #f0b429;
+  background: #fff8e6;
+}
+.usage-meter.tone-red {
+  border-color: #e0144a;
+  background: #fdecf1;
+}
+.um-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  font-size: 14px;
+}
+.um-text {
+  color: var(--color-text, #404040);
+}
+.um-bars {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px 16px;
+}
+.um-bar {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--color-text-muted, #6b6b6b);
+}
+.um-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.um-note {
+  flex: 1 1 200px;
+  margin: 0;
+  font-size: 13px;
+}
+.plan-per-month {
+  margin: -6px 0 8px;
+  font-size: 13px;
+}

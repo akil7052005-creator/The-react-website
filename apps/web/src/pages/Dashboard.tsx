@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { UsageMeter } from '../components/UsageMeter'
 import type { DashboardDto, EventDto, Paginated, SelectionDto, SelectionEffectiveStatus } from '@weddyzone/shared'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMe } from '../auth/AuthProvider'
@@ -91,6 +92,8 @@ function Dashboard() {
           <i className="bi bi-plus-lg" aria-hidden="true" /> New Selection
         </Link>
       </header>
+
+      <UsageMeter />
 
       <HeroCarousel />
 

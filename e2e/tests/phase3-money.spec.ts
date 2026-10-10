@@ -69,26 +69,26 @@ test('buy WhatsApp credits in test mode', async ({ page }) => {
   await expect(page.getByTestId('credit-chip')).toContainText((before + 500).toLocaleString('en-IN'))
 })
 
-test('upgrade to Studio yearly, then cancel and resume', async ({ page }) => {
+test('upgrade to VIP yearly, then cancel and resume', async ({ page }) => {
   // A fresh trial studio, so the run on the other viewport (same database) can't have upgraded it already.
   await signupStudio(page)
-  await page.goto('/subscriptions?cycle=yearly')
-  await page.getByRole('button', { name: 'Choose Studio' }).click()
-  // ₹59,990 + 18% GST
-  await expect(page.getByText(/₹70,788\.20/).last()).toBeVisible()
+  await page.goto('/subscriptions?months=12')
+  await page.getByRole('button', { name: 'Choose VIP' }).click()
+  // ₹49,999 + 18% GST
+  await expect(page.getByText(/₹58,998\.82/).last()).toBeVisible()
   await page.getByTestId('confirm-ok').click()
-  await expect(page.getByText("You're now on the Studio plan")).toBeVisible()
+  await expect(page.getByText("You're now on the VIP plan")).toBeVisible()
   await expect(page.getByRole('button', { name: 'Active Studio Plan' })).toBeDisabled()
 
   await page.goto('/my-subscription')
-  await expect(page.getByRole('heading', { name: /Studio Plan/ })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /VIP Plan/ })).toBeVisible()
   await page.getByRole('button', { name: 'Cancel plan' }).click()
-  const dialog = page.getByRole('dialog', { name: /Cancel your Studio plan/ })
+  const dialog = page.getByRole('dialog', { name: /Cancel your VIP plan/ })
   await dialog.getByRole('button', { name: 'Cancel plan' }).click()
   await expect(dialog.getByText('Tell us why you are cancelling')).toBeVisible()
   await dialog.getByLabel(/Why are you cancelling/).selectOption('NOT_ENOUGH_WORK')
   await dialog.getByRole('button', { name: 'Cancel plan' }).click()
-  await expect(page.getByText(/Studio will end on/)).toBeVisible()
+  await expect(page.getByText(/VIP will end on/)).toBeVisible()
   await page.getByRole('button', { name: 'Resume my plan' }).click()
-  await expect(page.getByText('Studio will renew as usual')).toBeVisible()
+  await expect(page.getByText('VIP will renew as usual')).toBeVisible()
 })

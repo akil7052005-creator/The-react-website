@@ -9,10 +9,10 @@ test('a purchase shows up for the admin at once, who can extend its deadline', a
   // A studio buys Pro yearly (test-mode gateway → webhook → plan applied).
   const studio = await (await browser.newContext()).newPage()
   const { email } = await signupStudio(studio, `sub.${Date.now()}@example.com`)
-  await expect(studio.getByText(/Starter trial/)).toBeVisible()
-  await studio.goto('/subscriptions?cycle=yearly')
+  await expect(studio.getByText(/Free trial/)).toBeVisible()
+  await studio.goto('/subscriptions?months=12')
   await studio.getByRole('button', { name: 'Choose Pro' }).click()
-  await expect(studio.getByText(/₹29,488\.20/).last()).toBeVisible()
+  await expect(studio.getByText(/₹23,598\.82/).last()).toBeVisible()
   await studio.getByTestId('confirm-ok').click()
   await expect(studio.getByText("You're now on the Pro plan")).toBeVisible()
   await studio.goto('/')
@@ -25,8 +25,8 @@ test('a purchase shows up for the admin at once, who can extend its deadline', a
   const row = page.getByRole('row', { name: /Fresh Frames/ })
   await expect(row).toHaveCount(1)
   await expect(row.getByRole('cell', { name: 'Pro · Yearly' })).toBeVisible()
-  // Admin amounts exclude GST: ₹24,990, not the ₹29,488.20 charged.
-  await expect(row.getByRole('cell', { name: '₹24,990' })).toBeVisible()
+  // Admin amounts exclude GST: ₹19,999, not the ₹23,598.82 charged.
+  await expect(row.getByRole('cell', { name: '₹19,999' })).toBeVisible()
   await expect(row.getByText('Active')).toBeVisible()
   // The bell opens the alerts; "View all" goes to the full feed.
   await page.getByRole('button', { name: /^Alerts/ }).click()

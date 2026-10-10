@@ -14,12 +14,13 @@ import {
   type PlanCode,
   type ReminderChannel,
 } from '@weddyzone/shared'
+import { CYCLE_LABELS, CYCLE_MONTHS, proratedCredit } from '@weddyzone/shared'
 import { badRequest, conflict, notFound } from '../common/errors'
 import { randomToken } from '../common/util'
 import { config } from '../config'
 import { LedgerService } from '../core/ledger.service'
 import { type GatewayWebhook, PaymentService } from '../core/payment.service'
-import { PlansService, stateOf } from '../core/plans.service'
+import { PlansService, priceFor, stateOf } from '../core/plans.service'
 import { SettingsService } from '../core/settings.service'
 import { PrismaService, type Tx } from '../prisma/prisma.service'
 import { AlertsService, type QueuedAlert } from './alerts.service'
@@ -34,12 +35,11 @@ export interface WebhookResult {
 
 /** Monthly-equivalent list price, to tell an upgrade from a downgrade. */
 function monthlyEquivalent(plan: Plan, cycle: BillingCycle): number {
-  return cycle === 'YEARLY' ? plan.yearlyPrice / 12 : (plan.monthlyPrice ?? plan.yearlyPrice / 12)
+  const price = priceFor(plan, cycle) ?? priceFor(plan, 'MONTHLY') ?? priceFor(plan, 'YEARLY') ?? 0
+  return price / (priceFor(plan, cycle) !== null ? CYCLE_MONTHS[cycle] : priceFor(plan, 'MONTHLY') !== null ? 1 : 12)
 }
 
-function listPrice(plan: Plan, cycle: BillingCycle): number | null {
-  return cycle === 'YEARLY' ? plan.yearlyPrice : plan.monthlyPrice
-}
+const listPrice = (plan: Plan, cycle: BillingCycle): number | null => priceFor(plan, cycle)
 
 /**
  * Everything that changes a subscription: purchases and renewals (only ever from a confirmed
@@ -71,13 +71,16 @@ export class SubscriptionLifecycleService {
     if (!plan.isActive) throw badRequest('This plan is not available', { planCode: 'This plan is not available' })
     const base = listPrice(plan, cycle)
     if (base === null) {
-      throw badRequest(`${plan.name} is billed yearly only`, { cycle: `${plan.name} is available on yearly billing only` })
+      throw badRequest(`${plan.name} isn't sold for ${CYCLE_LABELS[cycle]}`, { cycle: `${plan.name} isn't available for ${CYCLE_LABELS[cycle]}` })
     }
     const eff = await this.plans.effective(studioId)
     const s = eff.subscription
     if (eff.status === 'ACTIVE' && !s.isTrial && !s.cancelAtPeriodEnd && s.planId === plan.id && s.cycle === cycle) {
-      throw conflict(`You're already on the ${plan.name} plan (${cycle.toLowerCase()})`)
+      throw conflict(`You're already on the ${plan.name} plan (${CYCLE_LABELS[cycle]})`)
     }
+    // Changing plan (or period) mid-way: the unused days of what was paid count towards the new plan.
+    const changing = !s.isTrial && !eff.readOnly && !(s.planId === plan.id && s.cycle === cycle) && s.currentPeriodEnd > new Date()
+    const prorationPaise = changing ? Math.min(Math.max(0, base - 100), proratedCredit(Math.max(0, s.amountPaid - s.gstAmount), s.currentPeriodStart, s.currentPeriodEnd)) : 0
 
     let coupon: { id: string; percentOff: number } | null = null
     if (couponCode) {
@@ -88,14 +91,14 @@ export class SubscriptionLifecycleService {
       coupon = { id: c.id, percentOff: c.percentOff }
     }
     const discount = coupon ? Math.round((base * coupon.percentOff) / 100) : 0
-    const taxable = base - discount
+    const taxable = Math.max(100, base - discount - prorationPaise)
     const gst = gstOn(taxable)
 
     let payment = await this.prisma.payment.create({
       data: {
         studioId,
         purpose: 'SUBSCRIPTION',
-        description: `${plan.name} plan · ${cycleLabel(cycle)}${coupon ? ` · ${coupon.percentOff}% off` : ''}`,
+        description: `${plan.name} plan · ${cycleLabel(cycle)}${coupon ? ` · ${coupon.percentOff}% off` : ''}${prorationPaise ? ` · ${inr(prorationPaise)} credit for unused days` : ''}`,
         amount: taxable + gst,
         gst,
         status: 'PENDING',
@@ -103,7 +106,7 @@ export class SubscriptionLifecycleService {
         subscriptionId: s.id,
         planId: plan.id,
         cycle,
-        meta: { planCode, cycle, previousPlan: eff.plan.code, basePaise: base, discountPaise: discount, couponId: coupon?.id ?? null },
+        meta: { planCode, cycle, previousPlan: eff.plan.code, basePaise: base, discountPaise: discount, prorationPaise, couponId: coupon?.id ?? null },
       },
     })
     const orderId = await this.payments.createOrder(payment)
@@ -256,6 +259,8 @@ export class SubscriptionLifecycleService {
       planId: plan.id,
       cycle,
       isTrial: false,
+      // Monthly limits reset every 30 days from the plan's start: a renewal keeps the dates.
+      usageAnchor: type === 'RENEWED' ? (sub.usageAnchor ?? sub.currentPeriodStart) : start,
       currentPeriodStart: start,
       currentPeriodEnd: end,
       graceEndsAt: null,
@@ -296,7 +301,7 @@ export class SubscriptionLifecycleService {
           dedupe: `purchase:${payment.id}`,
           type: 'SUBSCRIPTION_PURCHASED',
           title: `${plan.name} plan`,
-          message: `is now active (${cycle.toLowerCase()}) until ${istDay(end)}${included ? ` · ${included.toLocaleString('en-IN')} WhatsApp credits added` : ''}`,
+          message: `is now active (${CYCLE_LABELS[cycle]}) until ${istDay(end)}${included ? ` · ${included.toLocaleString('en-IN')} WhatsApp credits added` : ''}`,
           link: '/my-subscription',
           icon: 'patch-check',
           subscriptionId: sub.id,
@@ -626,11 +631,11 @@ export class SubscriptionLifecycleService {
   async adminChangePlan(id: string, planId: string, cycle: BillingCycle, note: string, actorId: string) {
     const plan = await this.prisma.plan.findUnique({ where: { id: planId } })
     if (!plan) throw badRequest('Unknown plan', { planId: 'Select a plan' })
-    if (cycle === 'MONTHLY' && plan.monthlyPrice === null) throw badRequest(`${plan.name} is billed yearly only`, { billingCycle: `${plan.name} is yearly only` })
+    if (priceFor(plan, cycle) === null && !plan.code.startsWith('STARTER')) throw badRequest(`${plan.name} isn't sold for ${CYCLE_LABELS[cycle]}`, { billingCycle: `${plan.name} isn't available for ${CYCLE_LABELS[cycle]}` })
     const settings = await this.settings.alerts()
     const { sub, queued } = await this.prisma.$transaction(async (tx) => {
       const sub = await this.lockSubscription(tx, { id })
-      if (sub.planId === plan.id && sub.cycle === cycle) throw conflict(`Already on ${plan.name} (${cycle.toLowerCase()})`)
+      if (sub.planId === plan.id && sub.cycle === cycle) throw conflict(`Already on ${plan.name} (${CYCLE_LABELS[cycle]})`)
       const status = computeStatus(stateOf({ ...sub, isTrial: false }), new Date(), settings)
       await tx.subscription.update({ where: { id }, data: { planId: plan.id, cycle, isTrial: false, status } })
       await this.event(tx, id, 'PLAN_CHANGED_BY_ADMIN', {
@@ -645,7 +650,7 @@ export class SubscriptionLifecycleService {
           channels: ['IN_APP'],
           type: 'SUBSCRIPTION_CHANGED',
           title: `${plan.name} plan`,
-          message: `Weddyzone moved your studio to ${plan.name} (${cycle.toLowerCase()}) until ${istDay(sub.currentPeriodEnd)}`,
+          message: `Weddyzone moved your studio to ${plan.name} (${CYCLE_LABELS[cycle]}) until ${istDay(sub.currentPeriodEnd)}`,
           link: '/my-subscription',
           icon: 'patch-check',
           subscriptionId: id,

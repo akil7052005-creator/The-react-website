@@ -9,6 +9,7 @@ import {
   type EventSettingsPatch,
   type StoredEventSettings,
 } from '@weddyzone/shared'
+import { quotaOf } from '@weddyzone/shared'
 import sharp from 'sharp'
 import { AppError, badRequest, fileInvalid } from '../common/errors'
 import { sha256, toDate, toIso } from '../common/util'
@@ -39,11 +40,11 @@ export class EventSettingsService {
     private readonly storage: StorageService,
   ) {}
 
-  /** Add-ons come with the All-Access plan. */
-  private async addons(studioId: string) {
+  /** What the studio's plan includes: video downloads and favourites on VIP; Trial galleries stay open 7 days at most. */
+  private async addons(studioId: string): Promise<EventSettings['addons']> {
     const sub = await this.prisma.subscription.findUnique({ where: { studioId }, include: { plan: true } })
-    const all = sub?.plan.code === 'ALL_ACCESS'
-    return { videoDownload: all }
+    const quota = quotaOf(sub?.plan.limits)
+    return { videoDownload: sub?.plan.code === 'ALL_ACCESS', favourites: quota.favourites, galleryDaysMax: quota.galleryDays }
   }
 
   private dto(s: { deadline: Date; quota: number; allowDownload: boolean; notesAllowed: boolean; watermark: boolean; settings: unknown }, addons: EventSettings['addons']): EventSettings {
@@ -55,7 +56,8 @@ export class EventSettingsService {
       downloadOn: s.allowDownload,
       downloadAllFolder: s.allowDownload && st.downloadAllFolder,
       instagramFollow: st.instagramFollow,
-      favoriteOption: st.favoriteOption,
+      // Favourites are a VIP feature: off (and locked in Settings) on other plans.
+      favoriteOption: st.favoriteOption && addons.favourites,
       photoNotes: s.notesAllowed,
       galleryExpiry: none ? null : st.galleryExpiryDays !== undefined && st.galleryExpiryDays !== null ? st.galleryExpiryDays : 'custom',
       galleryExpiresOn: none ? null : expires,
@@ -93,6 +95,9 @@ export class EventSettingsService {
       limitOn: 'selection limit',
       videoSelection: 'video selection',
     } as const
+    if (body.favoriteOption && !addons.favourites) {
+      throw new AppError(HttpStatus.PAYMENT_REQUIRED, ERROR_CODES.PLAN_LIMIT, 'Customer favourites come with the VIP plan.', undefined, { resource: 'favourites', upgrade: '/subscriptions' })
+    }
     for (const k of Object.keys(labels) as (keyof typeof labels)[]) {
       if (body[k] !== undefined && body[k] !== st[k]) {
         next[k] = body[k]!
@@ -129,6 +134,13 @@ export class EventSettingsService {
     if (body.photoNotes !== undefined && body.photoNotes !== s.notesAllowed) {
       data.notesAllowed = body.photoNotes
       say('photo notes', body.photoNotes)
+    }
+    const max = addons.galleryDaysMax
+    if (max !== null && (body.galleryExpiry === null || (typeof body.galleryExpiry === 'number' && body.galleryExpiry > max))) {
+      throw badRequest(`Customer galleries stay open up to ${max} days on your plan.`, { galleryExpiry: `At most ${max} days on your plan` })
+    }
+    if (max !== null && body.linkExpiresOn !== undefined && (body.linkExpiresOn === null || toDate(body.linkExpiresOn).getTime() > toDate(todayIST()).getTime() + max * DAY)) {
+      throw badRequest(`Customer galleries stay open up to ${max} days on your plan.`, { linkExpiresOn: `At most ${max} days from today on your plan` })
     }
     if (body.galleryExpiry !== undefined) {
       const date = body.galleryExpiry === null ? NO_EXPIRY_DATE : toIso(new Date(toDate(todayIST()).getTime() + body.galleryExpiry * DAY))

@@ -64,7 +64,7 @@ export const FINISHED_ALBUM_STATUSES: AlbumStatus[] = ['APPROVED', 'PUBLISHED', 
 export const PLAN_CODES = ['STARTER', 'PRO', 'STUDIO', 'ALL_ACCESS'] as const
 export type PlanCode = (typeof PLAN_CODES)[number]
 
-export const BILLING_CYCLES = ['MONTHLY', 'YEARLY'] as const
+export const BILLING_CYCLES = ['MONTHLY', 'QUARTERLY', 'HALF_YEARLY', 'YEARLY'] as const
 export type BillingCycle = (typeof BILLING_CYCLES)[number]
 
 export const INVOICE_STATUSES = ['PENDING', 'PAID', 'CANCELLED'] as const

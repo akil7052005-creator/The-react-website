@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { resolveUploadLimits, STARTER_UPLOAD_LIMITS, type AdminPlanDto, type PlanLimits } from '@weddyzone/shared'
+import { CYCLE_LABELS, PRICING_CYCLES, resolveUploadLimits, STARTER_UPLOAD_LIMITS, type AdminPlanDto, type BillingCycle, type PlanLimits } from '@weddyzone/shared'
 import { Fragment, useState, type FormEvent, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { FieldShell, SubmitButton, useGuardedClose } from '../../components/form/form'
@@ -17,8 +17,18 @@ const PLANS_KEY = ['admin', 'plans'] as const
  * Limits that may be "unlimited" (blank field = null). `optional` ones (photo uploads) may be left
  * blank to use the Starter value instead.
  */
-const LIMIT_FIELDS: { key: keyof PlanLimits; label: string; unit?: string; unlimited: boolean; optional?: boolean }[] = [
-  { key: 'eventsPerMonth', label: 'Events per month', unlimited: true },
+type NumericLimit = Exclude<keyof PlanLimits, 'favourites'>
+const LIMIT_FIELDS: { key: NumericLimit; label: string; unit?: string; unlimited: boolean; optional?: boolean }[] = [
+  { key: 'eventsPerMonth', label: 'New customer events per month', unlimited: true },
+  { key: 'eventsTotal', label: 'Customer events in total (trial)', unlimited: true, optional: true },
+  { key: 'fairUseEventsPerMonth', label: 'Fair-use events per month', unlimited: true, optional: true },
+  { key: 'photosPerEvent', label: 'Photos per event', unlimited: true, optional: true },
+  { key: 'uploadGbPerMonth', label: 'Uploads per month', unit: 'GB, original size', unlimited: true, optional: true },
+  { key: 'uploadGbTotal', label: 'Uploads in total (trial)', unit: 'GB', unlimited: true, optional: true },
+  { key: 'trialDays', label: 'Trial length', unit: 'days', unlimited: true, optional: true },
+  { key: 'galleryDays', label: 'Customer gallery open at most', unit: 'days', unlimited: true, optional: true },
+  { key: 'addonEvents', label: 'Events in the add-on', unlimited: true, optional: true },
+  { key: 'addonEventsPricePaise', label: 'Add-on price', unit: 'paise', unlimited: true, optional: true },
   { key: 'albums', label: 'Digital albums', unlimited: true },
   { key: 'storageGb', label: 'Storage', unit: 'GB', unlimited: true },
   { key: 'teamSeats', label: 'Team seats', unlimited: false },
@@ -31,9 +41,9 @@ const LIMIT_FIELDS: { key: keyof PlanLimits; label: string; unit?: string; unlim
 interface Draft {
   name: string
   tagline: string
-  monthlyPrice: string
-  yearlyPrice: string
-  limits: Record<keyof PlanLimits, string>
+  prices: Record<BillingCycle, string>
+  limits: Record<NumericLimit, string>
+  favourites: boolean
   features: string
   comingSoon: string[]
   popular: boolean
@@ -43,8 +53,8 @@ interface Draft {
 const toDraft = (p: AdminPlanDto): Draft => ({
   name: p.name,
   tagline: p.tagline,
-  monthlyPrice: p.monthlyPricePaise === null ? '' : String(p.monthlyPricePaise / 100),
-  yearlyPrice: String(p.yearlyPricePaise / 100),
+  prices: Object.fromEntries(PRICING_CYCLES.map((c) => [c, p.prices?.[c] ? String(p.prices[c]! / 100) : ''])) as Draft['prices'],
+  favourites: p.limits.favourites === true,
   limits: Object.fromEntries(LIMIT_FIELDS.map((f) => [f.key, p.limits[f.key] === null || p.limits[f.key] === undefined ? '' : String(p.limits[f.key])])) as Draft['limits'],
   features: p.features.join('\n'),
   comingSoon: p.comingSoon,
@@ -88,10 +98,15 @@ function PlanEditor({ plan, onClose }: { plan: AdminPlanDto; onClose: () => void
     save.mutate({
       name: draft.name,
       tagline: draft.tagline,
-      monthlyPrice: num(draft.monthlyPrice),
-      yearlyPrice: num(draft.yearlyPrice),
-      // A blank optional limit is left out, so the Starter value applies.
-      limits: Object.fromEntries(LIMIT_FIELDS.filter((f) => !(f.optional && draft.limits[f.key].trim() === '')).map((f) => [f.key, num(draft.limits[f.key])])),
+      // Each billing period's price; empty = not sold for that period.
+      prices: Object.fromEntries(PRICING_CYCLES.map((c) => [c, num(draft.prices[c])])),
+      monthlyPrice: num(draft.prices.MONTHLY),
+      yearlyPrice: num(draft.prices.YEARLY),
+      limits: {
+        // A blank upload setting is left out (the default applies); other blanks mean none / unlimited.
+        ...Object.fromEntries(LIMIT_FIELDS.filter((f) => f.unlimited || draft.limits[f.key].trim() !== '').map((f) => [f.key, num(draft.limits[f.key])])),
+        favourites: draft.favourites,
+      },
       features,
       // Only features still on the list can be "coming soon".
       comingSoon: draft.comingSoon.filter((f) => features.includes(f)),
@@ -129,14 +144,18 @@ function PlanEditor({ plan, onClose }: { plan: AdminPlanDto; onClose: () => void
       <form id="plan-form" className="form-grid" onSubmit={submit} noValidate>
         {field('p-name', 'Plan name', errors.name, <input id="p-name" value={draft.name} maxLength={40} onChange={(e) => set('name', e.target.value)} />)}
         {field('p-tagline', 'Tagline', errors.tagline, <input id="p-tagline" value={draft.tagline} maxLength={80} onChange={(e) => set('tagline', e.target.value)} />)}
-        {field(
-          'p-monthly',
-          'Monthly price (₹)',
-          errors.monthlyPrice,
-          <input id="p-monthly" inputMode="decimal" value={draft.monthlyPrice} placeholder="Yearly only" onChange={(e) => set('monthlyPrice', e.target.value)} />,
-          'Leave empty for a yearly-only plan',
+        {PRICING_CYCLES.map((c) =>
+          field(
+            `p-price-${c}`,
+            `Price for ${CYCLE_LABELS[c]} (₹)`,
+            errors[`prices.${c}`],
+            <input id={`p-price-${c}`} inputMode="decimal" value={draft.prices[c]} placeholder="Not sold" onChange={(e) => set('prices', { ...draft.prices, [c]: e.target.value })} />,
+            'Leave empty if the plan is not sold for this period',
+          ),
         )}
-        {field('p-yearly', 'Yearly price (₹)', errors.yearlyPrice, <input id="p-yearly" inputMode="decimal" value={draft.yearlyPrice} onChange={(e) => set('yearlyPrice', e.target.value)} />)}
+        <label className="check-row full">
+          <input type="checkbox" checked={draft.favourites} onChange={(e) => set('favourites', e.target.checked)} /> Customer favourites (tick picks, heart favourites)
+        </label>
         {LIMIT_FIELDS.map((f) => (
           <Fragment key={f.key}>
             {field(
@@ -150,7 +169,7 @@ function PlanEditor({ plan, onClose }: { plan: AdminPlanDto; onClose: () => void
               placeholder={f.unlimited ? 'Unlimited' : undefined}
               onChange={(e) => set('limits', { ...draft.limits, [f.key]: e.target.value })}
             />,
-            f.unlimited ? 'Leave empty for unlimited' : f.optional ? `Leave empty for the Starter value (${STARTER_UPLOAD_LIMITS[f.key as keyof typeof STARTER_UPLOAD_LIMITS]})` : undefined,
+            f.unlimited ? 'Leave empty for none / unlimited' : f.optional ? `Leave empty for the default (${STARTER_UPLOAD_LIMITS[f.key as keyof typeof STARTER_UPLOAD_LIMITS]})` : undefined,
             )}
           </Fragment>
         ))}

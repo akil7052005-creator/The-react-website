@@ -17,7 +17,7 @@ export function istDay(d: Date): string {
   return `${String(p.day).padStart(2, '0')} ${MONTHS[p.month - 1]} ${p.year}`
 }
 
-export const cycleLabel = (c: BillingCycle) => (c === 'YEARLY' ? 'Yearly' : 'Monthly')
+export const cycleLabel = (c: BillingCycle) => ({ MONTHLY: 'Monthly', QUARTERLY: '3 months', HALF_YEARLY: '6 months', YEARLY: 'Yearly' })[c] ?? 'Monthly'
 
 export function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? '' : 's'}`

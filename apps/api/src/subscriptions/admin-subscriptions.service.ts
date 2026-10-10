@@ -19,6 +19,7 @@ import {
   type PlanCode,
   type SentNotificationDto,
 } from '@weddyzone/shared'
+import { CYCLE_MONTHS, type BillingCycle } from '@weddyzone/shared'
 import { notFound } from '../common/errors'
 import { paginate } from '../common/util'
 import { paymentDto } from '../core/payment.service'
@@ -325,7 +326,7 @@ interface PaidPeriod {
   subscriptionId: string | null
   amount: number
   gst: number
-  cycle: 'MONTHLY' | 'YEARLY' | null
+  cycle: BillingCycle | null
   periodStart: Date | null
   periodEnd: Date | null
   paidAt: Date | null
@@ -341,7 +342,7 @@ interface PaidPeriod {
 export function mrrCalculator(payments: PaidPeriod[], cancelledAt: Map<string, Date>) {
   const periods = payments.map((x) => {
     const start = x.periodStart ?? x.paidAt ?? x.createdAt
-    return { key: x.subscriptionId ?? x.id, sub: x.subscriptionId, start, end: x.periodEnd ?? addCycle(start, x.cycle ?? 'MONTHLY'), monthly: (x.amount - x.gst) / (x.cycle === 'YEARLY' ? 12 : 1) }
+    return { key: x.subscriptionId ?? x.id, sub: x.subscriptionId, start, end: x.periodEnd ?? addCycle(start, x.cycle ?? 'MONTHLY'), monthly: (x.amount - x.gst) / CYCLE_MONTHS[x.cycle ?? 'MONTHLY'] }
   })
   return (at: Date): number => {
     const current = new Map<string, (typeof periods)[number]>()

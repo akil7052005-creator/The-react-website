@@ -18,6 +18,7 @@ import { config } from '../config'
 import { PaymentService } from '../core/payment.service'
 import { stateOf } from '../core/plans.service'
 import { SettingsService } from '../core/settings.service'
+import { UsageService } from '../core/usage.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { AlertsService, type QueuedAlert } from './alerts.service'
 import { absoluteUrl, cycleLabel, inr, istDay, plural, renewPath } from './format'
@@ -57,6 +58,7 @@ export class SubscriptionJobsService implements OnApplicationBootstrap, OnModule
     private readonly payments: PaymentService,
     private readonly alerts: AlertsService,
     private readonly lifecycle: SubscriptionLifecycleService,
+    private readonly usage: UsageService,
   ) {}
 
   onApplicationBootstrap() {
@@ -200,7 +202,7 @@ export class SubscriptionJobsService implements OnApplicationBootstrap, OnModule
         const q = await studio(
           ['IN_APP', 'EMAIL', 'WHATSAPP'],
           'Plan expired',
-          `Your ${plan} expired on ${date}. Renew within ${plural(settings.graceDays, 'day')} (by ${istDay(ends)}) to keep full access; after that your studio becomes read-only.`,
+          `Your ${plan} expired on ${date}. Your galleries stay view-only and new uploads are paused: renew within ${plural(settings.graceDays, 'day')} (by ${istDay(ends)}), or your galleries close for customers.`,
           this.studioWhatsApp(row, 'PLAN_EXPIRED_GRACE', settings),
         )
         queued.push(...q, ...(await admin(`${owner}: ${plan} expired`, `In grace until ${istDay(ends)} · ${row.plan.name} (${cycleLabel(row.cycle)})${row.studio.phone ? ` · ${row.studio.phone}` : ''}`)))
@@ -299,39 +301,35 @@ export class SubscriptionJobsService implements OnApplicationBootstrap, OnModule
     return changed
   }
 
-  /** Admin alert when a studio passes 80% of its monthly events or storage: an upsell lead. */
+  /** Admin alert when a studio passes 80% of its events or uploads in this 30-day window: an upsell lead. */
   private async usageAlerts(now: Date): Promise<number> {
     const settings = await this.settings.alerts()
-    const p = istParts(now)
-    const monthStart = fromIst({ year: p.year, month: p.month, day: 1 })
-    const month = istDate(now).slice(0, 7)
     const subs = await this.prisma.subscription.findMany({ include: { plan: true, studio: true } })
     const live = subs.filter((s) => !['EXPIRED', 'CANCELLED'].includes(computeStatus(stateOf(s), now, settings)))
-    if (!live.length) return 0
-    const [events, storage] = await Promise.all([
-      this.prisma.event.groupBy({ by: ['studioId'], where: { deletedAt: null, createdAt: { gte: monthStart } }, _count: { _all: true } }),
-      this.prisma.storedFile.groupBy({ by: ['studioId'], where: { deletedAt: null, photoPreview: { is: null } }, _sum: { size: true } }),
-    ])
-    const eventsBy = new Map(events.map((e) => [e.studioId, e._count._all]))
-    const storageBy = new Map(storage.map((s) => [s.studioId, s._sum.size ?? 0]))
     let sent = 0
     for (const s of live) {
-      const limits = s.plan.limits as { eventsPerMonth: number | null; storageGb: number | null }
-      const checks: { key: string; used: number; limit: number | null; label: string; dedupe: string }[] = [
-        { key: 'events', used: eventsBy.get(s.studioId) ?? 0, limit: limits.eventsPerMonth, label: 'events this month', dedupe: `usage:${s.studioId}:events:${month}` },
-        { key: 'storage', used: (storageBy.get(s.studioId) ?? 0) / GB, limit: limits.storageGb, label: 'storage', dedupe: `usage:${s.studioId}:storage:${s.planId}:${s.currentPeriodEnd.toISOString()}` },
+      const m = await this.usage.meter(s.studioId)
+      const window = m.windowStart.slice(0, 10)
+      const checks: { key: string; used: number; limit: number | null; label: string; text: string }[] = [
+        { key: 'events', used: m.events.used, limit: m.events.limit, label: m.lifetime ? 'trial events' : 'events this month', text: `${m.events.used} of ${m.events.limit}` },
+        {
+          key: 'uploads',
+          used: m.uploads.usedBytes / GB,
+          limit: m.uploads.limitBytes === null ? null : m.uploads.limitBytes / GB,
+          label: m.lifetime ? 'trial uploads' : 'uploads this month',
+          text: `${(m.uploads.usedBytes / GB).toFixed(1)} of ${m.uploads.limitBytes === null ? '' : Math.round(m.uploads.limitBytes / GB)} GB`,
+        },
       ]
       for (const c of checks) {
         if (c.limit === null || c.limit === 0 || c.used < c.limit * USAGE_ALERT_RATIO) continue
         const pct = Math.round((c.used / c.limit) * 100)
-        const used = c.key === 'storage' ? `${c.used.toFixed(1)} of ${c.limit} GB` : `${c.used} of ${c.limit}`
         const q = await this.alerts.send({
           to: { type: 'ADMIN' },
           channels: ['IN_APP'],
-          dedupe: c.dedupe,
+          dedupe: `usage:${s.studioId}:${c.key}:${s.planId}:${window}`,
           type: 'USAGE_HIGH',
           title: `${s.studio.name} used ${pct}% of ${c.label}`,
-          message: `${used} on ${s.plan.name} · upsell opportunity`,
+          message: `${c.text} on ${s.plan.name} · upsell opportunity`,
           link: `/admin/subscriptions/${s.id}`,
           icon: 'graph-up-arrow',
           subscriptionId: s.id,

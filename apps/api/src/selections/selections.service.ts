@@ -39,6 +39,7 @@ import { previewKey, StorageService, thumbKey } from '../infra/storage.service'
 import { LIGHT_PREVIEW_PX, PhotoPreviewService, PREVIEW_PX, renderUploadCopies, type WatermarkSpec } from './previews.service'
 import { writeLog } from './selection-log'
 import { fileTooLarge, type originalMeta, renewToUpload, storageFull, UploadLimitsService } from './upload-limits'
+import { UsageService } from '../core/usage.service'
 
 const MB = 1024 * 1024
 const GB = 1024 ** 3
@@ -76,7 +77,14 @@ export class SelectionsService {
     private readonly uploadLimits: UploadLimitsService,
     private readonly previews: PhotoPreviewService,
     private readonly storage: StorageService,
+    private readonly usage: UsageService,
   ) {}
+
+  /** Plan check for a new event: one at a time per studio, so two at once can't both slip under the limit. */
+  private async assertNewEvent(tx: Tx, studioId: string) {
+    await tx.$queryRaw`SELECT id FROM studios WHERE id = ${studioId}::uuid FOR UPDATE`
+    await this.usage.assertCanCreateEvent(studioId, tx)
+  }
 
   publicUrl(token: string) {
     return `${config().APP_URL}/s/${token}`
@@ -210,7 +218,12 @@ export class SelectionsService {
     const studio = await this.prisma.studio.findUniqueOrThrow({ where: { id: studioId }, select: { selectionDefaults: true } })
     const defaults = resolveSelectionDefaults(studio.selectionDefaults)
     const id = randomUUID()
+    const cap = await this.usage.galleryDaysCap(studioId)
+    if (cap !== null && toDate(body.deadline).getTime() > toDate(todayIST()).getTime() + cap * 86_400_000) {
+      throw badRequest(`Customer galleries stay open up to ${cap} days on your plan`, { deadline: `At most ${cap} days from today on your plan` })
+    }
     const created = await this.prisma.$transaction(async (tx) => {
+      await this.assertNewEvent(tx, studioId)
       const members = body.members.length ? body.members : [{ name: event.client.name, phone: event.client.phone }]
       const row = await tx.selection.create({
         data: {
@@ -276,9 +289,13 @@ export class SelectionsService {
     const studio = await this.prisma.studio.findUniqueOrThrow({ where: { id: studioId }, select: { selectionDefaults: true } })
     const defaults = resolveSelectionDefaults(studio.selectionDefaults)
     const today = todayIST()
-    const deadline = toIso(new Date(toDate(today).getTime() + defaults.galleryDays * 86_400_000))
+    // Trial galleries stay open at most 7 days.
+    const cap = await this.usage.galleryDaysCap(studioId)
+    const galleryDays = cap !== null ? Math.min(cap, defaults.galleryDays) : defaults.galleryDays
+    const deadline = toIso(new Date(toDate(today).getTime() + galleryDays * 86_400_000))
     const id = randomUUID()
     await this.prisma.$transaction(async (tx) => {
+      await this.assertNewEvent(tx, studioId)
       const client =
         (await tx.client.findFirst({
           where: { studioId, deletedAt: null, phone: body.customerPhone, name: { equals: body.customerName, mode: 'insensitive' } },
@@ -302,7 +319,7 @@ export class SelectionsService {
           notesAllowed: defaults.notesAllowed,
           members: { create: [{ name: client.name, phone: client.phone }] },
           // Remember the expiry choice so the settings page shows it (when it is one of its options).
-          ...([7, 15, 30, 60, 90].includes(defaults.galleryDays) ? { settings: { galleryExpiryDays: defaults.galleryDays } } : {}),
+          ...([7, 15, 30, 60, 90].includes(galleryDays) ? { settings: { galleryExpiryDays: galleryDays } } : {}),
         },
       })
       await writeLog(tx, id, 'STUDIO', 'Created', `Limit ${body.quota} photos · gallery open until ${formatDeadline(deadline)}`)
@@ -433,6 +450,7 @@ export class SelectionsService {
             file: 'Duplicate photo — already uploaded',
           })
         }
+        if (media === 'photo') await this.usage.assertCanUpload(studioId, id, opts.original?.originalSize ?? file!.size, tx)
         const size = copies ? copies.preview.length + copies.thumb.length : file!.size
         // Storage is counted inside the lock too, so parallel uploads can't overshoot the plan together.
         if (limits && limits.storageGb !== null) {
@@ -685,7 +703,13 @@ export class SelectionsService {
     if (selectionStatus(s) === 'EXPIRED') {
       throw new AppError(HttpStatus.GONE, ERROR_CODES.GALLERY_EXPIRED, `This gallery has expired. Please contact ${s.studio.name} to reopen it.`, undefined, { studio, eventTitle: s.event.title })
     }
-    return Object.assign(s, { stored: settings })
+    // The studio's plan ended more than 7 days ago (past grace): its galleries close for customers.
+    const plan = await this.usage.planOf(s.studioId)
+    if (plan.eff.readOnly) {
+      throw new AppError(HttpStatus.FORBIDDEN, ERROR_CODES.GALLERY_CLOSED, `This gallery is closed right now. Please contact ${s.studio.name}.`, undefined, { studio, eventTitle: s.event.title })
+    }
+    // Favourites come with VIP only; on other plans the heart picks.
+    return Object.assign(s, { stored: settings, planFavourites: plan.quota.favourites })
   }
 
   /** Checks a gallery PIN. Wrong PINs are counted per selection; too many lock the gallery for a while. */

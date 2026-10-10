@@ -65,7 +65,8 @@ export interface AlertSettings {
 
 export const DEFAULT_ALERT_SETTINGS: AlertSettings = {
   reminderDays: [7, 3, 1],
-  graceDays: 3,
+  // After a plan ends: 7 days of view-only galleries (no new uploads), then they close.
+  graceDays: 7,
   digestTime: '09:00',
   winbackAfterDays: 7,
   winbackPercentOff: 20,
@@ -138,9 +139,10 @@ export function addMonthsIst(d: Date, months: number, anchorDay?: number): Date 
   return fromIst({ ...p, year, month, day })
 }
 
-/** End of one billing period starting at `from`: +1 month or +1 year, in IST. */
+/** End of one billing period starting at `from`: +1, 3, 6 or 12 months, in IST. */
 export function addCycle(from: Date, cycle: BillingCycle, anchorDay?: number): Date {
-  return addMonthsIst(from, cycle === 'YEARLY' ? 12 : 1, anchorDay)
+  const months = { MONTHLY: 1, QUARTERLY: 3, HALF_YEARLY: 6, YEARLY: 12 }[cycle] ?? 1
+  return addMonthsIst(from, months, anchorDay)
 }
 
 /**

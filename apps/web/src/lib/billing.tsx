@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { gstOn, type BillingCycle, type MySubscriptionBannerDto, type PaymentDto, type PlanDto, type SubscriptionDto, type UsageItem } from '@weddyzone/shared'
+import { CYCLE_LABELS, CYCLE_MONTHS, gstOn, type BillingCycle, type MySubscriptionBannerDto, type PaymentDto, type PlanDto, type SubscriptionDto, type UsageItem, type UsageMeterDto } from '@weddyzone/shared'
 import { toast } from 'sonner'
 import { ME_KEY } from '../auth/AuthProvider'
 import { useConfirm } from '../components/Modal'
@@ -18,6 +18,25 @@ export const usePlans = () => useQuery({ queryKey: ['plans'], queryFn: () => api
 
 export const useSubscription = () =>
   useQuery({ queryKey: ['subscription'], queryFn: () => api.get<SubscriptionOverview>('/subscription') })
+
+/** Events and uploads used in this 30-day window (GET /me/usage): the dashboard meter. */
+export const USAGE_KEY = ['subscription', 'usage'] as const
+export const useUsage = () => useQuery({ queryKey: USAGE_KEY, queryFn: () => api.get<UsageMeterDto>('/me/usage'), refetchInterval: 5 * 60_000 })
+
+/** "320 GB", "1.2 TB", "48 GB". */
+export function gbText(bytes: number) {
+  const gb = bytes / 1024 ** 3
+  if (gb >= 1024) return `${(gb / 1024).toFixed(gb % 1024 === 0 ? 0 : 1)} TB`
+  return `${gb >= 10 ? Math.round(gb) : Math.round(gb * 10) / 10} GB`
+}
+
+/** "Events 7/10 · Uploads 320 GB of 500 GB · resets on 8 Nov". */
+export function meterText(m: UsageMeterDto) {
+  const events = m.events.limit === null ? `Events ${m.events.used}` : `Events ${m.events.used}/${m.events.limit}`
+  const uploads = m.uploads.limitBytes === null ? `Uploads ${gbText(m.uploads.usedBytes)}` : `Uploads ${gbText(m.uploads.usedBytes)} of ${gbText(m.uploads.limitBytes)}`
+  const when = new Date(m.resetsOn).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+  return `${events} · ${uploads} · ${m.lifetime ? `trial ends ${when}` : `resets on ${when}`}`
+}
 
 /** Compact plan status for banners (GET /me/subscription). */
 export const usePlanBanner = () =>
@@ -46,9 +65,15 @@ export function usageMax(u: UsageItem): number {
   return u.limit ?? Math.max(u.used, 1) * 4
 }
 
+/** A plan's price for one billing period (1, 3, 6 or 12 months), paise; null when not sold for it. */
 export function priceFor(plan: PlanDto, cycle: BillingCycle): number | null {
-  return cycle === 'YEARLY' ? plan.yearlyPricePaise : plan.monthlyPricePaise
+  const p = plan.prices?.[cycle]
+  if (p !== undefined) return p
+  return cycle === 'YEARLY' ? plan.yearlyPricePaise || null : cycle === 'MONTHLY' ? plan.monthlyPricePaise : null
 }
+
+/** Per-month equivalent of a longer period, for "₹1,800 / month" under a 3-month price. */
+export const perMonth = (price: number, cycle: BillingCycle) => Math.round(price / CYCLE_MONTHS[cycle])
 
 export function TestModeNote() {
   return (
@@ -74,7 +99,7 @@ export function usePlanActions() {
   const change = (plan: PlanDto, cycle: BillingCycle, current?: SubscriptionDto, couponCode?: string) => {
     const price = priceFor(plan, cycle)
     if (price === null) {
-      toast.error(`${plan.name} is billed yearly only`)
+      toast.error(`${plan.name} isn't available for ${CYCLE_LABELS[cycle]}`)
       return Promise.resolve(false)
     }
     const currentPrice = current ? current.pricePaise : 0
@@ -86,11 +111,13 @@ export function usePlanActions() {
       icon: 'patch-check',
       message: (
         <>
-          You'll pay <strong>{formatMoney(price + gst)}</strong> ({formatMoney(price)} + {formatMoney(gst)} GST) {cycle === 'YEARLY' ? 'per year' : 'per month'}
+          You'll pay <strong>{formatMoney(price + gst)}</strong> ({formatMoney(price)} + {formatMoney(gst)} GST) for {CYCLE_LABELS[cycle]}
           {couponCode ? <>, less your coupon <strong>{couponCode}</strong></> : null}.{' '}
           {renewal && current && !current.readOnly && current.status !== 'GRACE'
             ? `Your plan continues from ${new Date(current.currentPeriodEnd).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}, so you lose no days`
-            : `The ${plan.name} plan starts as soon as the payment is confirmed`}
+            : current && !current.isTrial && !current.readOnly && !renewal
+              ? `The ${plan.name} plan starts straight away; the unused days of your current plan are taken off the price`
+              : `The ${plan.name} plan starts as soon as the payment is confirmed`}
           {plan.limits.includedCredits ? ` and includes ${plan.limits.includedCredits.toLocaleString('en-IN')} WhatsApp credits` : ''}.
           <TestModeNote />
         </>
@@ -132,5 +159,32 @@ export function usePlanActions() {
     }
   }
 
-  return { change, resume, setAutoRenew, refresh }
+  /** "Buy +5 events" for this month. */
+  const buyAddon = (addon: { events: number; pricePaise: number }) => {
+    const gst = gstOn(addon.pricePaise)
+    return confirm({
+      title: `Buy +${addon.events} events?`,
+      icon: 'plus-circle',
+      message: (
+        <>
+          You'll pay <strong>{formatMoney(addon.pricePaise + gst)}</strong> ({formatMoney(addon.pricePaise)} + {formatMoney(gst)} GST). The extra events are for this month only: unused ones
+          don't carry over.
+          <TestModeNote />
+        </>
+      ),
+      confirmLabel: `Buy +${addon.events} events`,
+      onConfirm: async () => {
+        try {
+          await api.post('/subscription/addon-events')
+          toast.success(`+${addon.events} events added for this month`, { description: 'Test mode, no real charge' })
+          refresh()
+        } catch (e) {
+          toastError(e)
+          throw e
+        }
+      },
+    })
+  }
+
+  return { change, resume, setAutoRenew, refresh, buyAddon }
 }

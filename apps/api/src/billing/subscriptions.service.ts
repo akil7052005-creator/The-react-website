@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common'
 import type { BillingCycle, PlanCode } from '@prisma/client'
-import { CREDIT_PACKS, renewsAutomatically, type CancelReason, type ListQuery, type MySubscriptionBannerDto } from '@weddyzone/shared'
+import { CREDIT_PACKS, gstOn, renewsAutomatically, type CancelReason, type ListQuery, type MySubscriptionBannerDto } from '@weddyzone/shared'
 import { badRequest } from '../common/errors'
 import { paginate, skipTake } from '../common/util'
 import { LedgerService } from '../core/ledger.service'
@@ -95,6 +95,35 @@ export class SubscriptionsService {
   async setAutoRenew(studioId: string, autoRenew: boolean) {
     await this.lifecycle.setAutoRenew(studioId, autoRenew)
     return this.overview(studioId)
+  }
+
+  usageMeter(studioId: string) {
+    return this.usage.meter(studioId)
+  }
+
+  /**
+   * Buys the plan's "+N events" add-on for the current 30-day window (unused events don't carry
+   * over). Test mode charges straight away, like WhatsApp credit packs.
+   */
+  async buyEventAddon(studioId: string) {
+    const w = await this.usage.window(studioId)
+    const { addonEvents: events, addonEventsPricePaise: price } = w.quota
+    if (w.lifetime || !events || price === null) throw badRequest(`Extra events aren't available on ${w.eff.plan.name}. Upgrade instead.`)
+    if (w.eff.readOnly || w.eff.status === 'GRACE') throw badRequest('Renew your plan first, then add events.')
+    const gst = gstOn(price)
+    const payment = await this.prisma.$transaction(async (tx) => {
+      const payment = await this.payments.charge(tx, studioId, {
+        purpose: 'EVENT_ADDON',
+        amountPaise: price + gst,
+        description: `+${events} events (until ${w.resetsOn.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' })})`,
+        meta: { events, windowStart: w.start.toISOString(), basePaise: price, gstPaise: gst },
+      })
+      await tx.payment.update({ where: { id: payment.id }, data: { gst } })
+      await tx.usageAddon.create({ data: { studioId, windowStart: w.start, events, paymentId: payment.id } })
+      await this.notifications.notify(studioId, { type: 'PLAN_CHANGED', title: `+${events} events`, body: 'added for this month', link: '/my-subscription', icon: 'plus-circle' }, tx)
+      return payment
+    })
+    return { payment: paymentDto(payment), usage: await this.usage.meter(studioId), testMode: this.payments.testMode }
   }
 
   // ------------------------------------------------------------- WhatsApp credits

@@ -101,13 +101,14 @@ function ItemButtons({ item, selection, onPatch, big }: { item: MediaItem; selec
       {(item.selectable || item.selected) && (
         <button
           type="button"
-          className={`cp-round cp-check${item.selected ? ' on' : ''}`}
+          className={`cp-round ${selection.pickIcon === 'heart' ? 'cp-heart cp-pick-heart' : 'cp-check'}${item.selected ? ' on' : ''}`}
           aria-pressed={item.selected}
+          // Trial and Pro pick with a heart (no favourites there); VIP picks with a tick.
           aria-label={item.selected ? `Unselect ${what}` : `Select ${what}`}
           disabled={off}
           onClick={() => onPatch({ selected: !item.selected })}
         >
-          <i className="bi bi-check-lg" aria-hidden="true" />
+          <i className={selection.pickIcon === 'heart' ? `bi bi-heart${item.selected ? '-fill' : ''}` : 'bi bi-check-lg'} aria-hidden="true" />
         </button>
       )}
     </div>
@@ -300,7 +301,7 @@ function FolderPage({ selection, folderId }: { selection: ClientSelectionDto; fo
             </span>
           )}
           <span className="cp-bar-selected">
-            <i className="bi bi-check-lg" aria-hidden="true" /> {nf.format(c.selected)}
+            <i className={selection.pickIcon === 'heart' ? 'bi bi-heart-fill' : 'bi bi-check-lg'} aria-hidden="true" /> {nf.format(c.selected)}
             {selection.selectionLimit !== null && ` / ${nf.format(selection.selectionLimit)}`} Selected Photos
           </span>
         </div>

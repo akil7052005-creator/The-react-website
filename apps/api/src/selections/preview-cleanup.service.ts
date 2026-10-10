@@ -14,6 +14,8 @@ export const EXPIRED_GALLERY_GRACE_DAYS = 15
  * so nothing is deleted the moment it goes live.
  */
 export const PREVIEW_CLEANUP_START = '2026-10-10'
+/** Previews of a studio whose plan ended are kept this long, in case it renews. */
+export const ENDED_PLAN_GRACE_DAYS = 30
 /** Selections handled per run (the next run picks up the rest). */
 const BATCH = 20
 
@@ -26,7 +28,8 @@ export interface PreviewCleanupReport {
 /**
  * Deletes the previews and thumbnails of expired galleries 15 days after they expired: the photos'
  * rows, picks and activity stay (the studio still sees what was picked); only the online copies go.
- * A gallery the studio reopens (a new expiry date) before then keeps everything.
+ * A gallery the studio reopens (a new expiry date) before then keeps everything. Also: 30 days after
+ * a studio's plan ends (unless renewed), the previews of all its galleries.
  */
 @Injectable()
 export class PreviewCleanupService implements OnApplicationBootstrap, OnModuleDestroy {
@@ -72,15 +75,30 @@ export class PreviewCleanupService implements OnApplicationBootstrap, OnModuleDe
     return cut < new Date(toDate(PREVIEW_CLEANUP_START).getTime() + EXPIRED_GALLERY_GRACE_DAYS * DAY) ? null : cut
   }
 
+  /** The latest plan end whose studios are past the 30 days at `now` (never before the start date + 30 days). */
+  static planCutoff(now = new Date()) {
+    const cut = new Date(now.getTime() - ENDED_PLAN_GRACE_DAYS * DAY)
+    return cut < new Date(toDate(PREVIEW_CLEANUP_START).getTime() + ENDED_PLAN_GRACE_DAYS * DAY) ? null : cut
+  }
+
   async run(now = new Date()): Promise<PreviewCleanupReport> {
     const report: PreviewCleanupReport = { selections: 0, files: 0, bytes: 0 }
     const cutoff = PreviewCleanupService.cutoff(now)
-    if (!cutoff) return report
+    const planCutoff = PreviewCleanupService.planCutoff(now)
+    if (!cutoff && !planCutoff) return report
+    const hasPreviews = { some: { deletedAt: null, file: { deletedAt: null, mimeType: { startsWith: 'image/' } } } }
+    // Plans that ended (not renewed, not on a trial still running) more than 30 days ago.
+    const ended = planCutoff
+      ? await this.prisma.subscription.findMany({ where: { currentPeriodEnd: { lt: planCutoff }, status: { in: ['EXPIRED', 'CANCELLED', 'GRACE'] } }, select: { studioId: true } })
+      : []
     const due = await this.prisma.selection.findMany({
       where: {
         deletedAt: null,
-        deadline: { lt: cutoff, not: toDate(NO_EXPIRY_DATE) },
-        photos: { some: { deletedAt: null, file: { deletedAt: null, mimeType: { startsWith: 'image/' } } } },
+        photos: hasPreviews,
+        OR: [
+          ...(cutoff ? [{ deadline: { lt: cutoff, not: toDate(NO_EXPIRY_DATE) } }] : []),
+          ...(ended.length ? [{ studioId: { in: ended.map((e) => e.studioId) } }] : []),
+        ],
       },
       select: { id: true },
       take: BATCH,

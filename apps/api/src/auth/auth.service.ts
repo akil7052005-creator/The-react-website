@@ -6,6 +6,7 @@ import {
   WEBSITE_SECTION_KEYS,
   type MeDto,
 } from '@weddyzone/shared'
+import { quotaOf } from '@weddyzone/shared'
 import type { z } from 'zod'
 import type {
   changePasswordSchema,
@@ -28,7 +29,8 @@ import { PrismaService, type Tx } from '../prisma/prisma.service'
 import { decryptSecret, verifyTotp } from './totp'
 
 export const SIGNUP_BONUS_CREDITS = 50
-export const TRIAL_DAYS = 30
+/** Trial length when the Trial plan doesn't set trialDays. */
+export const TRIAL_DAYS = 14
 const BCRYPT_ROUNDS = 10
 // Compared against when the email is unknown, so response time does not reveal which emails exist.
 const DUMMY_HASH = bcrypt.hashSync('never-a-real-password', BCRYPT_ROUNDS)
@@ -105,6 +107,7 @@ export class AuthService {
         },
       })
       const starter = await this.plans.byCode('STARTER', tx)
+      const trialDays = quotaOf(starter.limits).trialDays ?? TRIAL_DAYS
       const now = new Date()
       const sub = await tx.subscription.create({
         data: {
@@ -114,10 +117,11 @@ export class AuthService {
           status: 'TRIAL',
           isTrial: true,
           currentPeriodStart: now,
-          currentPeriodEnd: new Date(now.getTime() + TRIAL_DAYS * 86_400_000),
+          currentPeriodEnd: new Date(now.getTime() + trialDays * 86_400_000),
+          usageAnchor: now,
         },
       })
-      await tx.subscriptionEvent.create({ data: { subscriptionId: sub.id, type: 'CREATED', toPlan: `${starter.name} (trial)`, note: `${TRIAL_DAYS}-day free trial` } })
+      await tx.subscriptionEvent.create({ data: { subscriptionId: sub.id, type: 'CREATED', toPlan: `${starter.name} (trial)`, note: `${trialDays}-day free trial` } })
       await tx.websiteSettings.create({
         data: {
           studioId: studio.id,

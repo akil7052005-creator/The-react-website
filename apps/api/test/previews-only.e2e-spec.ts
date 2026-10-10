@@ -142,7 +142,7 @@ describe('Previews-only uploads', () => {
     const s = (await A.agent.post('/api/v1/uploads/sign').send(m.body).expect(200)).body
     await put(s.preview.url, Buffer.concat([m.preview, Buffer.alloc(1024)])).expect(422)
     // The one-photo API route takes at most 2 MB per photo.
-    const tenMb = await sharp({ create: { width: 3000, height: 3000, channels: 3, noise: { type: 'gaussian', mean: 128, sigma: 60 } } }).png({ compressionLevel: 0 }).toBuffer()
+    const tenMb = await sharp({ create: { width: 3000, height: 3000, channels: 3, background: '#808080', noise: { type: 'gaussian', mean: 128, sigma: 60 } } }).png({ compressionLevel: 0 }).toBuffer()
     expect(tenMb.length).toBeGreaterThan(MAX_PREVIEW_BYTES)
     const refused = await A.agent.post(`/api/v1/selections/${id}/photos`).attach('file', tenMb, 'huge.png')
     expect([413, 422]).toContain(refused.status)

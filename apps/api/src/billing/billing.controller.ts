@@ -92,6 +92,19 @@ export class PlansController {
   resume(@StudioId() studioId: string) {
     return this.subs.resume(studioId)
   }
+
+  /** The dashboard meter: events and uploads used in this 30-day window, and when it resets. */
+  @Get('me/usage')
+  usage(@StudioId() studioId: string) {
+    return this.subs.usageMeter(studioId)
+  }
+
+  /** "+5 events" for the current 30-day window (Pro). */
+  @Post('subscription/addon-events')
+  @HttpCode(200)
+  addonEvents(@StudioId() studioId: string) {
+    return this.subs.buyEventAddon(studioId)
+  }
 }
 
 const messageQuery = listQuerySchema.extend({

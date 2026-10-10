@@ -109,6 +109,17 @@ export const planLimitsSchema = z.object({
   maxPhotoMb: z.number().int().min(1, 'At least 1 MB').max(100, 'At most 100 MB').optional(),
   maxFilesPerUpload: z.number().int().min(1).max(10_000, 'At most 10,000').optional(),
   uploadConcurrency: z.number().int().min(1).max(8, 'At most 8').optional(),
+  // Trial / Pro / VIP quota (see plans.ts). null = no limit.
+  eventsTotal: z.number().int().min(0).nullable().optional(),
+  fairUseEventsPerMonth: z.number().int().min(0).nullable().optional(),
+  photosPerEvent: z.number().int().min(1).nullable().optional(),
+  uploadGbPerMonth: z.number().min(0).nullable().optional(),
+  uploadGbTotal: z.number().min(0).nullable().optional(),
+  trialDays: z.number().int().min(1).max(365).nullable().optional(),
+  galleryDays: z.number().int().min(1).max(365).nullable().optional(),
+  addonEvents: z.number().int().min(1).nullable().optional(),
+  addonEventsPricePaise: z.number().int().min(0).nullable().optional(),
+  favourites: z.boolean().optional(),
 })
 export type PlanLimits = z.output<typeof planLimitsSchema>
 
@@ -116,7 +127,10 @@ export const updatePlanSchema = z.object({
   name: requiredText('Plan name', 40),
   tagline: requiredText('Tagline', 80),
   monthlyPrice: amountSchema.nullable(),
-  yearlyPrice: amountSchema,
+  /** null for a free plan (Trial). */
+  yearlyPrice: amountSchema.nullable(),
+  /** Price of each billing period (rupees → paise like the others); null = not offered. */
+  prices: z.object({ MONTHLY: amountSchema.nullable(), QUARTERLY: amountSchema.nullable(), HALF_YEARLY: amountSchema.nullable(), YEARLY: amountSchema.nullable() }).partial().optional(),
   limits: planLimitsSchema,
   features: z.array(z.string().trim().min(1).max(80)).min(1).max(20),
   // Must be features of this plan; shown with a "Coming soon" tag instead of a check mark.

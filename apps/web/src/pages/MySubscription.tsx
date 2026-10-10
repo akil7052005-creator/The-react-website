@@ -1,4 +1,5 @@
-import { SUBSCRIPTION_STATUS_LABELS, type UsageItem } from '@weddyzone/shared'
+import { CYCLE_LABELS, SUBSCRIPTION_STATUS_LABELS, type UsageItem } from '@weddyzone/shared'
+import { UsageMeter } from '../components/UsageMeter'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { CancelPlanDialog, PlanBanner } from '../components/PlanBanner'
@@ -50,7 +51,7 @@ function MySubscription() {
 
   const { subscription: sub, usage, recentPayments } = q.data
   const plan = sub.plan
-  const yearly = sub.cycle === 'YEARLY'
+  const period = CYCLE_LABELS[sub.cycle]
   const ended = sub.readOnly
   const dateText = (iso: string) => <strong>{formatDate(iso)}</strong>
 
@@ -63,6 +64,7 @@ function MySubscription() {
         subtitle="Manage your current tier, track real-time quota usage, and review billing statements."
       />
       <PlanBanner always />
+      <UsageMeter />
 
       <div className="grid grid-1-2">
         <div className="lux lux-catchy">
@@ -75,7 +77,7 @@ function MySubscription() {
           </h2>
           <p className="big-number">
             {sub.isTrial ? formatMoney(0) : formatMoney(sub.pricePaise)}
-            <small style={{ fontSize: 16, fontWeight: 500, opacity: 0.8 }}> / {yearly ? 'year' : 'month'}</small>
+            <small style={{ fontSize: 16, fontWeight: 500, opacity: 0.8 }}> / {period}</small>
           </p>
           <p style={{ marginTop: 10, color: 'rgba(255, 255, 255, 0.85)' }}>
             {sub.isTrial && !ended ? (
@@ -83,13 +85,13 @@ function MySubscription() {
             ) : ended ? (
               <>Ended on {dateText(sub.currentPeriodEnd)} · renew to add events and uploads again</>
             ) : sub.status === 'GRACE' ? (
-              <>Expired on {dateText(sub.currentPeriodEnd)} · full access until {sub.graceEndsAt ? dateText(sub.graceEndsAt) : 'the grace period ends'}</>
+              <>Expired on {dateText(sub.currentPeriodEnd)} · galleries view-only and uploads paused until {sub.graceEndsAt ? dateText(sub.graceEndsAt) : 'the grace period ends'}, then they close</>
             ) : sub.cancelAtPeriodEnd ? (
               <>Ends on {dateText(sub.currentPeriodEnd)} · then your studio becomes read-only</>
             ) : sub.autoRenew ? (
-              <>Renews automatically on {dateText(sub.currentPeriodEnd)} · Billed {yearly ? 'yearly' : 'monthly'}</>
+              <>Renews automatically on {dateText(sub.currentPeriodEnd)} · Billed every {period}</>
             ) : (
-              <>Expires on {dateText(sub.currentPeriodEnd)} · Billed {yearly ? 'yearly' : 'monthly'}</>
+              <>Expires on {dateText(sub.currentPeriodEnd)} · Billed every {period}</>
             )}
           </p>
           <div className="store-btns" style={{ marginTop: 20 }}>
@@ -97,7 +99,7 @@ function MySubscription() {
               <i className="bi bi-arrow-up-circle-fill" /> Upgrade Plan
             </Link>
             <Link to="/all-access" className="store-btn">
-              <i className="bi bi-stars" /> See All-Access
+              <i className="bi bi-stars" /> See VIP
             </Link>
           </div>
           {!sub.isTrial && !ended && (

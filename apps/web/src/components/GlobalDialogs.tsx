@@ -2,12 +2,15 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { ApiError } from '../lib/api'
 import { onGlobalError } from '../lib/query'
+import { usePlanActions } from '../lib/billing'
 import { Modal } from './Modal'
 
 const resourceLabel: Record<string, string> = {
-  events: 'events this month',
+  events: 'events',
   albums: 'digital albums',
-  storage: 'storage',
+  storage: 'GB of storage',
+  photos: 'photos in this event',
+  uploads: 'GB of uploads',
 }
 
 /** Upgrade (PLAN_LIMIT) and top-up (INSUFFICIENT_CREDITS) dialogs, opened by any API call. */
@@ -19,7 +22,8 @@ export function GlobalDialogs() {
   useEffect(() => onGlobalError('PLAN_LIMIT', setLimit), [])
   useEffect(() => onGlobalError('INSUFFICIENT_CREDITS', setCredits), [])
 
-  const details = (limit?.details ?? {}) as { resource?: string; limit?: number; used?: number }
+  const details = (limit?.details ?? {}) as { resource?: string; limit?: number; used?: number; addon?: { events: number; pricePaise: number } | null }
+  const { buyAddon } = usePlanActions()
   const creditDetails = (credits?.details ?? {}) as { needed?: number; balance?: number }
 
   return (
@@ -36,14 +40,28 @@ export function GlobalDialogs() {
             <button className="btn btn-ghost" onClick={() => setLimit(null)}>
               Not now
             </button>
+            {details.addon && (
+              <button
+                className="btn btn-ghost"
+                data-testid="limit-buy-addon"
+                onClick={() => {
+                  const addon = details.addon!
+                  setLimit(null)
+                  void buyAddon(addon)
+                }}
+              >
+                <i className="bi bi-plus-circle" /> Buy +{details.addon.events} events
+              </button>
+            )}
             <button
               className="btn btn-primary"
+              data-testid="limit-upgrade"
               onClick={() => {
                 setLimit(null)
                 navigate('/subscriptions')
               }}
             >
-              <i className="bi bi-arrow-up-circle-fill" /> See plans
+              <i className="bi bi-arrow-up-circle-fill" /> Upgrade
             </button>
           </>
         }

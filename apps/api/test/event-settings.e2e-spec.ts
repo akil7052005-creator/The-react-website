@@ -24,7 +24,8 @@ describe('Photo Selection settings (per event)', () => {
   beforeAll(async () => {
     ;({ app, prisma } = await createTestApp())
     await resetDb(prisma)
-    A = await signup(app)
+    // Pro: no video downloads, no favourites (both VIP).
+    A = await signup(app, { plan: 'PRO' })
     B = await signup(app)
     s = (await A.agent.post('/api/v1/selections/details').send({ customerName: 'Ravi Kumar', customerPhone: '98400 12345', eventName: 'birthday', quota: 5 }).expect(201)).body
     const folder = (await A.agent.post(`/api/v1/selections/${s.id}/folders`).send({ name: 'Pictures' }).expect(201)).body
@@ -41,13 +42,14 @@ describe('Photo Selection settings (per event)', () => {
       downloadOn: false,
       downloadAllFolder: false,
       instagramFollow: false,
-      favoriteOption: true,
+      // Favourites are VIP only: off (and locked) on Pro.
+      favoriteOption: false,
       photoNotes: false,
       galleryExpiry: 30,
       galleryExpiresOn: isoDaysFromToday(30),
       videoDownload: false,
       watermark: { logoUrl: null, position: 'bottom-right', sizePct: 20, spacingPct: 2, opacityPct: 80, enabled: false },
-      addons: { videoDownload: false },
+      addons: { videoDownload: false, favourites: false, galleryDaysMax: null },
     })
   })
 
@@ -70,8 +72,11 @@ describe('Photo Selection settings (per event)', () => {
     await patch({ galleryExpiry: 12 }).expect(400)
   })
 
-  it('add-on settings need the add-on', async () => {
+  it('add-on settings need the add-on; favourites need VIP', async () => {
     expectError((await patch({ videoDownload: true }).expect(402)).body, 'PLAN_LIMIT')
+    const fav = await patch({ favoriteOption: true }).expect(402)
+    expectError(fav.body, 'PLAN_LIMIT')
+    expect(fav.body.error.message).toBe('Customer favourites come with the VIP plan.')
   })
 
   it('watermark: logo (PNG or SVG, stored as PNG), layout, remove; previews are made again', async () => {

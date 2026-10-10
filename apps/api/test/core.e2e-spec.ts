@@ -73,16 +73,14 @@ describe('Phase 2 — clients, events, selections, albums, dashboard', () => {
       expect(list.body.data.find((e: { id: string }) => e.id === event.id)).toBeUndefined()
     })
 
-    it('enforces the Starter plan event limit with PLAN_LIMIT', async () => {
-      const C = await signup(app)
+    it('bookings are not capped by the plan (its event limit counts customer photo selections)', async () => {
+      const C = await signup(app, { plan: 'trial' })
       const client = (await newClient(C)).body
-      for (let i = 0; i < 10; i++) await newEvent(C, client.id)
-      const res = await C.agent
+      for (let i = 0; i < 3; i++) await newEvent(C, client.id)
+      await C.agent
         .post('/api/v1/events')
-        .send({ clientId: client.id, title: 'One too many', type: 'WEDDING', date: isoDaysFromToday(3), venue: 'Hall', city: 'Chennai' })
-        .expect(402)
-      expectError(res.body, 'PLAN_LIMIT')
-      expect(res.body.error.details).toMatchObject({ resource: 'events', limit: 10, used: 10, plan: 'STARTER' })
+        .send({ clientId: client.id, title: 'Another booking', type: 'WEDDING', date: isoDaysFromToday(3), venue: 'Hall', city: 'Chennai' })
+        .expect(201)
     })
   })
 

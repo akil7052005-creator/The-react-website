@@ -340,7 +340,16 @@ export default function SelectionSettings() {
 
         <Section icon="sliders" title="Client options">
           <div className="ss-pills">
-            <SwitchPill label="Favorite Option" checked={data.favoriteOption} onChange={(v) => toggle('favoriteOption', v)} testId="favoriteOption" />
+            {data.addons.favourites ? (
+              <SwitchPill label="Favorite Option" checked={data.favoriteOption} onChange={(v) => toggle('favoriteOption', v)} testId="favoriteOption" />
+            ) : (
+              <Link to="/all-access" className="ss-pill is-locked" title="Customer favourites come with the VIP plan" data-testid="favoriteOption-locked">
+                <span>
+                  Favorite Option <span className="ss-vip">VIP</span>
+                </span>
+                <i className="bi bi-lock-fill" aria-label="Locked: VIP only" />
+              </Link>
+            )}
             <SwitchPill label="Photo Notes" checked={data.photoNotes} onChange={(v) => toggle('photoNotes', v)} testId="photoNotes" />
             <label className="ss-pill">
               <span>Gallery Expiry</span>
@@ -355,7 +364,7 @@ export default function SelectionSettings() {
                   void save({ galleryExpiry: v }, { galleryExpiry: v })
                 }}
               >
-                {GALLERY_EXPIRY_OPTIONS.map((d) => (
+                {GALLERY_EXPIRY_OPTIONS.filter((d) => data.addons.galleryDaysMax === null || (d !== null && d <= data.addons.galleryDaysMax)).map((d) => (
                   <option key={String(d)} value={d === null ? 'none' : String(d)}>
                     {d === null ? 'No expiry' : `${d} days`}
                   </option>

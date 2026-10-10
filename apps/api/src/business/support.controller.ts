@@ -308,8 +308,13 @@ export class AdminController {
       data: {
         name: body.name,
         tagline: body.tagline,
-        monthlyPrice: body.monthlyPrice === null ? null : toPaise(body.monthlyPrice),
-        yearlyPrice: toPaise(body.yearlyPrice),
+        // Prices per billing period (1, 3, 6, 12 months); the monthly and yearly columns follow them.
+        ...(() => {
+          const p = body.prices ?? {}
+          const paise = (v: number | null | undefined) => (v === null || v === undefined ? null : toPaise(v))
+          const prices = { MONTHLY: paise(p.MONTHLY ?? body.monthlyPrice), QUARTERLY: paise(p.QUARTERLY), HALF_YEARLY: paise(p.HALF_YEARLY), YEARLY: paise(p.YEARLY ?? body.yearlyPrice) }
+          return { prices, monthlyPrice: prices.MONTHLY, yearlyPrice: prices.YEARLY ?? 0 }
+        })(),
         limits: body.limits,
         features: body.features,
         comingSoon: body.comingSoon,

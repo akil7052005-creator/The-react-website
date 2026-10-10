@@ -19,6 +19,7 @@ import { AppError, badRequest, fileInvalid } from '../common/errors'
 import { zod } from '../common/zod'
 import { config } from '../config'
 import { previewKey, readLocalUploadToken, StorageService, thumbKey } from '../infra/storage.service'
+import { UsageService } from '../core/usage.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { PhotoPreviewService } from './previews.service'
 import { SelectionsService } from './selections.service'
@@ -50,6 +51,7 @@ export class UploadsService {
     private readonly selections: SelectionsService,
     private readonly limits: UploadLimitsService,
     private readonly previews: PhotoPreviewService,
+    private readonly usage: UsageService,
   ) {}
 
   /** The selection, writable, on a plan that may upload. */
@@ -79,6 +81,7 @@ export class UploadsService {
     await this.checkFolder(s.id, b.folderId)
     const dup = await this.duplicateOf(s.id, b)
     if (dup) return { duplicate: true, photoId: dup.id }
+    await this.usage.assertCanUpload(studioId, s.id, b.originalSize)
     const photoId = b.photoId ?? randomUUID()
     // A resumed upload may ask again for a photo that was completed meanwhile.
     const done = await this.prisma.photo.findFirst({ where: { id: photoId }, select: { id: true, selectionId: true } })
@@ -124,6 +127,7 @@ export class UploadsService {
         await tx.$queryRaw`SELECT id FROM selections WHERE id = ${s.id}::uuid FOR UPDATE`
         const dup = await tx.photo.findFirst({ where: { selectionId: s.id, deletedAt: null, sha256: b.sha256, relativePath: b.relativePath }, select: { id: true } })
         if (dup) return { id: dup.id, existing: true, orphan: true }
+        await this.usage.assertCanUpload(studioId, s.id, b.originalSize, tx)
         const last = await tx.photo.findFirst({ where: { selectionId: s.id }, orderBy: { position: 'desc' } })
         const folderId = await this.selections.resolveFolder(tx, s.id, 'photo', b.folderId, folder)
         const name = b.originalName.slice(0, 200)

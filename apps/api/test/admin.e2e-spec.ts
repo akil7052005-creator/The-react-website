@@ -105,8 +105,10 @@ describe('Platform admin area', () => {
     it('lists every plan, hidden ones included, with its coming-soon features', async () => {
       await prisma.plan.update({ where: { code: 'PRO' }, data: { isActive: false } })
       const res = await admin.get('/api/v1/admin/plans').expect(200)
-      expect(res.body.map((p: { code: string }) => p.code)).toEqual(['STARTER', 'PRO', 'STUDIO', 'ALL_ACCESS'])
-      expect(res.body.find((p: { code: string }) => p.code === 'PRO')).toMatchObject({ isActive: false, comingSoon: ['Custom domain'] })
+      // Trial, Pro, VIP, then the retired (hidden) Studio plan.
+      expect(res.body.map((p: { code: string }) => p.code)).toEqual(['STARTER', 'PRO', 'ALL_ACCESS', 'STUDIO'])
+      expect(res.body.find((p: { code: string }) => p.code === 'PRO')).toMatchObject({ isActive: false, comingSoon: [] })
+      expect(res.body.find((p: { code: string }) => p.code === 'STUDIO')).toMatchObject({ isActive: false })
       const studioView = await studio.agent.get('/api/v1/plans').expect(200)
       expect(studioView.body.map((p: { code: string }) => p.code)).not.toContain('PRO')
       await prisma.plan.update({ where: { code: 'PRO' }, data: { isActive: true } })

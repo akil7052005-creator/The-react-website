@@ -26,7 +26,7 @@ export default function Signup() {
     mutationFn: (body: object) => api.post<MeDto>('/auth/signup', body),
     onSuccess: (me) => {
       qc.setQueryData(ME_KEY, me)
-      toast.success(`Welcome to Weddyzone, ${me.user.name.split(' ')[0]}! Your 30-day Starter trial has begun.`)
+      toast.success(`Welcome to Weddyzone, ${me.user.name.split(' ')[0]}! Your 14-day free trial has begun.`)
       navigate('/', { replace: true })
     },
     onError: (e) => applyApiErrors(form, e),

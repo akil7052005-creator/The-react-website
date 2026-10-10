@@ -331,6 +331,8 @@ export interface PlanDto {
   tagline: string
   monthlyPricePaise: number | null
   yearlyPricePaise: number
+  /** Price of each billing period (1, 3, 6, 12 months) in paise, GST extra; null = not offered. */
+  prices: Record<BillingCycle, number | null>
   limits: PlanLimits
   features: string[]
   /** Features on this plan that are not built yet ("Coming soon" instead of a check mark). */
@@ -388,7 +390,7 @@ export interface UsageItem {
 
 export interface PaymentDto {
   id: string
-  purpose: 'SUBSCRIPTION' | 'CREDIT_PACK'
+  purpose: 'SUBSCRIPTION' | 'CREDIT_PACK' | 'EVENT_ADDON'
   description: string
   /** Total charged, GST included. */
   amountPaise: number

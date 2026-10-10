@@ -74,7 +74,7 @@ export function durationText(ms: number): string {
 
 /** "Pro · Monthly", "Starter trial · Monthly". */
 export function planCycle(r: Pick<AdminSubscriptionRowDto, 'plan' | 'cycle' | 'isTrial'>): string {
-  return `${r.plan.name}${r.isTrial ? ' trial' : ''} · ${r.cycle === 'YEARLY' ? 'Yearly' : 'Monthly'}`
+  return `${r.plan.name}${r.isTrial ? ' trial' : ''} · ${({ MONTHLY: 'Monthly', QUARTERLY: '3 months', HALF_YEARLY: '6 months', YEARLY: 'Yearly' } as Record<string, string>)[r.cycle] ?? 'Monthly'}`
 }
 
 type DaysLeftRow = Pick<AdminSubscriptionRowDto, 'daysLeft' | 'tone' | 'status'>
