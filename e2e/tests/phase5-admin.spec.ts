@@ -76,11 +76,11 @@ test('an admin edits a plan and studios see it on the pricing page', async ({ pa
   const tagline = `For new photographers ${uniqueTag()}`
   await login(page, ADMIN.email, ADMIN.password)
   await page.goto('/admin/plans')
-  await page.getByRole('button', { name: 'Edit Starter' }).click()
-  const form = page.getByRole('dialog', { name: 'Edit Starter' })
+  await page.getByRole('button', { name: 'Edit Trial' }).click()
+  const form = page.getByRole('dialog', { name: 'Edit Trial' })
   await form.getByLabel('Tagline').fill(tagline)
   await form.getByRole('button', { name: 'Save plan' }).click()
-  await expect(page.getByText('Starter saved')).toBeVisible()
+  await expect(page.getByText('Trial saved')).toBeVisible()
 
   const studio = await studioPage(browser)
   await studio.goto('/subscriptions')

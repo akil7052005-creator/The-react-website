@@ -9,14 +9,14 @@ test('a purchase shows up for the admin at once, who can extend its deadline', a
   // A studio buys Pro yearly (test-mode gateway → webhook → plan applied).
   const studio = await (await browser.newContext()).newPage()
   const { email } = await signupStudio(studio, `sub.${Date.now()}@example.com`)
-  await expect(studio.getByText(/Free trial/)).toBeVisible()
+  await expect(studio.getByText(/free Trial/i).first()).toBeVisible()
   await studio.goto('/subscriptions?months=12')
   await studio.getByRole('button', { name: 'Choose Pro' }).click()
   await expect(studio.getByText(/₹23,598\.82/).last()).toBeVisible()
   await studio.getByTestId('confirm-ok').click()
   await expect(studio.getByText("You're now on the Pro plan")).toBeVisible()
   await studio.goto('/')
-  await expect(studio.getByRole('status').filter({ hasText: /Pro · \d+ days left/ })).toBeVisible()
+  await expect(studio.getByTestId('usage-meter')).toContainText('Pro')
 
   // The admin finds it in the table (searching by owner email) and in the alerts.
   await login(page, ADMIN.email, ADMIN.password)

@@ -34,9 +34,9 @@ test('public site: home, about, pricing with period switch; menu and footer; no 
 test('login: email or phone field, show/hide password, forgot password, start free trial', async ({ page }) => {
   await page.goto('/login')
   await expect(page.getByLabel('Email or mobile number')).toBeVisible()
-  await page.getByLabel('Password').fill('secret12')
+  await page.getByRole('textbox', { name: 'Password', exact: true }).fill('secret12')
   await page.getByRole('button', { name: 'Show password' }).click()
-  await expect(page.getByLabel('Password')).toHaveAttribute('type', 'text')
+  await expect(page.getByRole('textbox', { name: 'Password', exact: true })).toHaveAttribute('type', 'text')
   await expect(page.getByRole('link', { name: 'Forgot password?' })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Start free trial' })).toHaveAttribute('href', '/signup')
   await page.getByLabel('Email or mobile number').fill('12345')

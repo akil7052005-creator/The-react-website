@@ -14,7 +14,7 @@ test('deep links redirect to login, then back after logging in', async ({ page }
 test('login shows inline errors for bad input and wrong password', async ({ page }) => {
   await page.goto('/login')
   await page.getByRole('button', { name: 'Log in' }).click()
-  await expect(page.getByText('Email is required')).toBeVisible()
+  await expect(page.getByText('Enter your email or mobile number')).toBeVisible()
   await page.getByRole('textbox', { name: 'Email' }).fill(DEMO.email)
   await page.getByRole('textbox', { name: 'Password', exact: true }).fill('WrongPass1')
   await page.getByRole('button', { name: 'Log in' }).click()

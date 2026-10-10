@@ -81,7 +81,7 @@ test('upgrade to VIP yearly, then cancel and resume', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Active Studio Plan' })).toBeDisabled()
 
   await page.goto('/my-subscription')
-  await expect(page.getByRole('heading', { name: /VIP Plan/ })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /VIP Studio Plan/ })).toBeVisible()
   await page.getByRole('button', { name: 'Cancel plan' }).click()
   const dialog = page.getByRole('dialog', { name: /Cancel your VIP plan/ })
   await dialog.getByRole('button', { name: 'Cancel plan' }).click()

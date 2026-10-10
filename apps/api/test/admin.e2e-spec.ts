@@ -38,7 +38,7 @@ describe('Platform admin area', () => {
     await resetDb(prisma)
     studio = await signup(app)
     const created = await createAdmin(prisma, { email: 'Ops@Wedmanage.test', name: 'Priya Ops' })
-    adminId = (await prisma.user.findUniqueOrThrow({ where: { email: 'ops@weddyzone.test' } })).id
+    adminId = (await prisma.user.findUniqueOrThrow({ where: { email: 'ops@wedmanage.test' } })).id
     admin = request.agent(app.getHttpServer())
     adminLogin = await admin.post('/api/v1/auth/login').send({ email: created.email, password: created.password }).expect(200)
   })
@@ -48,12 +48,12 @@ describe('Platform admin area', () => {
 
   describe('security', () => {
     it('creates admins with a strong random password, never a studio', async () => {
-      expect(adminLogin.body.user).toMatchObject({ role: 'SUPER_ADMIN', email: 'ops@weddyzone.test' })
+      expect(adminLogin.body.user).toMatchObject({ role: 'SUPER_ADMIN', email: 'ops@wedmanage.test' })
       expect(adminLogin.body.studio).toBeNull()
       const again = await createAdmin(prisma, { email: 'second@weddyzone.test', name: 'Second Admin' })
       expect(again.password).toMatch(/^[A-Za-z0-9_-]{24}$/)
       await expect(createAdmin(prisma, { email: studio.email, name: 'Hijack' })).rejects.toThrow(/studio account/)
-      await expect(createAdmin(prisma, { email: 'ops@weddyzone.test', name: 'Priya Ops' })).rejects.toThrow(/already an admin/)
+      await expect(createAdmin(prisma, { email: 'ops@wedmanage.test', name: 'Priya Ops' })).rejects.toThrow(/already an admin/)
       await expect(createAdmin(prisma, { email: 'nobody@weddyzone.test' })).rejects.toThrow(/--name/)
     })
 
@@ -79,7 +79,7 @@ describe('Platform admin area', () => {
 
     it('records every admin sign-in', async () => {
       const logins = await auditFor('auth.login')
-      expect(logins.some((l) => l.actorUserId === adminId && l.summary.includes('ops@weddyzone.test'))).toBe(true)
+      expect(logins.some((l) => l.actorUserId === adminId && l.summary.includes('ops@wedmanage.test'))).toBe(true)
       // Studio sign-ins are not admin actions.
       expect(logins.every((l) => !l.summary.includes(studio.email))).toBe(true)
     })

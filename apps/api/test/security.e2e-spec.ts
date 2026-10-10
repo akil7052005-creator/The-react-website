@@ -36,6 +36,8 @@ describe('Security — auth on every route, tenant isolation, public tokens', ()
     const isPublic = (path: string) =>
       path.startsWith('/api/v1/public/') ||
       path === '/api/v1/health' ||
+      // The website's Plans & Pricing page lists the plans before sign-up.
+      path === '/api/v1/plans' ||
       // Called by the payment gateway, authenticated by its HMAC signature instead of a session.
       path === '/api/v1/webhooks/payments' ||
       // Local storage's stand-in for the bucket's signed PUT: authorised by the signed token in the URL.
