@@ -83,15 +83,18 @@ export default function Login() {
   return (
     <AuthLayout
       title="Welcome back"
-      subtitle="Log in to manage your weddings, galleries and invoices."
+      subtitle="Log in to your studio."
       footer={
         <>
-          New to Weddyzone? <Link to="/signup" className="link">Create a studio account</Link>
+          New here?{' '}
+          <Link to="/signup" className="link">
+            Start free trial
+          </Link>
         </>
       }
     >
       <form method="post" onSubmit={form.handleSubmit((v) => login.mutate(v))} noValidate>
-        <TextField form={form} name="email" label="Email" type="email" autoComplete="email" required placeholder="you@studio.com" />
+        <TextField form={form} name="email" label="Email or mobile number" type="text" inputMode="email" autoComplete="username" required placeholder="you@studio.com or 98765 43210" />
         <PasswordField form={form} name="password" label="Password" autoComplete="current-password" />
         {needsOtp && (
           <TextField form={form} name="otp" label="Authenticator code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} required placeholder="6-digit code" autoFocus />
@@ -101,8 +104,8 @@ export default function Login() {
             Forgot password?
           </Link>
         </div>
-        <SubmitButton busy={login.isPending} className="btn btn-primary btn-block btn-lg" icon="box-arrow-in-right">
-          Log in
+        <SubmitButton busy={login.isPending} className="btn btn-primary btn-block btn-lg">
+          {login.isPending ? 'Logging in…' : 'Log in →'}
         </SubmitButton>
       </form>
     </AuthLayout>

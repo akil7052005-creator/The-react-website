@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import heroJpg from '../../assets/login-hero.jpg'
 import heroWebp from '../../assets/login-hero.webp'
 import { FieldShell } from '../../components/form/form'
+import { APP_NAME } from '../../lib/brand'
 
 export function AuthLayout({ title, subtitle, children, footer }: { title: string; subtitle: ReactNode; children: ReactNode; footer?: ReactNode }) {
   return (
@@ -24,27 +25,27 @@ export function AuthLayout({ title, subtitle, children, footer }: { title: strin
         <Link to="/" className="brand">
           <span className="brand-mark">W</span>
           <div className="brand-info">
-            <span className="brand-name">Weddyzone</span>
-            <span className="brand-sub">Studio OS</span>
+            <span className="brand-name">{APP_NAME}</span>
+            <span className="brand-sub">Studio</span>
           </div>
         </Link>
         <div className="auth-panel-copy">
           <h2>
-            Every wedding, <em>beautifully</em> organised.
+            The couple picks. <em>You deliver.</em>
           </h2>
-          <p>Client selections, flipbook albums, GST invoices and your portfolio website — in one studio workspace.</p>
+          <p>Upload a wedding, share it on WhatsApp and get the couple's photo picks back.</p>
           <ul className="checklist auth-features">
             <li>
-              <i className="bi bi-check-circle-fill" /> Private selection links with quota lock
+              <i className="bi bi-check-circle-fill" /> Originals stay on your computer
             </li>
             <li>
-              <i className="bi bi-check-circle-fill" /> Flipbook albums with client feedback
+              <i className="bi bi-check-circle-fill" /> Couples pick on their phone, no app needed
             </li>
             <li>
-              <i className="bi bi-check-circle-fill" /> GST-ready invoices with CGST/SGST/IGST
+              <i className="bi bi-check-circle-fill" /> Copy the selected originals in one click
             </li>
           </ul>
-          <p className="auth-panel-foot">© {new Date().getFullYear()} Weddyzone Studio</p>
+          <p className="auth-panel-foot">© {new Date().getFullYear()} {APP_NAME}</p>
         </div>
       </aside>
       <main className="auth-main">

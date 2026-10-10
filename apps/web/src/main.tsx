@@ -1,7 +1,7 @@
 import { lazy, StrictMode, Suspense, type ComponentType } from 'react'
 import { createRoot } from 'react-dom/client'
 import { QueryClientProvider } from '@tanstack/react-query'
-import { createBrowserRouter, Navigate, Outlet, RouterProvider, type RouteObject } from 'react-router-dom'
+import { createBrowserRouter, Navigate, Outlet, RouterProvider, useLocation, type RouteObject } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import './index.css'
 import './styles/tokens.css'
@@ -15,9 +15,10 @@ import './styles/client-portal.css'
 import './styles/selection-flow.css'
 import './styles/selection-list.css'
 import './styles/dashboard-layout.css'
+import './styles/public-site.css'
 import { queryClient } from './lib/query'
 import { features } from './lib/env'
-import { RedirectIfAuthed, RequireAdmin, RequireAuth } from './auth/AuthProvider'
+import { RedirectIfAuthed, RequireAdmin, RequireAuth, useMeQuery } from './auth/AuthProvider'
 import { ConfirmProvider } from './components/Modal'
 import { PageSkeleton } from './components/ui'
 import AppLayout from './layout/AppLayout'
@@ -58,6 +59,9 @@ const ClientSelected = page(() => import('./pages/public/client/ClientSelected')
 const SelectVerify = page(() => import('./pages/public/client/SelectVerify'))
 const InvoicePrint = page(() => import('./pages/InvoicePrint'))
 const PublicSite = page(() => import('./pages/public/PublicSite'))
+const Home = page(() => import('./pages/public/site/Home'))
+const About = page(() => import('./pages/public/site/About'))
+const Pricing = page(() => import('./pages/public/site/Pricing'))
 const AdminTickets = page(() => import('./pages/admin/AdminTickets'))
 const AdminFaqs = page(() => import('./pages/admin/AdminFaqs'))
 const AdminPlans = page(() => import('./pages/admin/AdminPlans'))
@@ -78,6 +82,21 @@ function Root() {
         <Outlet />
       </Suspense>
     </ConfirmProvider>
+  )
+}
+
+/** "/": the public home page for visitors; logged-in studios get their dashboard (and the app under it). */
+function HomeOrStudio() {
+  const me = useMeQuery()
+  const { pathname } = useLocation()
+  if (pathname === '/') {
+    if (me.isPending) return <PageSkeleton />
+    if (me.isError) return <Home />
+  }
+  return (
+    <RequireAuth>
+      <AppLayout />
+    </RequireAuth>
   )
 }
 
@@ -113,6 +132,9 @@ const router = createBrowserRouter([
     children: [
       // Login handles an existing session itself (shows who is logged in, offers to switch account).
       { path: '/login', element: <Login /> },
+      // Public website.
+      { path: '/about', element: <About /> },
+      { path: '/pricing', element: <Pricing /> },
       { path: '/signup', element: <RedirectIfAuthed><Signup /></RedirectIfAuthed> },
       { path: '/forgot-password', element: <ForgotPassword /> },
       { path: '/reset-password', element: <ResetPassword /> },
@@ -175,11 +197,7 @@ const router = createBrowserRouter([
       },
       {
         path: '/',
-        element: (
-          <RequireAuth>
-            <AppLayout />
-          </RequireAuth>
-        ),
+        element: <HomeOrStudio />,
         children: studioRoutes,
       },
     ],

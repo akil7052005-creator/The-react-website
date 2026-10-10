@@ -27,7 +27,10 @@ export default function Signup() {
     onSuccess: (me) => {
       qc.setQueryData(ME_KEY, me)
       toast.success(`Welcome to Weddyzone, ${me.user.name.split(' ')[0]}! Your 14-day free trial has begun.`)
-      navigate('/', { replace: true })
+      const plan = params.get('plan')
+      const months: Record<string, string> = { '1': 'MONTHLY', '3': 'QUARTERLY', '6': 'HALF_YEARLY', '12': 'YEARLY' }
+      const cycle = months[params.get('months') ?? ''] ?? 'MONTHLY'
+      navigate(plan === 'PRO' || plan === 'ALL_ACCESS' ? `/subscriptions?renew=${plan}&cycle=${cycle}` : '/', { replace: true })
     },
     onError: (e) => applyApiErrors(form, e),
   })
@@ -35,7 +38,7 @@ export default function Signup() {
   return (
     <AuthLayout
       title="Create your studio"
-      subtitle="Start a free 30-day trial. No card needed."
+      subtitle="Start your free 14-day trial. No card needed."
       footer={
         <>
           Already have an account? <Link to="/login" className="link">Log in</Link>
@@ -49,8 +52,8 @@ export default function Signup() {
         <TextField form={form} name="phone" label="Mobile number" type="tel" required autoComplete="tel" placeholder="98765 43210" hint="Indian mobile number — used for WhatsApp messages" />
         <PasswordField form={form} name="password" label="Password" autoComplete="new-password" hint="At least 8 characters, with a letter and a number" />
         <TextField form={form} name="referralCode" label="Referral code (optional)" placeholder="e.g. GOLDEN25" autoComplete="off" style={{ textTransform: 'uppercase' }} />
-        <SubmitButton busy={signup.isPending} className="btn btn-primary btn-block btn-lg" icon="stars">
-          Create studio
+        <SubmitButton busy={signup.isPending} className="btn btn-primary btn-block btn-lg">
+          Start free trial →
         </SubmitButton>
       </form>
     </AuthLayout>

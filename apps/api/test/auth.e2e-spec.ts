@@ -241,4 +241,11 @@ describe('Auth & profile', () => {
       expectError(res.body, 'VALIDATION_ERROR')
     })
   })
+
+  it('logs in with the mobile number instead of the email', async () => {
+    const s = await signup(app, { phone: '91234 56780', email: `phone.${Date.now()}@example.com` })
+    const res = await request(app.getHttpServer()).post('/api/v1/auth/login').send({ email: '+91 91234-56780', password: s.password }).expect(200)
+    expect(res.body.user.email).toBe(s.email)
+    await request(app.getHttpServer()).post('/api/v1/auth/login').send({ email: '12345', password: s.password }).expect(400)
+  })
 })

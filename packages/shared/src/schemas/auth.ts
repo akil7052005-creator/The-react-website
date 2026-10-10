@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { emailSchema, passwordSchema, phoneSchema, requiredText } from '../validators'
+import { emailSchema, normalizePhoneDigits, passwordSchema, PHONE_REGEX, phoneSchema, requiredText } from '../validators'
 
 export const referralCodeSchema = z
   .string()
@@ -20,8 +20,26 @@ export const signupSchema = z.object({
 })
 export type SignupInput = z.input<typeof signupSchema>
 
+/** Login with an email or an Indian mobile number (sent on as +91XXXXXXXXXX). */
+export const loginIdSchema = z
+  .string({ error: 'Enter your email or mobile number' })
+  .trim()
+  .min(1, 'Enter your email or mobile number')
+  .max(254)
+  .transform((v, ctx) => {
+    if (v.includes('@')) {
+      const r = emailSchema.safeParse(v)
+      if (r.success) return r.data
+    } else {
+      const d = normalizePhoneDigits(v)
+      if (PHONE_REGEX.test(d)) return `+91${d}`
+    }
+    ctx.addIssue({ code: 'custom', message: 'Enter a valid email or 10-digit mobile number' })
+    return z.NEVER
+  })
+
 export const loginSchema = z.object({
-  email: emailSchema,
+  email: loginIdSchema,
   password: z.string({ error: 'Password is required' }).min(1, 'Password is required').max(128),
   // Only for platform admins who turned on two-factor sign-in.
   otp: z

@@ -16,7 +16,7 @@ import {
   type PlatformInvoiceDto,
 } from '@weddyzone/shared'
 import { z } from 'zod'
-import { StudioId } from '../auth/auth.decorators'
+import { Public, StudioId } from '../auth/auth.decorators'
 import { notFound } from '../common/errors'
 import { paginate, skipTake, startOfMonthUtc } from '../common/util'
 import { ApiListQuery, ApiZodBody, zod } from '../common/zod'
@@ -36,6 +36,8 @@ export class PlansController {
     private readonly subs: SubscriptionsService,
   ) {}
 
+  // Public: the website's Plans & Pricing page shows them before sign-up.
+  @Public()
   @Get('plans')
   async list() {
     return (await this.plans.list()).map((p) => this.plans.toDto(p))

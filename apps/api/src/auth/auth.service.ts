@@ -155,7 +155,10 @@ export class AuthService {
   }
 
   async login(input: z.output<typeof loginSchema>): Promise<{ user: User; tokens: IssuedTokens }> {
-    const user = await this.prisma.user.findUnique({ where: { email: input.email } })
+    // The login id is an email, or a mobile number already normalised to +91XXXXXXXXXX.
+    const user = input.email.startsWith('+91')
+      ? await this.prisma.user.findFirst({ where: { phone: input.email }, orderBy: { createdAt: 'asc' } })
+      : await this.prisma.user.findUnique({ where: { email: input.email } })
     const ok = await bcrypt.compare(input.password, user?.passwordHash ?? DUMMY_HASH)
     if (!user || !ok) {
       throw new AppError(HttpStatus.UNAUTHORIZED, 'INVALID_CREDENTIALS', 'Incorrect email or password', {

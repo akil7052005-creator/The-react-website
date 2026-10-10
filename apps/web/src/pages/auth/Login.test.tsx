@@ -42,18 +42,18 @@ describe('Login form', () => {
     const api = fakeAuthApi({ loggedIn: false })
     renderPage(<Login />, '/login')
     await userEvent.click(await screen.findByRole('button', { name: /log in/i }))
-    expect(await screen.findByText('Email is required')).toBeInTheDocument()
+    expect(await screen.findByText('Enter your email or mobile number')).toBeInTheDocument()
     expect(screen.getByText('Password is required')).toBeInTheDocument()
-    expect(screen.getByRole('textbox', { name: 'Email' })).toHaveFocus()
+    expect(screen.getByRole('textbox', { name: 'Email or mobile number' })).toHaveFocus()
     expect(api.calls()).not.toContain('POST /api/v1/auth/login')
   })
 
   it('validates email on blur', async () => {
     fakeAuthApi({ loggedIn: false })
     renderPage(<Login />, '/login')
-    await userEvent.type(await screen.findByRole('textbox', { name: 'Email' }), 'nope')
+    await userEvent.type(await screen.findByRole('textbox', { name: 'Email or mobile number' }), 'nope')
     await userEvent.tab()
-    expect(await screen.findByText('Enter a valid email address')).toBeInTheDocument()
+    expect(await screen.findByText('Enter a valid email or 10-digit mobile number')).toBeInTheDocument()
   })
 
   it('maps API field errors onto the form', async () => {
@@ -63,7 +63,7 @@ describe('Login form', () => {
         json(401, { error: { code: 'INVALID_CREDENTIALS', message: 'Incorrect email or password', fields: { password: 'Incorrect email or password' } } }),
     })
     renderPage(<Login />, '/login')
-    await userEvent.type(await screen.findByRole('textbox', { name: 'Email' }), 'a@b.com')
+    await userEvent.type(await screen.findByRole('textbox', { name: 'Email or mobile number' }), 'a@b.com')
     await userEvent.type(screen.getByLabelText(/^Password/), 'Secret123')
     await userEvent.click(screen.getByRole('button', { name: /log in/i }))
     await waitFor(() => expect(document.querySelector('.field-error')?.textContent).toMatch(/Incorrect email or password/))
@@ -77,7 +77,7 @@ describe('Login page when already logged in', () => {
 
     expect(await screen.findByTestId('signed-in-notice')).toHaveTextContent("You're logged in as Arjun Mehta (hello@goldenhour.studio)")
     expect(screen.getByRole('link', { name: /Go to dashboard/ })).toHaveAttribute('href', '/')
-    expect(screen.queryByRole('textbox', { name: 'Email' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'Email or mobile number' })).not.toBeInTheDocument()
   })
 
   it('sends "Go to dashboard" back to the page the user came from', async () => {
@@ -98,7 +98,7 @@ describe('Login page when already logged in', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: /Log in with a different account/ }))
 
-    expect(await screen.findByRole('textbox', { name: 'Email' })).toHaveValue('')
+    expect(await screen.findByRole('textbox', { name: 'Email or mobile number' })).toHaveValue('')
     expect(screen.queryByTestId('signed-in-notice')).not.toBeInTheDocument()
     expect(api.state.loggedIn).toBe(false)
     expect(api.calls()).toContain('POST /api/v1/auth/logout')

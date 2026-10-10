@@ -49,8 +49,9 @@ test('log in, edit profile, reset, save, and log out', async ({ page }) => {
   await page.goto('/logout')
   await page.getByRole('button', { name: 'Sign out' }).click()
   await expect(page).toHaveURL(/\/login$/)
+  // Logged out, / is the public home page.
   await page.goto('/')
-  await expect(page).toHaveURL(/\/login/)
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('pick their photos')
 })
 
 test('sign up a new studio', async ({ page }) => {
@@ -60,7 +61,7 @@ test('sign up a new studio', async ({ page }) => {
   await page.getByRole('textbox', { name: 'Email' }).fill(`meena.${Date.now()}@example.com`)
   await page.getByLabel('Mobile number').fill('98400 11223')
   await page.getByRole('textbox', { name: 'Password', exact: true }).fill('Lotus2026')
-  await page.getByRole('button', { name: 'Create studio' }).click()
+  await page.getByRole('button', { name: 'Start free trial' }).click()
   await expect(page).toHaveURL(/\/$/)
   // Lands on the dashboard, on the Starter trial (plan tag in the sidebar): New Selection, the
   // highlights carousel, and an empty Recent Events list.
@@ -94,7 +95,7 @@ test('reset a forgotten password with the emailed link', async ({ page, context 
   await page.getByRole('textbox', { name: 'Email' }).fill(email)
   await page.getByLabel('Mobile number').fill('98400 22334')
   await page.getByRole('textbox', { name: 'Password', exact: true }).fill('Before2026')
-  await page.getByRole('button', { name: 'Create studio' }).click()
+  await page.getByRole('button', { name: 'Start free trial' }).click()
   await expect(page).toHaveURL(/\/$/)
   await context.clearCookies()
 
@@ -141,6 +142,7 @@ test('visiting /login while logged in offers the dashboard or a different accoun
   await expect(page.getByRole('textbox', { name: 'Email' })).toBeVisible()
   await expect(page.getByTestId('signed-in-notice')).toHaveCount(0)
   // The old session is really gone.
+  // Logged out, / is the public home page.
   await page.goto('/')
-  await expect(page).toHaveURL(/\/login/)
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('pick their photos')
 })
