@@ -83,6 +83,8 @@ export function UploadFoldersModal({
   /** An unfinished upload of this event, offered on opening. */
   const [saved, setSaved] = useState<SavedUpload | null>(null)
   const [resuming, setResuming] = useState<SavedUpload | null>(null)
+  /** The folder whose photo list is open (to remove single photos). */
+  const [openRow, setOpenRow] = useState<string | null>(null)
   const queue = useRef<UploadQueue | null>(null)
   const keySeq = useRef(0)
   const limitsQ = useQuery({ queryKey: UPLOAD_LIMITS_KEY, queryFn: () => api.get<UploadLimitsDto>('/me/upload-limits') })
@@ -154,8 +156,32 @@ export function UploadFoldersModal({
   }
   useImperativeHandle(ref, () => ({ pick }))
 
+  /** X on a folder: gone from the list at once, with "Undo" for 5 seconds. */
+  const removeRow = (key: string) => {
+    const at = rows.findIndex((x) => x.key === key)
+    if (at < 0) return
+    const row = rows[at]
+    setRows((cur) => cur.filter((x) => x.key !== key))
+    if (openRow === key) setOpenRow(null)
+    toast(`${row.name} removed`, {
+      id: `removed-${key}`,
+      duration: 5000,
+      action: { label: 'Undo', onClick: () => setRows((cur) => (cur.some((x) => x.key === key) ? cur : [...cur.slice(0, at), row, ...cur.slice(at)])) },
+    })
+  }
+  /** Takes one photo out of a folder before the upload; an emptied folder goes too. */
+  const removePhoto = (key: string, file: File) =>
+    setRows((cur) =>
+      cur.flatMap((r) => {
+        if (r.key !== key) return [r]
+        const files = r.files.filter((f) => f !== file)
+        return files.length ? [{ ...r, files, images: files.length }] : []
+      }),
+    )
+
   const reset = () => {
     setRows([])
+    setOpenRow(null)
     setRowProgress({})
     setProgress(null)
     setFinished(null)
@@ -421,6 +447,18 @@ export function UploadFoldersModal({
 
         <div className="uf-bar">
           <strong>Albums ({rows.length})</strong>
+          {rows.length > 0 && !busy && !Object.keys(rowProgress).length && (
+            <button
+              type="button"
+              className="uf-clear"
+              onClick={() => {
+                setRows([])
+                setOpenRow(null)
+              }}
+            >
+              Clear all
+            </button>
+          )}
           <button type="button" className="uf-add" onClick={pick} disabled={busy}>
             <i className="bi bi-images" /> Add Photo Folder
           </button>
@@ -429,7 +467,18 @@ export function UploadFoldersModal({
           {rows.map((r) => {
             const p = rowProgress[r.key]
             return (
-              <div key={r.key} className={`uf-row${p?.failed.length ? ' has-error' : ''}`}>
+              <div
+                key={r.key}
+                className={`uf-row uf-card${p?.failed.length ? ' has-error' : ''}`}
+                tabIndex={p ? undefined : 0}
+                aria-label={p ? undefined : `${r.name}, ${r.files.length} photos. Press Delete to remove`}
+                onKeyDown={(e) => {
+                  if (!p && !busy && e.target === e.currentTarget && (e.key === 'Delete' || e.key === 'Backspace')) {
+                    e.preventDefault()
+                    removeRow(r.key)
+                  }
+                }}
+              >
                 <div className="uf-row-main">
                   <i className="bi bi-folder-fill uf-folder" aria-hidden="true" />
                   <strong className="uf-name" title={r.name} aria-label={r.name}>
@@ -441,11 +490,28 @@ export function UploadFoldersModal({
                       {p.done === r.files.length ? <i className="bi bi-check-circle-fill" /> : null} {p.done}/{r.files.length}
                     </span>
                   ) : (
-                    <button type="button" className="uf-remove" onClick={() => setRows((cur) => cur.filter((x) => x.key !== r.key))} disabled={busy} aria-label={`Remove ${r.name}`}>
-                      ✖ Remove
+                    <button
+                      type="button"
+                      className="uf-toggle"
+                      onClick={() => setOpenRow((k) => (k === r.key ? null : r.key))}
+                      disabled={busy}
+                      aria-expanded={openRow === r.key}
+                      aria-label={`Show photos in ${r.name}`}
+                    >
+                      <i className={`bi bi-chevron-${openRow === r.key ? 'up' : 'down'}`} aria-hidden="true" />
                     </button>
                   )}
                 </div>
+                {!p && <RemoveX name={r.name} onRemove={() => removeRow(r.key)} disabled={busy} />}
+                {!p && openRow !== r.key && (
+                  <div className="uf-strip" aria-hidden="true">
+                    {r.files.slice(0, 6).map((f) => (
+                      <Thumb key={`${relativePathOf(f)}|${f.size}`} file={f} />
+                    ))}
+                    {r.files.length > 6 && <span className="uf-more">+{(r.files.length - 6).toLocaleString('en-IN')}</span>}
+                  </div>
+                )}
+                {!p && openRow === r.key && <PhotoGrid row={r} busy={busy} onRemove={(f) => removePhoto(r.key, f)} />}
                 {p && (
                   <div className="uf-track" role="progressbar" aria-valuenow={p.done} aria-valuemin={0} aria-valuemax={r.files.length} aria-label={`${r.name} upload`}>
                     <span style={{ width: `${(p.done / Math.max(1, r.files.length)) * 100}%` }} />
@@ -487,6 +553,74 @@ export function UploadFoldersModal({
           </button>
         </div>
       </Modal>
+    </>
+  )
+}
+
+/** The round X in a card's top-right corner (like closing a browser tab). */
+function RemoveX({ name, onRemove, disabled, small }: { name: string; onRemove: () => void; disabled?: boolean; small?: boolean }) {
+  return (
+    <button
+      type="button"
+      className={`uf-x${small ? ' sm' : ''}`}
+      onClick={(e) => {
+        e.stopPropagation()
+        onRemove()
+      }}
+      disabled={disabled}
+      aria-label={`Remove ${name}`}
+      title={`Remove ${name}`}
+    >
+      <i className="bi bi-x-lg" aria-hidden="true" />
+    </button>
+  )
+}
+
+/** A small preview of a picked photo, straight from the file (nothing is uploaded). */
+function Thumb({ file }: { file: File }) {
+  const [url, setUrl] = useState<string | null>(null)
+  useEffect(() => {
+    if (typeof URL.createObjectURL !== 'function') return
+    const u = URL.createObjectURL(file)
+    setUrl(u)
+    return () => URL.revokeObjectURL(u)
+  }, [file])
+  return url ? <img className="uf-thumb" src={url} alt="" loading="lazy" decoding="async" draggable={false} /> : <span className="uf-thumb" />
+}
+
+const GRID_STEP = 120
+
+/** An opened folder: its photos as thumbnails, each with an X (the Delete key works too). */
+function PhotoGrid({ row, busy, onRemove }: { row: FolderRow; busy: boolean; onRemove: (f: File) => void }) {
+  const [shown, setShown] = useState(GRID_STEP)
+  return (
+    <>
+      <ul className="uf-grid" aria-label={`Photos in ${row.name}`}>
+        {row.files.slice(0, shown).map((f) => (
+          <li
+            key={`${relativePathOf(f)}|${f.size}`}
+            className="uf-photo"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (!busy && e.target === e.currentTarget && (e.key === 'Delete' || e.key === 'Backspace')) {
+                e.preventDefault()
+                onRemove(f)
+              }
+            }}
+          >
+            <Thumb file={f} />
+            <span className="uf-photo-name" title={f.name}>
+              {f.name}
+            </span>
+            <RemoveX name={f.name} onRemove={() => onRemove(f)} disabled={busy} small />
+          </li>
+        ))}
+      </ul>
+      {row.files.length > shown && (
+        <button type="button" className="uf-clear" onClick={() => setShown((n) => n + GRID_STEP)}>
+          Show {Math.min(GRID_STEP, row.files.length - shown)} more of {row.files.length.toLocaleString('en-IN')}
+        </button>
+      )}
     </>
   )
 }
