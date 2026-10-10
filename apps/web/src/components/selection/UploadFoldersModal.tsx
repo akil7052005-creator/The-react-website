@@ -1,63 +1,50 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import type { EventSettings, SelectionFolderDto, UploadLimitsDto } from '@weddyzone/shared'
+import { ONLINE_BYTES_PER_PHOTO, type SelectionFolderDto, type UploadCompleteDto, type UploadLimitsDto, type UploadSign, type UploadSignDto } from '@weddyzone/shared'
 import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react'
+import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
-import { api, isApiError, upload } from '../../lib/api'
+import { api, isApiError } from '../../lib/api'
+import { fileUrl } from '../../lib/env'
 import { Modal } from '../Modal'
-import { withRetries } from '../photoUpload'
 import { Spinner } from '../ui'
-import { compressForUpload, formatBytes, type UploadCopy } from './compressForUpload'
-import { folderPathOf, groupInputFiles, isHeic, isRaw, mediaOf, rejectReason, targetsOf, toRow, type FolderRow, type PickedFolder } from './folderUpload'
-import { Undecodable } from './imageCompress'
+import { rejectReason, relativePathOf, scanInputFiles, targetsOf, toRow, type FolderRow, type PickedFolder, type SkippedFile } from './folderUpload'
 import { refreshSelection } from './selectionUi'
+import { copiesOf, stopCopyPool, uploadConcurrency } from './upload/copyPool'
+import { etaLabel, UploadQueue, type ItemResult, type QueueItem, type QueueProgress } from './upload/uploadQueue'
+import { fileKey, progressWriter, uploadStore, type SavedUpload } from './upload/uploadStore'
 
 export const UPLOAD_LIMITS_KEY = ['upload-limits'] as const
-/** Files sent at the same time. */
-const CONCURRENCY = 4
-const MB = 1024 * 1024
 
-interface Progress {
+/** "1.2 GB", "96 MB", "480 KB". */
+export function formatBytes(n: number) {
+  if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(1)} GB`
+  if (n >= 1024 ** 2) return `${Math.round(n / 1024 ** 2)} MB`
+  return `${Math.max(1, Math.round(n / 1024))} KB`
+}
+
+/** The reminder shown in the upload box and on the event page. */
+export const ORIGINALS_REMINDER = 'Originals are not stored online. Keep your original folder on this computer until delivery.'
+
+interface RowProgress {
   done: number
-  failed: { name: string; error: string; index: number }[]
-  /** Files that can't be uploaded at all (e.g. a RAW file without a readable preview). */
-  skipped: { name: string; reason: string }[]
-  state: 'ready' | 'uploading' | 'done' | 'error'
-  /** The event folders this picked folder goes into: photos and videos are kept apart. */
-  folderIds?: { photo?: string; video?: string }
+  uploaded: number
+  failed: { name: string; error: string }[]
+  skipped: SkippedFile[]
 }
+const emptyRow = (): RowProgress => ({ done: 0, uploaded: 0, failed: [], skipped: [] })
 
-const emptyProgress = (): Progress => ({ done: 0, failed: [], skipped: [], state: 'ready' })
-
-/** Thrown for a file to leave out (listed at the end), not retry. */
-class Skip extends Error {}
-
-/** SHA-256 (hex) of a file, so the server can verify the original arrived intact; null where the browser can't (plain http). */
-export async function sha256Hex(file: Blob): Promise<string | null> {
-  if (typeof crypto === 'undefined' || !crypto.subtle) return null
-  const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer())
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
-}
-
-/** The file to send for one picked file, and what to record about its original. */
-async function uploadCopyOf(original: File, compress: boolean): Promise<UploadCopy> {
-  const asIs: UploadCopy = { file: original, compressed: false, originalName: original.name, originalSize: original.size, originalWidth: null, originalHeight: null }
-  if (mediaOf(original.name) === 'video') return asIs
-  if (compress) {
-    try {
-      return await compressForUpload(original)
-    } catch (e) {
-      if (e instanceof Undecodable) throw new Skip(isRaw(original.name) ? 'No readable preview in this RAW file' : 'This photo could not be read')
-      throw e
-    }
+/** PUT to a signed link (storage, or the API itself without a bucket). Rejects with { status }. */
+async function putBlob(url: string, blob: Blob, headers: Record<string, string>) {
+  let res: Response
+  try {
+    res = await fetch(url.startsWith('http') ? url : fileUrl(url)!, { method: 'PUT', body: blob, headers })
+  } catch {
+    throw { status: 0, message: 'Network error' }
   }
-  // Original quality: browsers can't show RAW files, and HEIC becomes a full-size JPEG.
-  if (isRaw(original.name)) throw new Skip('RAW files upload only compressed — turn off “Upload original quality”')
-  if (!isHeic(original.name)) return asIs
-  const { default: heic2any } = await import('heic2any')
-  const out = await heic2any({ blob: original, toType: 'image/jpeg', quality: 0.92 })
-  const blob = Array.isArray(out) ? out[0] : out
-  return { ...asIs, file: new File([blob], original.name.replace(/\.(heic|heif)$/i, '.jpg'), { type: 'image/jpeg' }) }
+  if (!res.ok) throw { status: res.status, message: `Upload failed (${res.status})` }
 }
+
+const waitOnline = () => new Promise<void>((resolve) => window.addEventListener('online', () => resolve(), { once: true }))
 
 export interface UploadFoldersHandle {
   /** Opens the folder picker. Call it straight from the click that opens the dialog. */
@@ -66,11 +53,10 @@ export interface UploadFoldersHandle {
 
 /**
  * "Select Folders to Upload": pick a folder (its subfolders become albums), see each album with its
- * file count, then upload them into the event, 4 files at a time, with pause, resume and cancel.
- * Unless the event's "Upload original quality" is on, photos are compressed in the browser first
- * (1600 px JPEG, 80–85%) for the client, and each original is then kept in the cloud for the studio
- * (verified by SHA-256). Each photo keeps its original file name, size and folder path, so Download
- * Selected can return the originals (from the cloud, or from this computer).
+ * photo count and the size online, then upload. Each photo becomes a 2048 px preview and a 400 px
+ * thumbnail in the browser (Web Workers), uploaded straight to storage with signed links; the
+ * original never leaves this computer. Pause, resume, cancel; offline pauses on its own; a closed
+ * tab can resume (progress is kept in IndexedDB, the folder is picked again).
  */
 export function UploadFoldersModal({
   ref,
@@ -89,56 +75,69 @@ export function UploadFoldersModal({
   const qc = useQueryClient()
   const input = useRef<HTMLInputElement>(null)
   const [rows, setRows] = useState<FolderRow[]>([])
-  const [progress, setProgress] = useState<Record<string, Progress>>({})
+  const [rowProgress, setRowProgress] = useState<Record<string, RowProgress>>({})
+  const [progress, setProgress] = useState<QueueProgress | null>(null)
   const [busy, setBusy] = useState(false)
-  const [paused, setPaused] = useState(false)
+  const [finished, setFinished] = useState<{ uploaded: number; skipped: SkippedFile[]; failed: number } | null>(null)
+  const [stopped, setStopped] = useState<{ message: string; upgrade: boolean } | null>(null)
+  /** An unfinished upload of this event, offered on opening. */
+  const [saved, setSaved] = useState<SavedUpload | null>(null)
+  const [resuming, setResuming] = useState<SavedUpload | null>(null)
+  const queue = useRef<UploadQueue | null>(null)
   const keySeq = useRef(0)
-  // Pause holds the workers before their next file; cancel stops them taking any more.
-  const pauseGate = useRef<{ promise: Promise<void>; open: () => void } | null>(null)
-  const cancelled = useRef(false)
   const limitsQ = useQuery({ queryKey: UPLOAD_LIMITS_KEY, queryFn: () => api.get<UploadLimitsDto>('/me/upload-limits') })
-  const settingsKey = ['selection-settings', selectionId]
-  const settingsQ = useQuery({ queryKey: settingsKey, queryFn: () => api.get<EventSettings>(`/selections/${selectionId}/settings`) })
-  /** Compressed upload unless the event says "Upload original quality". */
-  const compressing = !settingsQ.data?.originalQuality
-  // Bytes of the originals sent so far, and of what was actually uploaded.
-  const [bytes, setBytes] = useState({ original: 0, sent: 0 })
 
-  // Leaving the page mid-upload would drop the photos not sent yet.
+  // An unfinished upload of this event? Offer to resume it.
+  useEffect(() => {
+    if (!open || busy) return
+    let live = true
+    void uploadStore.get(selectionId).then((u) => {
+      if (live) setSaved(u && u.done.length < u.total ? u : null)
+    })
+    return () => {
+      live = false
+    }
+  }, [open, selectionId, busy])
+
+  // Leaving the page mid-upload stops it (it can be resumed later).
   useEffect(() => {
     if (!busy) return
     const warn = (e: BeforeUnloadEvent) => e.preventDefault()
+    const online = () => queue.current?.setOnline(true)
+    const offline = () => queue.current?.setOnline(false)
     window.addEventListener('beforeunload', warn)
-    return () => window.removeEventListener('beforeunload', warn)
+    window.addEventListener('online', online)
+    window.addEventListener('offline', offline)
+    return () => {
+      window.removeEventListener('beforeunload', warn)
+      window.removeEventListener('online', online)
+      window.removeEventListener('offline', offline)
+    }
   }, [busy])
 
-  const addFolders = (picked: PickedFolder[]) => {
+  useEffect(() => () => stopCopyPool(), [])
+
+  const addFolders = (picked: PickedFolder[], resume: SavedUpload | null) => {
     const limits = limitsQ.data
     setRows((current) => {
       const next = [...current]
       for (const p of picked) {
-        let row = toRow(p, `f${++keySeq.current}`)
+        const row = toRow(p, `f${++keySeq.current}`)
+        // Resuming: the folders from the first attempt already exist in the event, and that's fine.
+        const existing = resume ? folders.filter((f) => !resume.folders.includes(f.name)).map((f) => f.name) : folders.map((f) => f.name)
         const reason = rejectReason(
           row,
           next.map((r) => r.name),
-          folders.map((f) => f.name),
+          existing,
         )
         if (reason) {
           toast.error(reason.message, { id: `reject-${row.name}`, description: reason.name })
           continue
         }
         if (limits) {
-          // Compressed photos end up far below the limit; only what is sent as it is can be too big.
-          const sentAsIs = (f: File) => !compressing || mediaOf(f.name) === 'video'
-          const tooBig = row.files.filter((f) => sentAsIs(f) && f.size > limits.maxPhotoMb * MB)
-          if (tooBig.length) {
-            toast.warning(`${tooBig.length} file${tooBig.length === 1 ? '' : 's'} in '${row.name}' over ${limits.maxPhotoMb} MB on your ${limits.planName} plan will be skipped`)
-            row = toRow({ name: row.name, files: row.files.filter((f) => !tooBig.includes(f)) }, row.key)
-            if (!row.files.length) continue
-          }
           const total = next.reduce((n, r) => n + r.files.length, 0) + row.files.length
           if (total > limits.maxFilesPerUpload) {
-            toast.error(`Your ${limits.planName} plan uploads up to ${limits.maxFilesPerUpload.toLocaleString('en-IN')} files at a time. Upload '${row.name}' separately.`)
+            toast.error(`Your ${limits.planName} plan uploads up to ${limits.maxFilesPerUpload.toLocaleString('en-IN')} photos at a time. Upload '${row.name}' separately.`)
             continue
           }
         }
@@ -157,182 +156,143 @@ export function UploadFoldersModal({
 
   const reset = () => {
     setRows([])
-    setProgress({})
-    setPaused(false)
-    setBytes({ original: 0, sent: 0 })
+    setRowProgress({})
+    setProgress(null)
+    setFinished(null)
+    setStopped(null)
+    setResuming(null)
   }
 
-  const pause = () => {
-    let open = () => {}
-    const promise = new Promise<void>((resolve) => (open = resolve))
-    pauseGate.current = { promise, open }
-    setPaused(true)
-  }
-  const resume = () => {
-    pauseGate.current?.open()
-    pauseGate.current = null
-    setPaused(false)
-  }
-  const cancel = () => {
-    cancelled.current = true
-    resume()
-  }
   const close = () => {
     if (busy) return
     reset()
     onClose()
   }
 
-  const patch = (key: string, p: Partial<Progress>) => setProgress((cur) => ({ ...cur, [key]: { ...(cur[key] ?? emptyProgress()), ...p } }))
+  /** The event folder for each picked folder: reused when it exists (resume), else created. */
+  const folderIds = async (list: FolderRow[]) => {
+    const ids: Record<string, string> = {}
+    const now = await api.get<SelectionFolderDto[]>(`/selections/${selectionId}/folders`).catch(() => folders)
+    for (const r of list) {
+      const target = targetsOf(r).find((t) => t.type === 'photo')
+      if (!target) continue
+      const found = now.find((f) => f.type === 'photo' && f.name.trim().toLowerCase() === target.name.trim().toLowerCase())
+      ids[r.key] = found ? found.id : (await api.post<SelectionFolderDto>(`/selections/${selectionId}/folders`, { name: target.name, type: 'photo' })).id
+    }
+    return ids
+  }
 
   /** Start Upload: any unexpected failure ends the upload with an error toast instead of a stuck dialog. */
-  const start = async (retry = false) => {
+  const start = async () => {
     if (!rows.length || busy) return
+    setBusy(true)
+    setFinished(null)
+    setStopped(null)
     try {
-      await run(retry)
+      await run()
     } catch (e) {
-      setBusy(false)
-      setPaused(false)
-      refreshSelection(qc, selectionId)
       toast.error('Upload failed', { description: isApiError(e) ? e.message : (e as Error).message || 'Something went wrong. Please try again.' })
+    } finally {
+      setBusy(false)
+      queue.current = null
+      refreshSelection(qc, selectionId)
+      void qc.invalidateQueries({ queryKey: UPLOAD_LIMITS_KEY })
     }
   }
 
-  /** Uploads every row (or, on retry, only the files that failed). */
-  const run = async (retry: boolean) => {
-    setBusy(true)
-    cancelled.current = false
-    // The event's setting decides, read fresh in case it changed since the dialog opened.
-    const compress = !(await qc.fetchQuery({ queryKey: settingsKey, queryFn: () => api.get<EventSettings>(`/selections/${selectionId}/settings`), staleTime: 0 }).catch(() => null))?.originalQuality
-    const state: Record<string, Progress> = {}
-    for (const r of rows) state[r.key] = progress[r.key] ?? emptyProgress()
-
-    // 1. A photo folder and/or a video folder per picked folder (refused if the name exists by now).
+  const run = async () => {
+    const ids = await folderIds(rows)
+    const resume = resuming
+    const doneKeys = new Set(resume?.done ?? [])
+    const rowOf = new Map<string, string>()
+    const items: QueueItem[] = []
+    let alreadyDone = 0
     for (const r of rows) {
-      if (state[r.key].folderIds) continue
-      try {
-        const ids: { photo?: string; video?: string } = {}
-        for (const t of targetsOf(r)) {
-          const f = await api.post<SelectionFolderDto>(`/selections/${selectionId}/folders`, { name: t.name, type: t.type })
-          ids[t.type] = f.id
+      for (const f of r.files) {
+        const relativePath = relativePathOf(f)
+        const key = fileKey({ relativePath, size: f.size, lastModified: f.lastModified })
+        if (doneKeys.has(key)) {
+          alreadyDone++
+          continue
         }
-        state[r.key] = { ...state[r.key], folderIds: ids }
-      } catch (e) {
-        const error = isApiError(e) ? e.message : 'Could not create the folder'
-        state[r.key] = { ...state[r.key], state: 'error', failed: r.files.map((f, index) => ({ name: f.name, error, index })) }
+        rowOf.set(key, r.key)
+        items.push({ key, file: f, relativePath, folderId: ids[r.key] ?? null, photoId: resume?.inflight[key] })
       }
-      patch(r.key, state[r.key])
+    }
+    const total = items.length + alreadyDone
+    const writer = progressWriter({ selectionId, total, done: [...doneKeys], inflight: { ...(resume?.inflight ?? {}) }, folders: rows.map((r) => r.name) })
+    writer.flush()
+
+    const perRow: Record<string, RowProgress> = Object.fromEntries(rows.map((r) => [r.key, emptyRow()]))
+    setRowProgress({ ...perRow })
+    const skippedAll: SkippedFile[] = []
+    const onItem = (r: ItemResult) => {
+      const rk = rowOf.get(r.key)!
+      const p = perRow[rk]
+      const name = r.key.split('|')[0]
+      p.done++
+      if (r.outcome === 'uploaded') p.uploaded++
+      else if (r.outcome === 'skipped') {
+        p.skipped.push({ name, reason: r.reason })
+        skippedAll.push({ name, reason: r.reason })
+      } else p.failed.push({ name, error: r.error })
+      if (r.outcome !== 'failed') writer.finished(r.key)
+      setRowProgress({ ...perRow, [rk]: { ...p } })
     }
 
-    // 2. The files, 4 at a time across all folders.
-    const jobs = rows.flatMap((r) => {
-      const s = state[r.key]
-      if (!s.folderIds) return []
-      const indexes = retry ? s.failed.map((f) => f.index) : r.files.map((_, i) => i)
-      state[r.key] = { ...s, failed: [], state: 'uploading' }
-      patch(r.key, state[r.key])
-      return indexes.map((index) => ({ row: r, index }))
+    const q = new UploadQueue({
+      selectionId,
+      items,
+      concurrency: uploadConcurrency(),
+      deps: {
+        copies: copiesOf,
+        sign: (body: UploadSign) => api.post<UploadSignDto>('/uploads/sign', body),
+        complete: (body) => api.post<UploadCompleteDto>('/uploads/complete', body),
+        put: putBlob,
+        isOnline: () => navigator.onLine !== false,
+        waitOnline,
+      },
+      onProgress: (p) => setProgress({ ...p, done: p.done + alreadyDone, total }),
+      onItem,
+      onSigned: (key, photoId) => writer.signed(key, photoId),
     })
-    /** Originals that couldn't be kept in the cloud (too large for the plan, or the upload failed). */
-    let originalsNotKept = 0
-    const maxBytes = (limitsQ.data?.maxPhotoMb ?? Infinity) * MB
-    const keepOriginal = async (photoId: string, original: File) => {
-      if (original.size > maxBytes) {
-        originalsNotKept++
-        return
-      }
-      try {
-        const sha = await sha256Hex(original)
-        await withRetries(() => {
-          const fd = new FormData()
-          if (sha) fd.append('sha256', sha)
-          fd.append('file', original, original.name)
-          return upload(`/selections/${selectionId}/photos/${photoId}/original`, fd)
-        })
-      } catch {
-        originalsNotKept++
-      }
-    }
+    queue.current = q
+    setProgress({ ...q.state, done: alreadyDone, total })
+    const outcome = await q.run()
+    writer.flush()
+    const s = q.state
 
-    let next = 0
-    const worker = async () => {
-      while (next < jobs.length) {
-        if (pauseGate.current) await pauseGate.current.promise
-        if (cancelled.current) return
-        const { row, index } = jobs[next++]
-        const s = state[row.key]
-        const original = row.files[index]
-        try {
-          const folderPath = folderPathOf(original)
-          const copy = await uploadCopyOf(original, compress)
-          const photo = await withRetries(() => {
-            const fd = new FormData()
-            fd.append('folderId', s.folderIds![mediaOf(original.name) === 'video' ? 'video' : 'photo']!)
-            if (folderPath) fd.append('folder', folderPath)
-            // The original's name (e.g. IMG_1234.CR2), size and pixel size, kept with the photo.
-            fd.append('originalName', copy.originalName)
-            fd.append('originalSize', String(copy.originalSize))
-            if (copy.originalWidth && copy.originalHeight) {
-              fd.append('originalWidth', String(copy.originalWidth))
-              fd.append('originalHeight', String(copy.originalHeight))
-            }
-            if (copy.compressed) fd.append('compressed', '1')
-            fd.append('file', copy.file)
-            return upload<{ id: string }>(`/selections/${selectionId}/photos`, fd)
-          })
-          s.done++
-          setBytes((b) => ({ original: b.original + original.size, sent: b.sent + copy.file.size }))
-          // The customer gets the 80–85% copy; the full-quality original is kept in the cloud for the
-          // studio, so the picks can be returned at full quality (Download Selected → Download from cloud).
-          if (copy.compressed) await keepOriginal(photo.id, original)
-        } catch (e) {
-          // Same file already in the event: nothing to do.
-          if (isApiError(e) && e.status === 409 && /already/i.test(e.message)) s.done++
-          else if (e instanceof Skip) s.skipped.push({ name: folderPathOf(original) ? `${folderPathOf(original)}/${original.name}` : original.name, reason: e.message })
-          else s.failed.push({ name: original.name, error: isApiError(e) ? (e.fields?.file ?? e.message) : (e as Error).message || 'Upload failed', index })
-        }
-        patch(row.key, { done: s.done, failed: [...s.failed], skipped: [...s.skipped] })
-      }
-    }
-    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, jobs.length) }, worker))
-    for (const r of rows) {
-      const s = state[r.key]
-      patch(r.key, { state: s.failed.length ? 'error' : 'done' })
-    }
-    setBusy(false)
-    setPaused(false)
-    refreshSelection(qc, selectionId)
-    void qc.invalidateQueries({ queryKey: UPLOAD_LIMITS_KEY })
-
-    if (cancelled.current) {
-      const sent = rows.reduce((n, r) => n + state[r.key].done, 0)
-      toast.info(`Upload cancelled — ${sent} of ${jobs.length} files uploaded`)
+    if (outcome.cancelled) {
+      toast.info(`Upload cancelled — ${s.uploaded} of ${items.length} photos uploaded`, { description: 'Open Upload Folder again to resume.' })
       reset()
       onClose()
       return
     }
-    if (originalsNotKept > 0) {
-      toast.warning(`${originalsNotKept} original${originalsNotKept === 1 ? ' wasn’t' : 's weren’t'} kept in the cloud`, {
-        description: `Larger than ${limitsQ.data?.maxPhotoMb ?? 'your plan’s'} MB or the upload failed. Their photos are uploaded; get those originals with Download Selected → Copy from my computer.`,
-      })
+    if (outcome.stopped) {
+      const upgrade = outcome.stopped.code === 'PLAN_LIMIT'
+      setStopped({ message: outcome.stopped.message, upgrade })
+      return
     }
-    const failed = rows.reduce((n, r) => n + state[r.key].failed.length, 0)
-    const skipped = rows.reduce((n, r) => n + state[r.key].skipped.length, 0)
-    if (!failed && !skipped) {
-      toast.success('Upload complete')
+    // Files that aren't photos (notes, .xmp sidecars…) are ignored quietly; only photos that couldn't go up are listed.
+    const skipped = skippedAll
+    setFinished({ uploaded: s.uploaded + alreadyDone, skipped, failed: s.failed })
+    if (!s.failed) await uploadStore.clear(selectionId)
+    // Retry failed: the next Start Upload skips what is already done.
+    else setResuming({ ...writer.state, updatedAt: Date.now() })
+    if (!s.failed && !skipped.length) {
+      const n = s.uploaded + alreadyDone
+      toast.success(`${n.toLocaleString('en-IN')} photo${n === 1 ? '' : 's'} uploaded`)
       reset()
       onClose()
-    } else if (!failed) {
-      toast.warning(`Upload complete — ${skipped} file${skipped === 1 ? ' was' : 's were'} skipped`, { description: 'They are listed below.' })
-    } else {
-      toast.error(`${failed} file${failed === 1 ? '' : 's'} didn't upload`, { description: 'Check the folders below and retry the failed files.' })
+    } else if (s.failed) {
+      toast.error(`${s.failed} photo${s.failed === 1 ? '' : 's'} didn't upload`, { description: 'Start the upload again to retry them; the rest are skipped.' })
     }
   }
 
-  const total = rows.reduce((n, r) => n + r.files.length, 0)
-  const finished = rows.reduce((n, r) => n + (progress[r.key]?.done ?? 0) + (progress[r.key]?.failed.length ?? 0) + (progress[r.key]?.skipped.length ?? 0), 0)
-  const pct = total ? Math.round((finished / total) * 100) : 0
-  const anyFailed = rows.some((r) => (progress[r.key]?.failed.length ?? 0) > 0)
+  const photoCount = rows.reduce((n, r) => n + r.files.length, 0)
+  const originalBytes = rows.reduce((n, r) => n + r.files.reduce((m, f) => m + f.size, 0), 0)
+  const pct = progress && progress.total ? Math.round((progress.done / progress.total) * 100) : 0
+  const anyFailed = Object.values(rowProgress).some((p) => p.failed.length > 0)
 
   return (
     <>
@@ -348,46 +308,117 @@ export function UploadFoldersModal({
         data-testid="folder-input"
         onChange={(e) => {
           if (e.target.files?.length) {
-            const picked = groupInputFiles(e.target.files)
-            if (picked.length) addFolders(picked)
-            else toast.error('No photos or videos to upload', { description: 'Empty folders and “Selected - …” folders are skipped.' })
+            const { folders: picked } = scanInputFiles(e.target.files)
+            if (picked.length) addFolders(picked, resuming)
+            else toast.error('No photos to upload', { description: 'Empty folders, hidden files and “Selected - …” folders are skipped.' })
           }
           e.target.value = ''
         }}
       />
       <Modal open={open} onClose={close} title={busy ? 'Uploading' : 'Select Folders to Upload'} className="uf-modal" size="lg" busy={busy}>
-        {busy && (
+        {saved && !busy && !resuming && rows.length === 0 && (
+          <div className="uf-resume" role="status" data-testid="upload-resume">
+            <i className="bi bi-arrow-repeat" aria-hidden="true" />
+            <span>
+              <strong>
+                Resume {saved.done.length.toLocaleString('en-IN')} of {saved.total.toLocaleString('en-IN')}?
+              </strong>{' '}
+              Pick the same folder{saved.folders.length ? ` (${saved.folders.slice(0, 3).join(', ')}${saved.folders.length > 3 ? '…' : ''})` : ''} again: photos already uploaded are skipped.
+            </span>
+            <div className="uf-resume-actions">
+              <button
+                type="button"
+                className="uf-pill"
+                onClick={() => {
+                  setResuming(saved)
+                  pick()
+                }}
+              >
+                Resume
+              </button>
+              <button
+                type="button"
+                className="uf-pill ghost"
+                onClick={() => {
+                  void uploadStore.clear(selectionId)
+                  setSaved(null)
+                }}
+              >
+                Discard
+              </button>
+            </div>
+          </div>
+        )}
+
+        {busy && progress && (
           <div className="uf-live" data-testid="upload-progress">
             <div className="uf-live-head">
               <strong aria-live="polite">
-                Uploading {finished} / {total}
+                Uploading {progress.done.toLocaleString('en-IN')} / {progress.total.toLocaleString('en-IN')}
+                {progress.etaSeconds !== null && !progress.paused ? ` · ${etaLabel(progress.etaSeconds)}` : ''}
               </strong>
-              <span>{paused ? 'Paused' : `${pct}%`}</span>
+              <span>{progress.offline ? 'Offline' : progress.paused ? 'Paused' : `${pct}%`}</span>
             </div>
-            <div className="uf-track big" role="progressbar" aria-valuenow={finished} aria-valuemin={0} aria-valuemax={total} aria-label="Upload progress">
+            <div className="uf-track big" role="progressbar" aria-valuenow={progress.done} aria-valuemin={0} aria-valuemax={progress.total} aria-label="Upload progress">
               <span style={{ width: `${pct}%` }} />
             </div>
+            {progress.offline && (
+              <p className="uf-offline" role="alert">
+                <i className="bi bi-wifi-off" aria-hidden="true" /> You’re offline. The upload is paused and continues when you’re back online.
+              </p>
+            )}
             <div className="uf-live-actions">
-              {paused ? (
-                <button type="button" className="uf-pill" onClick={resume}>
+              {progress.paused ? (
+                <button type="button" className="uf-pill" onClick={() => queue.current?.resume()} disabled={progress.offline}>
                   <i className="bi bi-play-fill" /> Resume
                 </button>
               ) : (
-                <button type="button" className="uf-pill ghost" onClick={pause}>
+                <button type="button" className="uf-pill ghost" onClick={() => queue.current?.pause()}>
                   <i className="bi bi-pause-fill" /> Pause
                 </button>
               )}
-              <button type="button" className="uf-pill ghost danger" onClick={cancel}>
+              <button type="button" className="uf-pill ghost danger" onClick={() => queue.current?.cancel()}>
                 <i className="bi bi-x-lg" /> Cancel
               </button>
             </div>
           </div>
         )}
-        {bytes.original > 0 && bytes.sent < bytes.original && (
-          <p className="uf-saving" data-testid="upload-saving" aria-live="polite">
-            <i className="bi bi-arrow-down-circle" aria-hidden="true" /> Compressed {formatBytes(bytes.original)} → {formatBytes(bytes.sent)}
+
+        {stopped && (
+          <p className="notice danger" role="alert" data-testid="upload-stopped">
+            <i className="bi bi-exclamation-octagon" aria-hidden="true" />
+            <span>
+              {stopped.message}{' '}
+              {stopped.upgrade && (
+                <Link to="/subscriptions" className="uf-upgrade">
+                  Upgrade
+                </Link>
+              )}
+            </span>
           </p>
         )}
+
+        {finished && (
+          <div className="uf-done" data-testid="upload-summary">
+            <strong>
+              {finished.uploaded.toLocaleString('en-IN')} uploaded · {finished.skipped.length.toLocaleString('en-IN')} skipped
+              {finished.failed ? ` · ${finished.failed} failed` : ''}
+            </strong>
+            {finished.skipped.length > 0 && (
+              <details className="uf-skipped">
+                <summary>Show list</summary>
+                <ul>
+                  {finished.skipped.map((f, i) => (
+                    <li key={`${f.name}-${i}`}>
+                      {f.name}: {f.reason}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </div>
+        )}
+
         <div className="uf-bar">
           <strong>Albums ({rows.length})</strong>
           <button type="button" className="uf-add" onClick={pick} disabled={busy}>
@@ -396,96 +427,64 @@ export function UploadFoldersModal({
         </div>
         <div className="uf-box" data-testid="selected-folders">
           {rows.map((r) => {
-            const p = progress[r.key]
-            const done = p ? p.done + p.failed.length + p.skipped.length : 0
+            const p = rowProgress[r.key]
             return (
-              <div key={r.key} className={`uf-row${p?.state === 'error' ? ' has-error' : ''}`}>
+              <div key={r.key} className={`uf-row${p?.failed.length ? ' has-error' : ''}`}>
                 <div className="uf-row-main">
                   <i className="bi bi-folder-fill uf-folder" aria-hidden="true" />
                   <strong className="uf-name" title={r.name} aria-label={r.name}>
                     {r.name}
                   </strong>
-                  <span className="uf-kind">{r.label}</span>
-                  <span className="uf-count">
-                    {r.files.length} files{r.videos && r.images ? ` · ${r.videos} video${r.videos === 1 ? '' : 's'}` : ''}
-                  </span>
-                  {p && p.state !== 'ready' ? (
-                    <span className={`uf-progress-text${p.state === 'done' ? ' ok' : ''}`}>
-                      {p.state === 'done' ? <i className="bi bi-check-circle-fill" /> : null} {p.done}/{r.files.length}
+                  <span className="uf-count">{r.files.length.toLocaleString('en-IN')} photos</span>
+                  {p ? (
+                    <span className={`uf-progress-text${p.done === r.files.length ? ' ok' : ''}`}>
+                      {p.done === r.files.length ? <i className="bi bi-check-circle-fill" /> : null} {p.done}/{r.files.length}
                     </span>
                   ) : (
-                    <button
-                      type="button"
-                      className="uf-remove"
-                      onClick={() => setRows((cur) => cur.filter((x) => x.key !== r.key))}
-                      disabled={busy}
-                      aria-label={`Remove ${r.name}`}
-                    >
+                    <button type="button" className="uf-remove" onClick={() => setRows((cur) => cur.filter((x) => x.key !== r.key))} disabled={busy} aria-label={`Remove ${r.name}`}>
                       ✖ Remove
                     </button>
                   )}
                 </div>
-                {p && p.state !== 'ready' && (
-                  <div className="uf-track" role="progressbar" aria-valuenow={done} aria-valuemin={0} aria-valuemax={r.files.length} aria-label={`${r.name} upload`}>
-                    <span style={{ width: `${(done / Math.max(1, r.files.length)) * 100}%` }} />
+                {p && (
+                  <div className="uf-track" role="progressbar" aria-valuenow={p.done} aria-valuemin={0} aria-valuemax={r.files.length} aria-label={`${r.name} upload`}>
+                    <span style={{ width: `${(p.done / Math.max(1, r.files.length)) * 100}%` }} />
                   </div>
                 )}
                 {p && p.failed.length > 0 && (
                   <ul className="uf-failed">
                     {p.failed.slice(0, 5).map((f) => (
-                      <li key={f.index}>
+                      <li key={f.name}>
                         <i className="bi bi-exclamation-circle" /> {f.name}: {f.error}
                       </li>
                     ))}
                     {p.failed.length > 5 && <li>…and {p.failed.length - 5} more</li>}
                   </ul>
                 )}
-                {p && p.skipped.length > 0 && (
-                  <details className="uf-skipped" open={p.skipped.length <= 5}>
-                    <summary>
-                      <i className="bi bi-skip-forward-circle" /> {p.skipped.length} skipped
-                    </summary>
-                    <ul>
-                      {p.skipped.map((f) => (
-                        <li key={f.name}>
-                          {f.name}: {f.reason}
-                        </li>
-                      ))}
-                    </ul>
-                  </details>
-                )}
               </div>
             )
           })}
         </div>
+
+        {rows.length > 0 && !busy && !finished && (
+          <p className="uf-summary" data-testid="upload-estimate">
+            <i className="bi bi-cloud-arrow-up" aria-hidden="true" /> {photoCount.toLocaleString('en-IN')} photos · about {formatBytes(photoCount * ONLINE_BYTES_PER_PHOTO)} online (originals{' '}
+            {formatBytes(originalBytes)} stay on this computer)
+          </p>
+        )}
         <p className="uf-hint">
           <i className="bi bi-info-circle" /> Each subfolder becomes an album. Duplicate folder names and already existing folders will be automatically prevented.
         </p>
         <p className="uf-hint uf-mode" data-testid="upload-mode">
-          {compressing ? (
-            <>
-              <i className="bi bi-lightning-charge" /> Photos are compressed to 80–85% quality (1600 px) for fast client viewing. A full-quality copy of each original is also kept in the cloud
-              for you (never shown to the client), so their picks come back at full quality with Download Selected.
-            </>
-          ) : (
-            <>
-              <i className="bi bi-hdd-stack" /> Uploading original quality (large files), as set in this event’s Settings.
-            </>
-          )}
+          <i className="bi bi-shield-lock" /> {ORIGINALS_REMINDER}
         </p>
         <div className="uf-foot">
           <button type="button" className="uf-pill ghost" onClick={close} disabled={busy}>
-            Cancel
+            {finished ? 'Close' : 'Cancel'}
           </button>
-          {anyFailed && !busy ? (
-            <button type="button" className="uf-pill" onClick={() => void start(true)}>
-              <i className="bi bi-arrow-clockwise" /> Retry failed
-            </button>
-          ) : (
-            <button type="button" className="uf-pill" onClick={() => void start()} disabled={busy || rows.length === 0} data-testid="start-upload">
-              {busy ? <Spinner size={14} /> : <i className="bi bi-upload" />} {busy ? `Uploading ${pct}%` : 'Start Upload'}
-            </button>
-          )}
+          <button type="button" className="uf-pill" onClick={() => void start()} disabled={busy || rows.length === 0} data-testid="start-upload">
+            {busy ? <Spinner size={14} /> : <i className={`bi bi-${anyFailed ? 'arrow-clockwise' : 'upload'}`} />} {busy ? `Uploading ${pct}%` : anyFailed ? 'Retry failed' : 'Start Upload'}
+          </button>
         </div>
       </Modal>
     </>

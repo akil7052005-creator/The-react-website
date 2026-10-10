@@ -219,30 +219,20 @@ export interface StudioSelectionPhotoDto extends PhotoDto {
   /** 'video' for MP4/MOV clips (kept with the event, not shown to the client for picking). */
   media?: 'image' | 'video'
   mimeType?: string
-  /** Uploaded as a 1600 px JPEG made in the browser; originalName is the file on the studio's computer. */
+  /** Stored as a preview made from the original; originalName is the file on the studio's computer. */
   compressed?: boolean
   /** The original file's size in bytes and pixel size (null when not known). */
   originalSize?: number | null
   originalWidth?: number | null
   originalHeight?: number | null
-  /**
-   * The full-quality original in the cloud (studio only, never sent to the customer): the kept
-   * original of a compressed upload, or the uploaded file itself when it wasn't compressed. Null
-   * when a compressed upload's original wasn't kept (e.g. larger than the plan allows).
-   */
-  originalUrl?: string | null
-  /** SHA-256 (hex) of that original, to verify a download byte for byte. */
-  originalChecksum?: string | null
+  /** Where the original sits under the uploaded folder, file name included ("Wedding/Haldi/IMG_1.jpg"). */
+  relativePath?: string | null
+  /** SHA-256 (hex) of the original, computed in the browser: Copy from my computer matches on it first. */
+  sha256?: string | null
+  /** The 400 px thumbnail (null for photos uploaded before thumbnails existed, and for videos). */
+  thumbUrl?: string | null
   pickedBy: string[]
   comments: { memberName: string; text: string; createdAt: string }[]
-}
-
-/** POST /selections/:id/photos/:photoId/original: the original was stored and verified. */
-export interface PhotoOriginalDto {
-  photoId: string
-  originalUrl: string
-  originalChecksum: string
-  size: number
 }
 
 export interface PublicSelectionDto {

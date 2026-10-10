@@ -43,7 +43,7 @@ export class EventSettingsService {
   private async addons(studioId: string) {
     const sub = await this.prisma.subscription.findUnique({ where: { studioId }, include: { plan: true } })
     const all = sub?.plan.code === 'ALL_ACCESS'
-    return { originalQuality: all, videoDownload: all }
+    return { videoDownload: all }
   }
 
   private dto(s: { deadline: Date; quota: number; allowDownload: boolean; notesAllowed: boolean; watermark: boolean; settings: unknown }, addons: EventSettings['addons']): EventSettings {
@@ -59,7 +59,6 @@ export class EventSettingsService {
       photoNotes: s.notesAllowed,
       galleryExpiry: none ? null : st.galleryExpiryDays !== undefined && st.galleryExpiryDays !== null ? st.galleryExpiryDays : 'custom',
       galleryExpiresOn: none ? null : expires,
-      originalQuality: addons.originalQuality && st.originalQuality,
       videoDownload: addons.videoDownload && st.videoDownload,
       allowSelection: st.allowSelection,
       highQuality: st.highQuality,
@@ -106,14 +105,14 @@ export class EventSettingsService {
       data.quota = limit
       changes.push(`selection limit ${limit}`)
     }
-    for (const k of ['originalQuality', 'videoDownload'] as const) {
+    for (const k of ['videoDownload'] as const) {
       if (body[k] === undefined) continue
       if (body[k] && !addons[k]) {
-        throw new AppError(HttpStatus.PAYMENT_REQUIRED, ERROR_CODES.PLAN_LIMIT, k === 'originalQuality' ? 'Original Quality needs the Photo & Video Storage add-on.' : 'Video Download needs the Video add-on bundle.', undefined, { upgrade: '/subscriptions' })
+        throw new AppError(HttpStatus.PAYMENT_REQUIRED, ERROR_CODES.PLAN_LIMIT, 'Video Download needs the Video add-on bundle.', undefined, { upgrade: '/subscriptions' })
       }
       if (body[k] !== st[k]) {
         next[k] = body[k]!
-        say(k === 'originalQuality' ? 'original quality' : 'video download', body[k]!)
+        say('video download', body[k]!)
       }
     }
     const downloadOn = body.downloadOn ?? s.allowDownload

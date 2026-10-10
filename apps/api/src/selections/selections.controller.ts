@@ -145,26 +145,6 @@ export class SelectionsController {
     })
   }
 
-  /**
-   * The full-quality original of a compressed upload, kept for the studio only (customers get the
-   * compressed copy). Field `sha256` (optional): the browser's hash of the file, checked on arrival.
-   */
-  @Throttle({ default: { limit: config().RATE_LIMIT_UPLOADS_PER_MIN, ttl: 60_000 } })
-  @Post(':id/photos/:photoId/original')
-  @ApiConsumes('multipart/form-data')
-  @UseInterceptors(PlanUploadInterceptor)
-  attachOriginal(
-    @StudioId() studioId: string,
-    @Param('id', ParseUUIDPipe) id: string,
-    @Param('photoId', ParseUUIDPipe) photoId: string,
-    @UploadedFile() file: Upload | undefined,
-    @Req() req: UploadRequest,
-  ) {
-    const body = (req.body ?? {}) as Record<string, unknown>
-    const sha = typeof body.sha256 === 'string' && /^[a-f0-9]{64}$/i.test(body.sha256) ? body.sha256 : null
-    return this.selections.attachOriginal(studioId, id, photoId, file, { limits: req.uploadLimits, sha256: sha })
-  }
-
   /** Everything the event page shows: the selection, folders with counts, notes, log and albums. */
   @Get(':id/overview')
   overview(@StudioId() studioId: string, @Param('id', ParseUUIDPipe) id: string) {

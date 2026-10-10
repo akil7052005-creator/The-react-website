@@ -1,7 +1,9 @@
 // "Download Selected → Copy from my computer": the studio picks the folder that holds the original photos;
-// the client's picks are found there by their original file name and copied into a new
-// "Selected - <Customer> - <Event> - <date>" folder inside it. The originals are only read, never
-// moved or changed. Uses the browser's File System Access API (Chrome and Edge on a computer).
+// the client's picks are found there (by fingerprint first, then folder path + name, then name +
+// size) and copied, byte for byte, into a new "Selected - <Customer> - <Event> - <date>" folder
+// inside it. The originals are only read, never moved or changed. Originals are never stored
+// online, so this is the only way to get them. Uses the browser's File System Access API (Chrome
+// and Edge on a computer).
 
 // ---------------------------------------------------------------- File System Access types
 
@@ -71,15 +73,16 @@ export interface FoundFile<H = FileEntryHandle> {
 export const COPY_FOLDER_PREFIX = 'Selected - '
 
 /**
- * Every file under the picked folder, subfolders included. Files named in `wanted` (lower case)
- * also get their byte size, to tell apart originals that share a name.
+ * Every file under the picked folder, subfolders included, with its byte size (to tell apart
+ * originals that share a name, and to find a renamed one by its fingerprint). With `wanted` (lower
+ * case names), only those files get their size read.
  */
 export async function scanFolder(root: DirEntryHandle, onFound?: (n: number) => void, wanted?: Set<string>): Promise<FoundFile[]> {
   const out: FoundFile[] = []
   const walk = async (dir: DirEntryHandle, dirs: string[]) => {
     for await (const entry of dir.values()) {
       if (entry.kind === 'file') {
-        const size = wanted?.has(entry.name.toLowerCase()) ? (await entry.getFile()).size : undefined
+        const size = !wanted || wanted.has(entry.name.toLowerCase()) ? (await entry.getFile()).size : undefined
         out.push({ name: entry.name, dirs, handle: entry, size })
         if (out.length % 200 === 0) onFound?.(out.length)
       } else if (!entry.name.startsWith(COPY_FOLDER_PREFIX)) {
@@ -102,6 +105,10 @@ export interface SelectedPhoto {
   album: string | null
   /** The original file's byte size, when known. */
   size?: number | null
+  /** Path under the uploaded folder, file name included ("Wedding/Haldi/IMG_1.jpg"), when known. */
+  relativePath?: string | null
+  /** SHA-256 (hex) of the original, computed when it was uploaded. */
+  sha256?: string | null
 }
 
 const lower = (s: string) => s.trim().toLowerCase()
@@ -168,6 +175,90 @@ export function matchSelected<H>(photos: SelectedPhoto[], files: FoundFile<H>[])
     matched.push({ photo: p, file: best })
   }
   return { matched, missing }
+}
+
+/** How a pick was found: its fingerprint (exact), folder path + name, name + size, or name only (older uploads). */
+export type MatchedBy = 'sha256' | 'path' | 'size' | 'name'
+
+/**
+ * Finds each pick's original, most certain first: a file with the same SHA-256 fingerprint (only
+ * files with the right name or size are read and hashed), then the same folder path + name, then
+ * the same name + size. Photos uploaded before fingerprints were kept fall back to name matching.
+ * A photo with a fingerprint that no file matches is reported missing rather than guessed.
+ */
+export async function matchExact<H>(photos: SelectedPhoto[], files: FoundFile<H>[], hashOf: (f: FoundFile<H>) => Promise<string>) {
+  const byName = new Map<string, FoundFile<H>[]>()
+  const bySize = new Map<number, FoundFile<H>[]>()
+  for (const f of files) {
+    byName.set(lower(f.name), [...(byName.get(lower(f.name)) ?? []), f])
+    if (f.size !== undefined) bySize.set(f.size, [...(bySize.get(f.size) ?? []), f])
+  }
+  const hashes = new Map<FoundFile<H>, Promise<string>>()
+  const hash = (f: FoundFile<H>) => {
+    let h = hashes.get(f)
+    if (!h) {
+      h = hashOf(f).catch(() => '')
+      hashes.set(f, h)
+    }
+    return h
+  }
+  const matched: { photo: SelectedPhoto; file: FoundFile<H>; by: MatchedBy }[] = []
+  const missing: SelectedPhoto[] = []
+  for (const p of photos) {
+    const named = namesFor(p).flatMap((n) => byName.get(n) ?? [])
+    // 1. Fingerprint: the same bytes, wherever and however named.
+    if (p.sha256) {
+      const sized = p.size ? (bySize.get(p.size) ?? []) : []
+      const candidates = [...new Set([...named.filter((f) => !p.size || f.size === undefined || f.size === p.size), ...sized])]
+      let found: FoundFile<H> | null = null
+      for (const c of candidates) {
+        if ((await hash(c)) === p.sha256.toLowerCase()) {
+          found = c
+          break
+        }
+      }
+      if (found) matched.push({ photo: p, file: found, by: 'sha256' })
+      else missing.push(p)
+      continue
+    }
+    // 2. Folder path + name.
+    const want = (p.relativePath ?? (p.folder ? `${p.folder}/${p.originalName}` : '')).split('/').filter(Boolean).map(lower)
+    const byPath = want.length > 1 ? named.find((f) => endsWith([...f.dirs.map(lower), lower(f.name)], want) || endsWith(want, [...f.dirs.map(lower), lower(f.name)])) : undefined
+    if (byPath) {
+      matched.push({ photo: p, file: byPath, by: 'path' })
+      continue
+    }
+    // 3. Name + size.
+    const bySizeName = p.size ? named.find((f) => f.size === p.size) : undefined
+    if (bySizeName) {
+      matched.push({ photo: p, file: bySizeName, by: 'size' })
+      continue
+    }
+    // 4. Older uploads without size or path: the best name match, as before.
+    if (!p.size && named.length) {
+      let best = named[0]
+      let bestFit = fit(best, p)
+      for (const c of named.slice(1)) {
+        const s2 = fit(c, p)
+        if (s2 > bestFit) [best, bestFit] = [c, s2]
+      }
+      matched.push({ photo: p, file: best, by: 'name' })
+      continue
+    }
+    missing.push(p)
+  }
+  return { matched, missing }
+}
+
+/** SHA-256 (hex) of a file on this computer. */
+export async function hashFile(handle: FileEntryHandle) {
+  const digest = await crypto.subtle.digest('SHA-256', await (await handle.getFile()).arrayBuffer())
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+/** The "Copy list of picked file names" text (phones and browsers that can't copy): one path per line. */
+export function pickedListText(event: string, photos: SelectedPhoto[]) {
+  return [`Picked photos — ${event}`, '', ...photos.map((p) => p.relativePath ?? (p.folder ? `${p.folder}/${p.originalName}` : p.originalName))].join('\n')
 }
 
 // ---------------------------------------------------------------- copying

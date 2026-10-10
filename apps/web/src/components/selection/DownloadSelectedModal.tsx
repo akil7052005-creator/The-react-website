@@ -1,54 +1,58 @@
 import { useQueryClient } from '@tanstack/react-query'
 import type { SelectionDto, SelectionFolderDto, StudioSelectionPhotoDto } from '@weddyzone/shared'
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { api, isApiError } from '../../lib/api'
-import { API_BASE } from '../../lib/env'
+import { api } from '../../lib/api'
 import { toastError } from '../../lib/query'
 import { Modal } from '../Modal'
 import {
   canCopyLocally,
   copyFolderName,
   copyMatches,
-  matchSelected,
+  hashFile,
+  matchExact,
   missingListText,
   PermissionNeeded,
+  pickedListText,
   pickOriginalsFolder,
   saveText,
   scanFolder,
-  wantedNames,
   type SelectedPhoto,
 } from './localCopy'
-import { returnOriginals, type CloudPick, type ReturnResult } from './cloudReturn'
-import { isPhone, MobileDownload } from './MobileDownload'
 import { refreshSelection } from './selectionUi'
 
 type Step =
   | { at: 'choose' }
-  | { at: 'local' }
   | { at: 'scanning'; found: number }
+  | { at: 'matching'; done: number; total: number }
   | { at: 'copying'; done: number; total: number }
   | { at: 'copied'; copied: number; missing: SelectedPhoto[]; folder: string }
-  | { at: 'online'; done: number; total: number }
-  | { at: 'online-failed'; message: string }
-  | { at: 'online-done'; result: ReturnResult; folder: string | null }
 
 const PERMISSION_MSG = 'Permission needed to copy selected photos'
 
-function saveBlob(blob: Blob, name: string) {
-  const a = document.createElement('a')
-  a.href = URL.createObjectURL(blob)
-  a.download = name
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  setTimeout(() => URL.revokeObjectURL(a.href), 2000)
+/** The client's picks, with what was recorded about each original when it was uploaded. */
+async function selectedPhotos(selection: SelectionDto, folders: SelectionFolderDto[]): Promise<SelectedPhoto[]> {
+  const photos = await api.get<StudioSelectionPhotoDto[]>(`/selections/${selection.id}/photos`)
+  const album = new Map(folders.map((f) => [f.id, f.name]))
+  return photos
+    .filter((p) => p.pickedBy.length > 0)
+    .map((p) => ({
+      id: p.id,
+      originalName: p.originalName,
+      folder: p.folder ?? null,
+      album: (p.folderId && album.get(p.folderId)) || null,
+      size: p.originalSize ?? null,
+      relativePath: p.relativePath ?? null,
+      sha256: p.sha256 ?? null,
+    }))
 }
 
 /**
- * "Get selected files": copy the client's picks from the original folder on this computer (fast),
- * or download their full-quality originals kept in the cloud, verified, into a folder (no ZIP).
- * Either way the selection then shows as Downloaded.
+ * Download Selected. Originals are never stored online, so they come from the studio's own
+ * computer: on desktop Chrome / Edge, "Copy from my computer" finds each pick in the original folder
+ * (by fingerprint first) and copies the exact file into "Selected - <Customer> - <Event> - <date>".
+ * Elsewhere (phones, tablets, other browsers) it explains that and offers the list of picked file
+ * names. A copy marks the selection Downloaded.
  */
 export function DownloadSelectedModal({
   selection,
@@ -59,19 +63,14 @@ export function DownloadSelectedModal({
   selection: SelectionDto
   folders: SelectionFolderDto[]
   onClose: () => void
-  /** After a copy or download: open the Selected Photos view. */
+  /** After a copy: open the Selected Photos view. */
   onDone: () => void
 }) {
   const qc = useQueryClient()
   const [step, setStep] = useState<Step>({ at: 'choose' })
   const local = canCopyLocally()
   const stop = useRef({ cancelled: false })
-  const abort = useRef<AbortController | null>(null)
-  useEffect(() => () => abort.current?.abort(), [])
-  // Phones and tablets save to the phone instead (no folder picker); computers continue below unchanged.
-  if (isPhone()) return <MobileDownload selection={selection} folders={folders} onClose={onClose} onDone={onDone} />
-
-  const busy = step.at === 'scanning' || step.at === 'copying' || step.at === 'online'
+  const busy = step.at === 'scanning' || step.at === 'matching' || step.at === 'copying'
 
   const markDownloaded = async () => {
     try {
@@ -80,23 +79,6 @@ export function DownloadSelectedModal({
       toastError(e)
     }
     refreshSelection(qc, selection.id)
-  }
-
-  /** The client's picks, with the album each is in and where its full-quality original is kept. */
-  const selectedPhotos = async (): Promise<CloudPick[]> => {
-    const photos = await api.get<StudioSelectionPhotoDto[]>(`/selections/${selection.id}/photos`)
-    const album = new Map(folders.map((f) => [f.id, f.name]))
-    return photos
-      .filter((p) => p.pickedBy.length > 0)
-      .map((p) => ({
-        id: p.id,
-        originalName: p.originalName,
-        folder: p.folder ?? null,
-        album: (p.folderId && album.get(p.folderId)) || null,
-        size: p.originalSize ?? null,
-        originalUrl: p.originalUrl ?? null,
-        originalChecksum: p.originalChecksum ?? null,
-      }))
   }
 
   const copyLocal = async () => {
@@ -112,9 +94,15 @@ export function DownloadSelectedModal({
     }
     try {
       setStep({ at: 'scanning', found: 0 })
-      const selected = await selectedPhotos()
-      const files = await scanFolder(root, (found) => setStep({ at: 'scanning', found }), wantedNames(selected))
-      const { matched, missing } = matchSelected(selected, files)
+      const selected = await selectedPhotos(selection, folders)
+      const files = await scanFolder(root, (found) => setStep({ at: 'scanning', found }))
+      let hashed = 0
+      setStep({ at: 'matching', done: 0, total: selected.length })
+      const { matched, missing } = await matchExact(selected, files, async (f) => {
+        const h = await hashFile(f.handle)
+        setStep({ at: 'matching', done: Math.min(++hashed, selected.length), total: selected.length })
+        return h
+      })
       const folder = copyFolderName(selection.client.name, selection.event.title)
       if (matched.length === 0) {
         setStep({ at: 'copied', copied: 0, missing, folder })
@@ -127,63 +115,23 @@ export function DownloadSelectedModal({
     } catch (e) {
       if ((e as Error).name === 'NotAllowedError' || (e as Error).name === 'SecurityError') toast.error(PERMISSION_MSG)
       else toastError(e)
-      setStep({ at: 'local' })
+      setStep({ at: 'choose' })
     }
   }
 
-  /** Download from cloud: the picks' full-quality originals, verified, into a folder (no ZIP). */
-  const getOnline = async () => {
-    stop.current = { cancelled: false }
-    let root = null
-    if (local) {
-      try {
-        // Straight from the click: the browser shows its own folder picker and edit prompt.
-        root = await pickOriginalsFolder()
-      } catch (e) {
-        if (e instanceof PermissionNeeded) toast.error('Permission needed to save the selected photos')
-        else toastError(e)
-        return
-      }
-    }
-    const ctrl = new AbortController()
-    abort.current = ctrl
+  /** Phones and unsupported browsers: the picked file names, to find them on the computer later. */
+  const copyList = async () => {
     try {
-      const picks = await selectedPhotos()
-      setStep({ at: 'online', done: 0, total: picks.length })
-      const folder = copyFolderName(selection.client.name, selection.event.title)
-      const get = async (url: string) => {
-        const res = await fetch(`${API_BASE}${url}`, { credentials: 'include', signal: ctrl.signal })
-        if (!res.ok) throw new Error(`Download failed (${res.status})`)
-        return res.arrayBuffer()
+      const text = pickedListText(selection.event.title, await selectedPhotos(selection, folders))
+      try {
+        await navigator.clipboard.writeText(text)
+        toast.success('List of picked file names copied')
+      } catch {
+        saveText(`${selection.event.title} - picked photos.txt`.replace(/[\\/:*?"<>|]+/g, '-'), text)
       }
-      const result = await returnOriginals(picks, {
-        root,
-        folderName: folder,
-        get,
-        save: (data, name) => saveBlob(new Blob([data]), name),
-        onProgress: (done, total) => setStep({ at: 'online', done, total }),
-        signal: stop.current,
-      })
-      if (ctrl.signal.aborted) {
-        setStep({ at: 'choose' })
-        return
-      }
-      setStep({ at: 'online-done', result, folder: root ? folder : null })
-      if (result.saved > 0) await markDownloaded()
     } catch (e) {
-      if ((e as Error).name === 'AbortError') {
-        setStep({ at: 'choose' })
-        return
-      }
-      setStep({ at: 'online-failed', message: isApiError(e) ? e.message : (e as Error).message || 'The download stopped. Check your connection and try again.' })
-    } finally {
-      abort.current = null
+      toastError(e)
     }
-  }
-
-  const cancelOnline = () => {
-    stop.current.cancelled = true
-    abort.current?.abort()
   }
 
   const finish = () => {
@@ -191,57 +139,38 @@ export function DownloadSelectedModal({
     onDone()
   }
 
-  const title = step.at === 'choose' ? 'Get selected files' : step.at.startsWith('online') ? 'Download Online' : 'Find your originals'
-
   return (
-    <Modal open onClose={busy ? () => undefined : onClose} title={title} size="md" className="dl-modal" busy={busy}>
+    <Modal open onClose={busy ? () => undefined : onClose} title={step.at === 'choose' ? 'Get selected files' : 'Copy from my computer'} size="md" className="dl-modal" busy={busy}>
       {step.at === 'choose' && (
         <div className="dl-choices">
           {local ? (
-            <button type="button" className="dl-choice primary" onClick={() => setStep({ at: 'local' })}>
-              <i className="bi bi-hdd" aria-hidden="true" />
-              <span>
-                <strong>Copy from my computer</strong>
-                <small>Fastest, uses your originals</small>
-              </span>
-            </button>
+            <>
+              <p className="dl-sub">Choose the main folder where this shoot’s originals are saved</p>
+              <button type="button" className="dl-choice primary" onClick={() => void copyLocal()} data-testid="select-original-folder">
+                <i className="bi bi-hdd" aria-hidden="true" />
+                <span>
+                  <strong>Copy from my computer</strong>
+                  <small>Pick the top folder. We look inside every subfolder.</small>
+                </span>
+              </button>
+              <p className="dl-fine">The exact originals are copied into a new “Selected - …” folder inside it. Your originals are never moved or changed.</p>
+            </>
           ) : (
-            <p className="dl-note" role="note">
-              <i className="bi bi-info-circle" /> Copying from your computer: use Chrome or Edge on desktop.
-            </p>
+            <>
+              <p className="dl-note" role="note" data-testid="copy-desktop-only">
+                <i className="bi bi-info-circle" /> Copying the original photos works on a laptop/desktop (Chrome or Edge) where the original folder is saved.
+              </p>
+              <button type="button" className="dl-choice outline" onClick={() => void copyList()} data-testid="copy-picked-list">
+                <i className="bi bi-clipboard" aria-hidden="true" />
+                <span>
+                  <strong>Copy list of picked file names</strong>
+                  <small>To find them on your computer later</small>
+                </span>
+              </button>
+            </>
           )}
-          <button type="button" className="dl-choice outline" onClick={() => void getOnline()} data-testid="download-from-cloud">
-            <i className="bi bi-cloud-arrow-down" aria-hidden="true" />
-            <span>
-              <strong>Download from cloud</strong>
-              <small>Full-quality originals, into a folder</small>
-            </span>
-          </button>
-          <p className="dl-note-online" data-testid="online-note">
-            <i className="bi bi-info-circle" /> The client picked from 80–85% copies; you get the originals, each checked before it is saved.
-          </p>
           <p className="dl-count">
             {selection.pickedCount} selected {selection.pickedCount === 1 ? 'photo' : 'photos'}
-          </p>
-        </div>
-      )}
-
-      {step.at === 'local' && (
-        <div className="dl-local">
-          <p className="dl-sub">Choose the main folder where this shoot’s originals are saved</p>
-          <button type="button" className="dl-back" onClick={() => setStep({ at: 'choose' })}>
-            <i className="bi bi-arrow-left" /> Back
-          </button>
-          <p className="dl-hint">Pick the top folder. We’ll look inside every subfolder.</p>
-          {local ? (
-            <button type="button" className="dl-pick" onClick={() => void copyLocal()} data-testid="select-original-folder">
-              <i className="bi bi-folder2-open" /> Choose folder
-            </button>
-          ) : (
-            <p className="dl-note">Use Chrome or Edge on desktop.</p>
-          )}
-          <p className="dl-fine">
-            Matching photos are copied into a new “Selected - …” folder inside it. Your originals are never moved or changed.
           </p>
         </div>
       )}
@@ -250,6 +179,13 @@ export function DownloadSelectedModal({
         <div className="dl-progress" role="status">
           <span className="cp-spinner" aria-hidden="true" />
           <p>Looking through the folder… {step.found.toLocaleString('en-IN')} files</p>
+        </div>
+      )}
+
+      {step.at === 'matching' && (
+        <div className="dl-progress" role="status">
+          <span className="cp-spinner" aria-hidden="true" />
+          <p>Matching the picks to your originals…</p>
         </div>
       )}
 
@@ -281,6 +217,14 @@ export function DownloadSelectedModal({
               </span>
             </p>
           )}
+          {step.missing.length > 0 && (
+            <ul className="dl-missing" data-testid="missing-list">
+              {step.missing.slice(0, 8).map((p) => (
+                <li key={p.id}>{p.relativePath ?? (p.folder ? `${p.folder}/${p.originalName}` : p.originalName)}</li>
+              ))}
+              {step.missing.length > 8 && <li>…and {step.missing.length - 8} more</li>}
+            </ul>
+          )}
           <div className="dl-actions">
             {step.missing.length > 0 && (
               <button
@@ -296,82 +240,10 @@ export function DownloadSelectedModal({
                 View Selected Photos
               </button>
             ) : (
-              <button type="button" className="ef-btn solid" onClick={() => setStep({ at: 'local' })}>
+              <button type="button" className="ef-btn solid" onClick={() => setStep({ at: 'choose' })}>
                 Choose another folder
               </button>
             )}
-          </div>
-        </div>
-      )}
-
-      {step.at === 'online' && (
-        <div className="dl-progress">
-          <p aria-live="polite">
-            Downloading and checking originals… {step.done} of {step.total}
-          </p>
-          <div className="uf-track big" role="progressbar" aria-valuenow={step.done} aria-valuemin={0} aria-valuemax={step.total} aria-label="Download progress">
-            <span style={{ width: `${(step.done / Math.max(1, step.total)) * 100}%` }} />
-          </div>
-          <button type="button" className="dl-text-btn" onClick={cancelOnline}>
-            Cancel
-          </button>
-        </div>
-      )}
-
-      {step.at === 'online-failed' && (
-        <div className="dl-summary">
-          <i className="bi bi-exclamation-triangle warn" aria-hidden="true" />
-          <p className="dl-result">The download didn’t finish</p>
-          <p className="dl-fine">{step.message}</p>
-          <div className="dl-actions">
-            <button type="button" className="ef-btn outline" onClick={() => setStep({ at: 'choose' })}>
-              <i className="bi bi-arrow-left" /> Back
-            </button>
-            <button type="button" className="ef-btn solid" onClick={() => void getOnline()}>
-              <i className="bi bi-arrow-clockwise" /> Retry
-            </button>
-          </div>
-        </div>
-      )}
-
-      {step.at === 'online-done' && (
-        <div className="dl-summary" data-testid="cloud-summary">
-          <i className={`bi bi-${step.result.saved ? 'check-circle-fill ok' : 'exclamation-circle warn'}`} aria-hidden="true" />
-          <p className="dl-result">
-            <strong>{step.result.saved} originals saved</strong> · <strong>{step.result.verified} verified</strong>
-          </p>
-          {step.folder && step.result.saved > 0 && (
-            <p className="dl-fine dl-saved">
-              Saved in the folder{' '}
-              <span className="dl-folder-name" title={step.folder}>
-                “{step.folder}”
-              </span>
-            </p>
-          )}
-          {step.result.notInCloud.length > 0 && (
-            <p className="dl-fine">
-              {step.result.notInCloud.length} {step.result.notInCloud.length === 1 ? 'original isn’t' : 'originals aren’t'} in the cloud: use Copy from my computer for{' '}
-              {step.result.notInCloud.length === 1 ? 'it' : 'them'}.
-            </p>
-          )}
-          {step.result.failed.length > 0 && (
-            <p className="dl-fine">{step.result.failed.length} didn’t download or didn’t match the uploaded original. Try again.</p>
-          )}
-          <div className="dl-actions">
-            {step.result.notInCloud.length + step.result.failed.length > 0 && (
-              <button
-                type="button"
-                className="ef-btn outline"
-                onClick={() =>
-                  saveText(`${selection.event.title} - missing photos.txt`.replace(/[\\/:*?"<>|]+/g, '-'), missingListText(selection.event.title, [...step.result.notInCloud, ...step.result.failed]))
-                }
-              >
-                <i className="bi bi-file-earmark-text" /> Download missing list (.txt)
-              </button>
-            )}
-            <button type="button" className="ef-btn solid" onClick={finish}>
-              View Selected Photos
-            </button>
           </div>
         </div>
       )}

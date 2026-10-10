@@ -45,10 +45,9 @@ describe('Photo Selection settings (per event)', () => {
       photoNotes: false,
       galleryExpiry: 30,
       galleryExpiresOn: isoDaysFromToday(30),
-      originalQuality: false,
       videoDownload: false,
       watermark: { logoUrl: null, position: 'bottom-right', sizePct: 20, spacingPct: 2, opacityPct: 80, enabled: false },
-      addons: { originalQuality: false, videoDownload: false },
+      addons: { videoDownload: false },
     })
   })
 
@@ -72,7 +71,6 @@ describe('Photo Selection settings (per event)', () => {
   })
 
   it('add-on settings need the add-on', async () => {
-    expectError((await patch({ originalQuality: true }).expect(402)).body, 'PLAN_LIMIT')
     expectError((await patch({ videoDownload: true }).expect(402)).body, 'PLAN_LIMIT')
   })
 

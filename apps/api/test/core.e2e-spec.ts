@@ -121,7 +121,8 @@ describe('Phase 2 — clients, events, selections, albums, dashboard', () => {
       expectError(fake.body, 'FILE_INVALID')
       const photos = await A.agent.get(`/api/v1/selections/${selection.id}/photos`).expect(200)
       expect(photos.body).toHaveLength(3)
-      await A.agent.get(photos.body[0].url).expect(200).expect('Content-Type', 'image/png')
+      // Stored as its WebP preview, never as the file that was sent.
+      await A.agent.get(photos.body[0].url).expect(200).expect('Content-Type', 'image/webp')
     })
 
     it('still skips a duplicate when copies upload at the same time (folder uploads send several at once)', async () => {

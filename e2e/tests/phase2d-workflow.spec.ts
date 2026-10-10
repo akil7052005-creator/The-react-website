@@ -58,14 +58,16 @@ test('Send options: web sign-in and personal links, the full message, never loca
   const full = await page.evaluate(() => navigator.clipboard.readText())
   expect(full).toContain('📸')
   expect(full).toContain(`Access code: ${sel.code}`)
-  expect(full.split('\n')).toContain(`https://studio.weddyzone.example/select/${sel.publicToken}`)
+  expect(full.split(/\r?\n/)).toContain(`https://studio.weddyzone.example/select/${sel.publicToken}`)
   expect(full).not.toMatch(/localhost|127\.0\.0\.1/)
   await dialog.getByTestId('copy-message').click()
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(full)
   const sent = context.waitForEvent('page')
   await dialog.getByRole('button', { name: 'Send on WhatsApp' }).click()
   const sentPage = await sent
-  expect(new URL(sentPage.url()).searchParams.get('text')).toBe(full)
+  // The Windows clipboard turns line breaks into CRLF; the message itself is the same.
+  const lf = (s: string | null | undefined) => (s ?? '').split(/\r?\n/).join('\n')
+  expect(lf(new URL(sentPage.url()).searchParams.get('text'))).toBe(lf(full))
   await sentPage.close()
   // The Copy Link card has a single button.
   await expect(dialog.locator('.sh-card').first().getByRole('button')).toHaveText([/^(Copy Link|Copied ✓)$/])
@@ -74,7 +76,7 @@ test('Send options: web sign-in and personal links, the full message, never loca
   await options.getByRole('button', { name: 'Send Web link via WhatsApp' }).click()
   const wa = await popup
   const text = new URL(wa.url()).searchParams.get('text') ?? ''
-  expect(text.split('\n')).toContain('https://studio.weddyzone.example/selection/auth')
+  expect(text.split(/\r?\n/)).toContain('https://studio.weddyzone.example/selection/auth')
   expect(text).toContain(`Access code: ${sel.code}`)
   await wa.close()
   expect(await dialog.innerText()).not.toMatch(/localhost/)
@@ -182,23 +184,21 @@ test('upload: rejected files and a failed start show an error toast; counts upda
   mkdirSync(folder)
   writeFileSync(join(folder, 'M1.png'), gradientPng(70, 50, 10, 250))
   writeFileSync(join(folder, 'M2.png'), gradientPng(70, 50, 250, 10))
-  await page.route('**/api/v1/selections/*/photos', (r) =>
-    r.request().method() === 'POST'
-      ? r.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ error: { code: 'FILE_INVALID', message: 'Not a supported file', fields: { file: 'Not a supported file' } } }) })
-      : r.continue(),
+  await page.route('**/api/v1/uploads/complete', (r) =>
+    r.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify({ error: { code: 'FILE_INVALID', message: 'Not a supported file', fields: { file: 'Not a supported file' } } }) }),
   )
   let chooser = page.waitForEvent('filechooser')
   await page.locator('.ef-actions .ef-btn', { hasText: 'Upload Folder' }).click()
   await (await chooser).setFiles(folder)
   const dialog = page.getByRole('dialog', { name: 'Select Folders to Upload' })
   await dialog.getByTestId('start-upload').click()
-  await expect(page.getByText("2 files didn't upload")).toBeVisible()
+  await expect(page.getByText("2 photos didn't upload")).toBeVisible({ timeout: 60_000 })
   await expect(dialog.getByRole('button', { name: /Retry failed/ })).toBeVisible()
 
   // Retry with the server back: "Uploading X / Y", then the counts on the page update.
-  await page.unroute('**/api/v1/selections/*/photos')
+  await page.unroute('**/api/v1/uploads/complete')
   await dialog.getByRole('button', { name: /Retry failed/ }).click()
-  await expect(page.getByText('Upload complete')).toBeVisible()
+  await expect(page.getByText('2 photos uploaded')).toBeVisible({ timeout: 60_000 })
   await expect(page.getByTestId('event-info')).toContainText('5 Images')
   await expect(page.getByTestId('event-info')).toContainText('2 Folders')
 
@@ -211,7 +211,7 @@ test('upload: rejected files and a failed start show an error toast; counts upda
   await page.locator('.ef-actions .ef-btn', { hasText: 'Upload Folder' }).click()
   await (await chooser).setFiles(again)
   await dialog.getByTestId('start-upload').click()
-  await expect(page.getByText(/file didn't upload/)).toBeVisible()
-  await expect(dialog).toContainText('H1.png')
+  await expect(page.getByText('Upload failed')).toBeVisible()
+  await expect(dialog.getByTestId('start-upload')).toBeEnabled()
   rmSync(root, { recursive: true, force: true })
 })

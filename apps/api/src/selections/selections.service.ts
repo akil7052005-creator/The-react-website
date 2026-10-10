@@ -15,7 +15,7 @@ import {
   type createSelectionSchema,
   type eventDetailsSchema,
   type ListQuery,
-  type PhotoOriginalDto,
+  MAX_PREVIEW_BYTES,
   type PublicSelectionDto,
   type SendVia,
   type SelectionDto,
@@ -35,8 +35,8 @@ import { NotificationsService } from '../core/notifications.service'
 import { PrismaService, type Tx } from '../prisma/prisma.service'
 import { accessKey, hashPin, hasAccess, PIN_LOCK_MINUTES, PIN_MAX_FAILURES, pinLocked, pinMatches, pinRequired, wrongPin } from './gallery-access'
 import { IMAGE_MIMES, isVideoMime, VIDEO_MIMES } from '../infra/file-sniff'
-import { StorageService } from '../infra/storage.service'
-import { LIGHT_PREVIEW_PX, PhotoPreviewService, PREVIEW_PX, type WatermarkSpec } from './previews.service'
+import { previewKey, StorageService, thumbKey } from '../infra/storage.service'
+import { LIGHT_PREVIEW_PX, PhotoPreviewService, PREVIEW_PX, renderUploadCopies, type WatermarkSpec } from './previews.service'
 import { writeLog } from './selection-log'
 import { fileTooLarge, type originalMeta, renewToUpload, storageFull, UploadLimitsService } from './upload-limits'
 
@@ -344,8 +344,8 @@ export class SelectionsService {
     const s = await this.find(studioId, id)
     const now = new Date()
     await this.prisma.$transaction(async (tx) => {
-      const photos = await tx.photo.findMany({ where: { selectionId: id, deletedAt: null }, select: { fileId: true, previewFileId: true, originalFileId: true } })
-      const fileIds = photos.flatMap((p) => [p.fileId, ...(p.previewFileId ? [p.previewFileId] : []), ...(p.originalFileId ? [p.originalFileId] : [])])
+      const photos = await tx.photo.findMany({ where: { selectionId: id, deletedAt: null }, select: { fileId: true, previewFileId: true, originalFileId: true, thumbFileId: true } })
+      const fileIds = photos.flatMap((p) => [p.fileId, p.previewFileId, p.originalFileId, p.thumbFileId].filter((f): f is string => !!f))
       await tx.photo.updateMany({ where: { selectionId: id, deletedAt: null }, data: { deletedAt: now } })
       if (fileIds.length) await tx.storedFile.updateMany({ where: { id: { in: fileIds } }, data: { deletedAt: now } })
       await tx.selection.update({ where: { id }, data: { deletedAt: now } })
@@ -361,11 +361,9 @@ export class SelectionsService {
     await this.find(studioId, id)
     const photos = await this.prisma.photo.findMany({
       where: { selectionId: id, deletedAt: null },
-      include: { file: true, originalFile: true, picks: { include: { member: true } }, comments: { include: { member: true }, orderBy: { createdAt: 'asc' } } },
+      include: { file: true, picks: { include: { member: true } }, comments: { include: { member: true }, orderBy: { createdAt: 'asc' } } },
       orderBy: { position: 'asc' },
     })
-    // The full-quality original: kept beside a compressed upload, or the upload itself when not compressed.
-    const original = (p: (typeof photos)[number]) => (p.originalFile && !p.originalFile.deletedAt ? p.originalFile : p.compressed ? null : p.file)
     return photos.map((p) => ({
       id: p.id,
       url: fileUrls.studio(p.fileId),
@@ -381,17 +379,20 @@ export class SelectionsService {
       originalSize: p.originalSize,
       originalWidth: p.originalWidth,
       originalHeight: p.originalHeight,
-      originalUrl: original(p) ? fileUrls.studio(original(p)!.id) : null,
-      originalChecksum: original(p)?.checksum ?? null,
+      relativePath: p.relativePath,
+      sha256: p.sha256,
+      thumbUrl: p.thumbFileId ? fileUrls.studio(p.thumbFileId) : null,
       pickedBy: p.picks.map((k) => k.member.name),
       comments: p.comments.map((c) => ({ memberName: c.member.name, text: c.text, createdAt: c.createdAt.toISOString() })),
     }))
   }
 
   /**
-   * Adds one photo. With `limits` (the upload route always passes them) the studio's plan decides
-   * the largest photo, storage is checked under the selection lock, and a read-only plan is refused.
-   * `folder` is the folder the photo came from, if any.
+   * Adds one photo or video sent through the API (small files; the uploader sends photos straight to
+   * storage through /uploads instead). A photo is never kept as sent: the server makes the same 2048 px
+   * preview and 400 px thumbnail the browser would, and only those are stored. Photos over 2 MB are
+   * refused. With `limits` the studio's plan decides video size and storage, and a read-only plan is
+   * refused. `folder` is the folder the file came from, if any.
    */
   async addPhoto(
     studioId: string,
@@ -411,6 +412,12 @@ export class SelectionsService {
       : { mimes }
     const { checksum, type } = await this.files.validate(studioId, 'PHOTO', file, 'file', overrides)
     const media = isVideoMime(type.mime) ? 'video' : 'photo'
+    if (media === 'photo' && file!.size > MAX_PREVIEW_BYTES) {
+      throw fileInvalid(`${file!.originalname} is larger than 2 MB — use Upload Folder, which makes the preview on your computer`)
+    }
+    // A photo becomes its preview + thumbnail before anything is stored (the bytes sent are dropped).
+    const photoId = randomUUID()
+    const copies = media === 'photo' ? await renderUploadCopies(file!.buffer) : null
     // The uploader sends several files at once (a whole folder, say). Locking the selection row makes
     // uploads to one selection take turns between the duplicate check and the insert, so the same
     // photo arriving twice in parallel is still caught, and positions never collide.
@@ -418,38 +425,60 @@ export class SelectionsService {
       async (tx) => {
         await tx.$queryRaw`SELECT id FROM selections WHERE id = ${id}::uuid FOR UPDATE`
         const dup = await tx.photo.findFirst({
-          where: { selectionId: id, deletedAt: null, file: { checksum } },
+          where: { selectionId: id, deletedAt: null, OR: [{ sha256: checksum }, { file: { checksum } }] },
           include: { file: true },
         })
         if (dup) {
-          throw conflict(`${file!.originalname} is already in this selection (same file as ${dup.file.originalName})`, {
+          throw conflict(`${file!.originalname} is already in this selection (same file as ${dup.originalName ?? dup.file.originalName})`, {
             file: 'Duplicate photo — already uploaded',
           })
         }
+        const size = copies ? copies.preview.length + copies.thumb.length : file!.size
         // Storage is counted inside the lock too, so parallel uploads can't overshoot the plan together.
         if (limits && limits.storageGb !== null) {
           const used = await this.uploadLimits.storageUsed(studioId, tx)
-          if (used + file!.size > limits.storageGb * GB) throw storageFull(used, limits)
+          if (used + size > limits.storageGb * GB) throw storageFull(used, limits)
         }
         const last = await tx.photo.findFirst({ where: { selectionId: id }, orderBy: { position: 'desc' } })
         const folderId = await this.resolveFolder(tx, id, media, opts.folderId, opts.folder)
-        const stored = await this.files.store(studioId, 'PHOTO', file, 'file', tx, overrides)
-        // The original's name and size: from the browser for a compressed upload, else the file itself.
+        // The original's name and size: from the browser when it sent them, else the file itself.
         const o = opts.original
+        const name = o?.originalName ?? file!.originalname.slice(0, 255)
+        let stored
+        let thumbId: string | null = null
+        if (copies) {
+          const keys = { preview: previewKey(s.eventId, photoId, 'webp'), thumb: thumbKey(s.eventId, photoId, 'webp') }
+          await this.storage.saveAt(keys.preview, copies.preview, 'image/webp')
+          await this.storage.saveAt(keys.thumb, copies.thumb, 'image/webp')
+          stored = await tx.storedFile.create({
+            data: { studioId, kind: 'PHOTO', storageKey: keys.preview, originalName: name.slice(0, 200), mimeType: 'image/webp', size: copies.preview.length, checksum },
+          })
+          thumbId = (
+            await tx.storedFile.create({
+              data: { studioId, kind: 'PHOTO', storageKey: keys.thumb, originalName: name.slice(0, 200), mimeType: 'image/webp', size: copies.thumb.length, checksum: `thumb:${checksum}` },
+            })
+          ).id
+        } else {
+          stored = await this.files.store(studioId, 'PHOTO', file, 'file', tx, overrides)
+        }
         const photo = await tx.photo.create({
           data: {
+            id: photoId,
             studioId,
             eventId: s.eventId,
             selectionId: id,
             fileId: stored.id,
+            thumbFileId: thumbId,
             position: (last?.position ?? -1) + 1,
             folder: opts.folder ?? null,
             folderId,
-            compressed: !!o?.compressed,
-            originalName: o?.originalName ?? stored.originalName,
-            originalSize: o?.originalSize ?? (o?.compressed ? null : stored.size),
-            originalWidth: o?.originalWidth ?? null,
-            originalHeight: o?.originalHeight ?? null,
+            compressed: !!copies,
+            originalName: name,
+            originalSize: o?.originalSize ?? file!.size,
+            originalWidth: o?.originalWidth ?? copies?.width ?? null,
+            originalHeight: o?.originalHeight ?? copies?.height ?? null,
+            sha256: copies ? checksum : null,
+            format: copies ? 'webp' : null,
           },
         })
         // The first photo moves a new selection from Draft to Uploading (until it is shared).
@@ -474,60 +503,6 @@ export class SelectionsService {
     }
   }
 
-  /**
-   * Keeps the full-quality original of a compressed upload in the cloud, for the studio only (the
-   * customer always gets the compressed copy). Verified before it is kept: the bytes must hash to the
-   * SHA-256 the browser computed (when it sent one) and match the original's name and size recorded
-   * with the photo. Any file type (RAW, HEIC…), up to the plan's size per photo; counts as storage.
-   */
-  async attachOriginal(
-    studioId: string,
-    id: string,
-    photoId: string,
-    file: UploadedFile | undefined,
-    opts: { limits?: UploadLimitsDto; sha256?: string | null } = {},
-  ): Promise<PhotoOriginalDto> {
-    const s = await this.find(studioId, id)
-    if (isSelectionLocked(s.status)) throw readOnly('This selection was submitted — photos can no longer be added.')
-    const { limits } = opts
-    if (limits?.readOnly) throw renewToUpload(limits)
-    if (!file || !file.buffer?.length) throw fileInvalid('Please choose the original file', 'file')
-    if (limits && file.size > limits.maxPhotoMb * MB) throw fileTooLarge(limits)
-    const checksum = sha256(file.buffer)
-    if (opts.sha256 && opts.sha256.toLowerCase() !== checksum) {
-      throw fileInvalid(`${file.originalname} changed on the way — upload it again`, 'file')
-    }
-    const photo = await this.prisma.photo.findFirst({ where: { id: photoId, selectionId: id, deletedAt: null }, include: { originalFile: true } })
-    if (!photo) throw notFound('Photo')
-    if (!photo.compressed) throw badRequest('This photo was uploaded at full quality — it is its own original.')
-    if ((photo.originalName && photo.originalName !== file.originalname) || (photo.originalSize && photo.originalSize !== file.size)) {
-      throw fileInvalid(`${file.originalname} is not the original of ${photo.originalName ?? 'this photo'}`, 'file')
-    }
-    const dto = (f: { id: string; checksum: string; size: number }): PhotoOriginalDto => ({ photoId, originalUrl: fileUrls.studio(f.id), originalChecksum: f.checksum, size: f.size })
-    // Sent again (a retry): the same bytes are already kept.
-    if (photo.originalFile && !photo.originalFile.deletedAt && photo.originalFile.checksum === checksum) return dto(photo.originalFile)
-
-    const ext = (/\.([a-z0-9]{1,8})$/i.exec(file.originalname)?.[1] ?? 'bin').toLowerCase()
-    const key = await this.storage.save(file.buffer, ext, 'application/octet-stream')
-    const stored = await this.prisma.$transaction(
-      async (tx) => {
-        await tx.$queryRaw`SELECT id FROM selections WHERE id = ${id}::uuid FOR UPDATE`
-        if (limits && limits.storageGb !== null) {
-          const used = await this.uploadLimits.storageUsed(studioId, tx)
-          if (used + file.size > limits.storageGb * GB) throw storageFull(used, limits)
-        }
-        const f = await tx.storedFile.create({
-          data: { studioId, kind: 'PHOTO', storageKey: key, originalName: file.originalname.slice(0, 200), mimeType: 'application/octet-stream', size: file.size, checksum },
-        })
-        if (photo.originalFileId) await tx.storedFile.update({ where: { id: photo.originalFileId }, data: { deletedAt: new Date() } })
-        await tx.photo.update({ where: { id: photo.id }, data: { originalFileId: f.id } })
-        return f
-      },
-      { timeout: 30_000, maxWait: 30_000 },
-    )
-    return dto(stored)
-  }
-
   /** The studio's grid shows the same preview the client sees (fast to load), not the original. */
   async studioPreview(studioId: string, id: string, photoId: string) {
     const s = await this.find(studioId, id)
@@ -544,7 +519,7 @@ export class SelectionsService {
     return { logoFileId: w.logoFileId, text: studioName, position: w.position, sizePct: w.sizePct, spacingPct: w.spacingPct, opacityPct: w.opacityPct }
   }
 
-  private async studioName(studioId: string) {
+  async studioName(studioId: string) {
     return (await this.prisma.studio.findUniqueOrThrow({ where: { id: studioId }, select: { name: true } })).name
   }
 
@@ -552,7 +527,7 @@ export class SelectionsService {
    * The folder a new photo goes in: the one chosen on the page, else the top folder it was uploaded
    * from ("Haldi/Close-ups" → Haldi, made if new), else General. Runs under the selection lock.
    */
-  private async resolveFolder(tx: Tx, selectionId: string, media: 'photo' | 'video', folderId?: string | null, path?: string | null) {
+  async resolveFolder(tx: Tx, selectionId: string, media: 'photo' | 'video', folderId?: string | null, path?: string | null) {
     if (folderId) {
       const f = await tx.selectionFolder.findFirst({ where: { id: folderId, selectionId } })
       if (!f) throw badRequest('Folder not found', { folderId: 'Choose one of this selection’s folders' })
@@ -579,8 +554,8 @@ export class SelectionsService {
       this.prisma.photoPick.deleteMany({ where: { photoId } }),
       this.prisma.photo.update({ where: { id: photoId }, data: { deletedAt: new Date() } }),
       this.prisma.storedFile.update({ where: { id: photo.fileId }, data: { deletedAt: new Date() } }),
-      // Its kept original goes with it.
-      ...(photo.originalFileId ? [this.prisma.storedFile.update({ where: { id: photo.originalFileId }, data: { deletedAt: new Date() } })] : []),
+      // Its thumbnail (and any original kept by an older version) go with it.
+      ...[photo.thumbFileId, photo.originalFileId].filter((f): f is string => !!f).map((fid) => this.prisma.storedFile.update({ where: { id: fid }, data: { deletedAt: new Date() } })),
     ])
   }
 
@@ -825,10 +800,9 @@ export class SelectionsService {
       if (!s.stored.videoDownload) throw new AppError(HttpStatus.FORBIDDEN, ERROR_CODES.FORBIDDEN, 'Video downloads are turned off for this gallery.')
       return { file: photo.file, buffer: null }
     }
+    // Customers only ever get the preview (watermarked when the event says so), never an original.
     const watermark = this.watermarkFor(s, s.studio.name)
-    const original = s.stored.originalQuality
-    if (!watermark && original) return { file: photo.file, buffer: null }
-    const buffer = await this.previews.downloadFor(photo.file, watermark, original)
+    const buffer = await this.previews.downloadFor(photo.file, watermark)
     if (!buffer) throw notFound('Photo')
     return { file: photo.file, buffer, name: photo.file.originalName.replace(/\.[^.]+$/, '') + '.jpg' }
   }
@@ -849,7 +823,6 @@ export class SelectionsService {
     })
     if (!photos.length) throw badRequest('This folder has no photos.')
     const watermark = this.watermarkFor(s, s.studio.name)
-    const original = s.stored.originalQuality
     const safe = folder.name.replace(/[^\w-]+/g, '-').replace(/-+/g, '-') || 'photos'
     res.setHeader('Content-Type', 'application/zip')
     res.setHeader('Content-Disposition', `attachment; filename="${safe}.zip"`)
@@ -858,7 +831,7 @@ export class SelectionsService {
     zip.pipe(res)
     const used = new Set<string>()
     for (const p of photos) {
-      const buffer = !watermark && original ? null : await this.previews.downloadFor(p.file, watermark, original)
+      const buffer = await this.previews.downloadFor(p.file, watermark)
       let name = buffer ? p.file.originalName.replace(/\.[^.]+$/, '') + '.jpg' : p.file.originalName
       for (let n = 2; used.has(name.toLowerCase()); n++) name = name.replace(/(\.[^.]+)?$/, ` (${n})$1`)
       used.add(name.toLowerCase())

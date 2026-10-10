@@ -186,7 +186,7 @@ describe('Studio workflow: Photo Selection', () => {
       const res = await pub().get(view.photos[0].url).expect(200)
       expect(res.headers['content-type']).toBe('image/jpeg')
       const meta = await sharp(res.body as Buffer).metadata()
-      expect(Math.max(meta.width!, meta.height!)).toBe(1600)
+      expect(Math.max(meta.width!, meta.height!)).toBe(2048)
       expect(view.photos[0].downloadUrl).toBeNull()
       await pub().get(`${view.photos[0].url}/download`).expect(403)
 
@@ -195,14 +195,15 @@ describe('Studio workflow: Photo Selection', () => {
       expect(Buffer.compare(marked.body as Buffer, res.body as Buffer)).not.toBe(0)
       const photo = await prisma.photo.findFirstOrThrow({ where: { selectionId: s.id }, include: { preview: true } })
       // The stored preview is named by the watermark it carries.
-      expect(photo.preview?.originalName).toMatch(/^preview-[0-9a-f]{10}-1600-m1:/)
+      expect(photo.preview?.originalName).toMatch(/^preview-[0-9a-f]{10}-2048-m1:/)
     })
 
-    it('previews do not count toward studio storage', async () => {
+    it('server-made customer copies do not count toward studio storage (the preview and thumbnail do)', async () => {
       const before = (await A.agent.get('/api/v1/me/upload-limits').expect(200)).body.storageUsedBytes
       const s = await newSelection()
       await upload(s.id).expect(201)
-      const file = await prisma.storedFile.findFirstOrThrow({ where: { photo: { selectionId: s.id } } })
+      const photo = await prisma.photo.findFirstOrThrow({ where: { selectionId: s.id }, include: { file: true, thumb: true } })
+      const file = { size: photo.file.size + photo.thumb!.size }
       await settle()
       const view = (await pub().get(`/api/v1/public/selections/${s.publicToken}`).expect(200)).body
       await pub().get(view.photos[0].url).expect(200)
@@ -210,14 +211,14 @@ describe('Studio workflow: Photo Selection', () => {
       expect(after - before).toBe(file.size)
     })
 
-    it('gives the original only when downloads are on', async () => {
+    it('gives a preview-quality download only when downloads are on', async () => {
       const s = await newSelection({ allowDownload: true })
       await upload(s.id).expect(201)
       const view = (await pub().get(`/api/v1/public/selections/${s.publicToken}`).expect(200)).body
       expect(view.allowDownload).toBe(true)
       const dl = await pub().get(view.photos[0].downloadUrl).expect(200)
       expect(dl.headers['content-disposition']).toMatch(/^attachment/)
-      // Without the Original Quality add-on a download is a 1600 px JPEG copy.
+      // Customers only ever download the preview (a 2048 px JPEG), never an original.
       expect(dl.headers['content-type']).toBe('image/jpeg')
     })
 
@@ -324,7 +325,8 @@ describe('Studio workflow: Photo Selection', () => {
       expect(zip.headers['content-type']).toBe('application/zip')
       const body = zip.body as Buffer
       expect(body.subarray(0, 2).toString()).toBe('PK')
-      expect(body.includes(Buffer.from(`Haldi/${view.photos[0].originalName}`))).toBe(true)
+      // The ZIP holds the previews (WebP), named after the originals.
+      expect(body.includes(Buffer.from(`Haldi/${view.photos[0].originalName.replace(/\.[^.]+$/, '')}.webp`))).toBe(true)
       expect(body.includes(Buffer.from('Wedding/'))).toBe(false)
       const all = await A.agent.get(`/api/v1/selections/${s.id}/zip`).query({ scope: 'all' }).buffer(true).parse(binary).expect(200)
       expect((all.body as Buffer).includes(Buffer.from('Wedding/'))).toBe(true)

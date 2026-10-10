@@ -99,13 +99,13 @@ test('studio: upload folders, block a duplicate, set a PIN, share', async ({ pag
   const dialog = page.getByRole('dialog', { name: 'Select Folders to Upload' })
   await expect(dialog.getByText('Albums (1)')).toBeVisible()
   await expect(dialog.getByTestId('selected-folders')).toContainText('Wedding')
-  await expect(dialog.getByTestId('selected-folders')).toContainText('2 files') // the text file is ignored
+  await expect(dialog.getByTestId('selected-folders')).toContainText('2 photos') // the text file is ignored
   chooser = page.waitForEvent('filechooser')
   await dialog.getByRole('button', { name: 'Add Photo Folder' }).click()
   await (await chooser).setFiles(haldi)
   await expect(dialog.getByText('Albums (2)')).toBeVisible()
   await dialog.getByTestId('start-upload').click()
-  await expect(page.getByText('Upload complete')).toBeVisible()
+  await expect(page.getByText('3 photos uploaded')).toBeVisible({ timeout: 60_000 })
   await expect(dialog).toHaveCount(0)
   await expect(page.getByTestId('folder-grid').getByRole('button', { name: /Open photo folder Wedding, 2 images/ })).toBeVisible()
   await expect(page.getByTestId('folder-grid').getByRole('button', { name: /Open photo folder Haldi, 1 images/ })).toBeVisible()
@@ -165,7 +165,8 @@ test('studio: Send/Share sends the code and the /select link on WhatsApp, then s
   await dialog.getByRole('button', { name: 'Send on WhatsApp' }).click()
   const wa = await popup
   const url = new URL(wa.url())
-  expect(url.pathname).toBe('/919845011223')
+  // wa.me/<number> (or WhatsApp's own /send?phone= it redirects to on the live internet).
+  expect(url.pathname === '/919845011223' || url.searchParams.get('phone') === '919845011223').toBe(true)
   const text = url.searchParams.get('text') ?? ''
   expect(text).toContain(`Access code: ${code}`)
   // The link has a line of its own, so WhatsApp makes it tappable.
@@ -238,7 +239,7 @@ test('studio: dashboard shows the client activity and the event in Recent Events
   await expect(page).toHaveURL(selectionUrl)
 })
 
-test('studio: submitted → download picks (no ZIP), unlock with a reason, resubmitted → delivered, reset refused', async ({ page }) => {
+test('studio: submitted → download picks (no ZIP), unlock with a reason, resubmitted → delivered, reset still available', async ({ page }) => {
   await login(page)
   await page.goto(selectionUrl)
   await page.locator('.ef-actions .ef-btn', { hasText: 'Settings' }).click()
@@ -247,11 +248,11 @@ test('studio: submitted → download picks (no ZIP), unlock with a reason, resub
   await settings.getByRole('tab', { name: /Picks & activity/ }).click()
   await expect(settings.getByText('2 of 2 picked. The client submitted their selection.')).toBeVisible()
 
-  // "Download picked photos" opens Download Selected (originals into a folder, never a ZIP).
+  // "Download picked photos" opens Download Selected (originals copied from this computer, never a ZIP).
   await expect(settings.getByRole('link', { name: /ZIP/ })).toHaveCount(0)
   await settings.getByRole('button', { name: 'Download picked photos' }).click()
   const get = page.getByRole('dialog', { name: 'Get selected files' })
-  await expect(get.getByTestId('download-from-cloud')).toContainText('Full-quality originals, into a folder')
+  await expect(get.getByTestId('select-original-folder')).toContainText('Copy from my computer')
   await get.getByRole('button', { name: 'Close' }).click()
 
   // Unlock, logged with the reason.
@@ -277,9 +278,9 @@ test('studio: submitted → download picks (no ZIP), unlock with a reason, resub
   await page.getByTestId('confirm-ok').click()
   await expect(settings.getByText(/Delivered\./)).toBeVisible()
   await settings.getByRole('button', { name: 'Close' }).click()
-  // A delivered selection's picks are final.
+  // A Downloaded selection can still be reset (Shortlist / Reject all → Pending).
   await page.getByRole('link', { name: /Back to folders/ }).click()
-  await expect(page.locator('.ef-actions .ef-btn', { hasText: 'Reset Selection' })).toBeDisabled()
+  await expect(page.locator('.ef-actions .ef-btn', { hasText: 'Reset Selection' })).toBeEnabled()
 })
 
 test('studio defaults apply to new selections', async ({ page }) => {

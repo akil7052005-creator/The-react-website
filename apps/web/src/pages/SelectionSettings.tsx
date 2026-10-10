@@ -18,13 +18,14 @@ import { EventDetailsModal } from '../components/selection/EventDetailsModal'
 import { refreshSelection, selectionPath } from '../components/selection/selectionUi'
 import { ResetSelectionModal } from '../components/selection/ResetSelectionModal'
 import { SettingsModal } from '../components/selection/SettingsModal'
+import { CloudStorageMeter } from '../components/selection/CloudStorageMeter'
 import { ErrorState, Skeleton, Spinner } from '../components/ui'
 import { api, upload } from '../lib/api'
 import { fileUrl } from '../lib/env'
 import { toastError } from '../lib/query'
 import { formatDate } from '../utils/format'
 
-type Bool = 'allowClientView' | 'downloadOn' | 'downloadAllFolder' | 'instagramFollow' | 'favoriteOption' | 'photoNotes' | 'originalQuality' | 'videoDownload'
+type Bool = 'allowClientView' | 'downloadOn' | 'downloadAllFolder' | 'instagramFollow' | 'favoriteOption' | 'photoNotes' | 'videoDownload'
 type Layout = { position: WatermarkPosition; sizePct: number; spacingPct: number; opacityPct: number; enabled: boolean }
 
 /** A blue/grey switch in a white pill. */
@@ -364,7 +365,7 @@ export default function SelectionSettings() {
             </label>
             <div className="ss-pill">
               <span>Reset Selection</span>
-              <button type="button" className="ss-reset" onClick={() => setResetting(true)} disabled={sel.pickedCount === 0 || sel.status === 'DELIVERED'}>
+              <button type="button" className="ss-reset" onClick={() => setResetting(true)} disabled={sel.pickedCount === 0 && sel.status !== 'DELIVERED'}>
                 ↺ Reset
               </button>
             </div>
@@ -373,24 +374,12 @@ export default function SelectionSettings() {
         </Section>
 
         <div className="ss-block">
-          <h3 className="ss-label">Image Upload Quality</h3>
-          {data.addons.originalQuality ? (
-            <SwitchPill label="Upload original quality (large files)" checked={data.originalQuality} onChange={(v) => toggle('originalQuality', v)} testId="originalQuality" />
-          ) : (
-            <div className="ss-notice">
-              <span>
-                <strong>Upload original quality (large files):</strong> Requires Photo &amp; Video Storage add-on.
-              </span>
-              <Link to="/subscriptions" className="ss-upgrade">
-                UPGRADE
-              </Link>
-            </div>
-          )}
+          <h3 className="ss-label">Photos online</h3>
           <p className="ss-help" data-testid="upload-quality-help">
-            {data.originalQuality
-              ? 'On: photos are uploaded as they are, at full size. Uploads take longer and use more storage.'
-              : 'Photos are compressed to 80–85% quality for fast client viewing. Your originals stay on your computer.'}
+            Each photo is uploaded as a 2048 px preview and a small thumbnail for fast client viewing. Originals are not stored online. Keep your original folder on this
+            computer until delivery.
           </p>
+          <CloudStorageMeter />
           {data.addons.videoDownload ? (
             <SwitchPill label="Video Download" checked={data.videoDownload} onChange={(v) => toggle('videoDownload', v)} testId="videoDownload" />
           ) : (

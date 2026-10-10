@@ -9,8 +9,6 @@ import { formatBytes } from '../../utils/format'
 import { Modal, useConfirm } from '../Modal'
 import { RowMenu } from '../RowMenu'
 import { EmptyState, ErrorState, Skeleton, Spinner } from '../ui'
-import { returnOriginals, safeName, type CloudPick } from './cloudReturn'
-import { canCopyLocally, PermissionNeeded, pickOriginalsFolder } from './localCopy'
 import { count, refreshSelection } from './selectionUi'
 
 export function FolderModal({
@@ -284,57 +282,6 @@ export function FolderView({ s, folder, folders, onBack }: { s: SelectionDto; fo
   )
   const photo = open !== null ? list[open] : null
 
-  /** The folder's full-quality originals, verified, saved into a folder you pick (no ZIP). */
-  const [savingFolder, setSavingFolder] = useState(false)
-  const downloadFolder = async () => {
-    let root = null
-    if (canCopyLocally()) {
-      try {
-        // Straight from the click: the browser shows its own folder picker.
-        root = await pickOriginalsFolder()
-      } catch (e) {
-        if (e instanceof PermissionNeeded) toast.error('Permission needed to save the photos')
-        else toastError(e)
-        return
-      }
-    }
-    setSavingFolder(true)
-    try {
-      const picks: CloudPick[] = inFolder.map((p) => ({
-        id: p.id,
-        originalName: p.originalName,
-        folder: p.folder ?? null,
-        album: folder.name,
-        size: p.originalSize ?? null,
-        originalUrl: p.originalUrl ?? null,
-        originalChecksum: p.originalChecksum ?? null,
-      }))
-      const r = await returnOriginals(picks, {
-        root,
-        folderName: safeName(s.event.title),
-        get: async (url) => {
-          const res = await fetch(fileUrl(url)!, { credentials: 'include' })
-          if (!res.ok) throw new Error(`Download failed (${res.status})`)
-          return res.arrayBuffer()
-        },
-        save: (data, name) => {
-          const a = document.createElement('a')
-          a.href = URL.createObjectURL(new Blob([data]))
-          a.download = name
-          a.click()
-          setTimeout(() => URL.revokeObjectURL(a.href), 2000)
-        },
-      })
-      const left = r.notInCloud.length + r.failed.length
-      if (left) toast.warning(`${r.saved} originals saved · ${left} not available`, { description: 'Not kept in the cloud or didn’t match: use Download Selected → Copy from my computer for those.' })
-      else toast.success(`${r.saved} originals saved${root ? ` in “${safeName(s.event.title)}/${safeName(folder.name)}”` : ''}`)
-    } catch (e) {
-      toastError(e)
-    } finally {
-      setSavingFolder(false)
-    }
-  }
-
   const remove = () =>
     confirm({
       title: `Delete folder ${folder.name}?`,
@@ -367,9 +314,6 @@ export function FolderView({ s, folder, folders, onBack }: { s: SelectionDto; fo
           {count(folder.photoCount)} Images{folder.videoCount ? ` · ${count(folder.videoCount)} Videos` : ''} · {count(folder.pickedCount)} picked
         </span>
         <div className="fv-actions">
-          <button type="button" className="ef-btn outline sm" onClick={() => void downloadFolder()} disabled={!inFolder.length || savingFolder} data-testid="folder-download">
-            {savingFolder ? <Spinner size={12} /> : <i className="bi bi-download" />} Download
-          </button>
           <RowMenu
             label={`Folder ${folder.name} actions`}
             items={[
@@ -415,7 +359,7 @@ export function FolderView({ s, folder, folders, onBack }: { s: SelectionDto; fo
                       <i className="bi bi-play-circle-fill" aria-hidden="true" />
                     </span>
                   ) : (
-                    <img src={fileUrl(p.previewUrl ?? p.url)} alt={p.originalName} loading="lazy" decoding="async" />
+                    <img src={fileUrl(p.thumbUrl ?? p.previewUrl ?? p.url)} alt={p.originalName} loading="lazy" decoding="async" />
                   )}
                 </button>
                 {p.pickedBy.length > 0 && (

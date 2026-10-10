@@ -115,7 +115,6 @@ export const eventSettingsPatchSchema = z
     photoNotes: z.boolean(),
     /** Days from today, or null for no expiry. */
     galleryExpiry: z.union([z.literal(7), z.literal(15), z.literal(30), z.literal(60), z.literal(90), z.null()]),
-    originalQuality: z.boolean(),
     videoDownload: z.boolean(),
     allowSelection: z.boolean(),
     highQuality: z.boolean(),

@@ -84,7 +84,7 @@ function PicksTab({ overview }: { overview: SelectionOverviewDto }) {
           </div>
         )}
         <div className="st-row">
-          {/* The picks' full-quality originals into a folder (the Download Selected dialog), never a ZIP. */}
+          {/* The picks' originals, copied from this computer (the Download Selected dialog). */}
           <button className="btn btn-ghost" onClick={() => setDownloading(true)} disabled={s.pickedCount === 0}>
             <i className="bi bi-download" /> Download picked photos
           </button>

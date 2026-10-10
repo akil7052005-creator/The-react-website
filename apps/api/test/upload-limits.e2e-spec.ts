@@ -101,7 +101,9 @@ describe('Photo uploads: plan-based limits', () => {
     it('rejects a photo over the plan size with 413 FILE_TOO_LARGE (Starter: 25 MB)', async () => {
       const res = await upload(photo(26 * MB), 'big.png').expect(413)
       expect(res.body.error).toMatchObject({ code: 'FILE_TOO_LARGE', message: 'Larger than 25 MB on your Starter plan', fields: { file: 'Larger than 25 MB on your Starter plan' } })
-      await upload(photo(24 * MB), 'under-limit.png').expect(201)
+      // Under the plan size but over 2 MB: refused too, only previews are stored online.
+      expect((await upload(photo(24 * MB), 'under-limit.png').expect(422)).body.error.message).toMatch(/larger than 2 MB/)
+      await upload(photo(1 * MB), 'small.png').expect(201)
     })
 
     it("uses each plan's own size (Pro accepts what Starter refuses)", async () => {
@@ -120,11 +122,10 @@ describe('Photo uploads: plan-based limits', () => {
     it('refuses an upload that would pass the storage limit (402 PLAN_LIMIT "Storage full")', async () => {
       await setLimits('STARTER', { storageGb: 1 })
       const used = (await A.agent.get('/api/v1/me/upload-limits').expect(200)).body.storageUsedBytes
-      // A stand-in file record bringing usage to 1 GB minus 100 KB.
-      await prisma.storedFile.create({ data: { studioId: A.studioId, kind: 'PHOTO', storageKey: `test/filler-${Date.now()}`, originalName: 'filler.png', mimeType: 'image/png', size: GB - used - 100 * 1024, checksum: 'filler' } })
+      // A stand-in file record leaving 10 bytes: less than any preview + thumbnail.
+      await prisma.storedFile.create({ data: { studioId: A.studioId, kind: 'PHOTO', storageKey: `test/filler-${Date.now()}`, originalName: 'filler.png', mimeType: 'image/png', size: GB - used - 10, checksum: 'filler' } })
       const left = (await A.agent.get('/api/v1/me/upload-limits').expect(200)).body.storageLeftBytes
-      expect(left).toBe(100 * 1024)
-      await upload(photo(50 * 1024), 'fits.png').expect(201)
+      expect(left).toBe(10)
       const full = await upload(photo(200 * 1024), 'too-much.png').expect(402)
       expect(full.body.error.code).toBe('PLAN_LIMIT')
       expect(full.body.error.message).toBe('Storage full: 1 of 1 GB used. Upgrade for more space.')
@@ -151,11 +152,14 @@ describe('Photo uploads: plan-based limits', () => {
       expect((await upload(Buffer.from('MZ-not-an-image'), 'fake.jpg').expect(422)).body.error.code).toBe('FILE_INVALID')
     })
 
-    it('counts new uploads in My Subscription → Storage', async () => {
-      const before = (await A.agent.get('/api/v1/subscription').expect(200)).body.usage.find((u: { key: string }) => u.key === 'storage').used
-      await upload(photo(3 * MB), 'storage.png').expect(201)
-      const after = (await A.agent.get('/api/v1/subscription').expect(200)).body.usage.find((u: { key: string }) => u.key === 'storage').used
-      expect(after).toBeGreaterThan(before)
+    it('counts new uploads (their preview + thumbnail) in the storage used', async () => {
+      const used = async () => (await A.agent.get('/api/v1/me/upload-limits').expect(200)).body.storageUsedBytes
+      const before = await used()
+      await upload(photo(1 * MB), 'storage.png').expect(201)
+      // Only the small copies count: far less than the 1 MB that was sent.
+      const added = (await used()) - before
+      expect(added).toBeGreaterThan(0)
+      expect(added).toBeLessThan(MB)
     })
   })
 

@@ -12,7 +12,7 @@ import { count, hasSubmitted, LIVE_POLL_MS, refreshSelection } from '../componen
 import { SelectionStatusPill } from '../components/selection/SelectionStatusPill'
 import { ResetSelectionModal } from '../components/selection/ResetSelectionModal'
 import { ShareModal } from '../components/selection/ShareModal'
-import { UploadFoldersModal, type UploadFoldersHandle } from '../components/selection/UploadFoldersModal'
+import { ORIGINALS_REMINDER, UploadFoldersModal, type UploadFoldersHandle } from '../components/selection/UploadFoldersModal'
 import { EmptyState, ErrorState, Skeleton } from '../components/ui'
 import { useUrlState } from '../hooks/useUrlState'
 import { api, isApiError } from '../lib/api'
@@ -200,6 +200,9 @@ export default function SelectionEvent() {
           </button>
         </div>
       </header>
+      <p className="ef-reminder" data-testid="originals-reminder">
+        <i className="bi bi-shield-lock" aria-hidden="true" /> {ORIGINALS_REMINDER}
+      </p>
       <p className="ef-info" data-testid="event-info">
         <span>
           <i className="bi bi-folder2" /> {count(folders.length)} Folders

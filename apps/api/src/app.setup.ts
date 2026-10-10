@@ -32,7 +32,9 @@ export function configureApp(app: INestApplication) {
     const mutating = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)
     const len = Number(req.headers['content-length'] ?? 0)
     const type = req.headers['content-type'] ?? ''
-    if (mutating && len > 0 && !type.startsWith('application/json') && !type.startsWith('multipart/form-data')) {
+    // Local storage stands in for the bucket's signed PUT of a preview (development and tests only).
+    const localPreviewPut = req.method === 'PUT' && req.path.startsWith('/api/v1/uploads/local/') && /^image\/(webp|jpeg)$/.test(type)
+    if (mutating && len > 0 && !localPreviewPut && !type.startsWith('application/json') && !type.startsWith('multipart/form-data')) {
       res.status(415).json({ error: { code: 'VALIDATION_ERROR', message: 'Send JSON (application/json) or multipart/form-data' } })
       return
     }

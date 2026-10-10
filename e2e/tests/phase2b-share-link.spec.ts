@@ -28,14 +28,16 @@ async function typeCode(page: Page, code: string) {
  * into it are listed in window.__written. window.__fsMode = 'deny' makes the picker refuse.
  */
 function fakeFolderPicker(page: Page) {
-  return page.addInitScript(() => {
+  // The real bytes of each original (as uploaded), so fingerprint matching finds them.
+  const originals = { 'H0.png': png(200).toString('base64'), 'H1.png': png(270).toString('base64'), 'W0.png': png(280).toString('base64') }
+  return page.addInitScript((bytes: Record<string, string>) => {
     type Any = any // eslint-disable-line @typescript-eslint/no-explicit-any
     const w = window as Any
     w.__written = [] as string[]
     const fileHandle = (name: string, path: string[]) => ({
       kind: 'file',
       name,
-      getFile: async () => new File([new Uint8Array([1, 2, 3])], name),
+      getFile: async () => new File([bytes[name] ? Uint8Array.from(atob(bytes[name]), (c) => c.charCodeAt(0)) : new Uint8Array([1, 2, 3])], name),
       createWritable: async () => ({ write: async () => undefined, close: async () => void w.__written.push([...path, name].join('/')) }),
     })
     const dirHandle = (name: string, path: string[], files: string[] = [], dirs: Any[] = []): Any => {
@@ -70,7 +72,7 @@ function fakeFolderPicker(page: Page) {
       if (w.__fsMode === 'deny') throw new DOMException('The user aborted a request.', 'NotAllowedError')
       return root
     }
-  })
+  }, originals)
 }
 
 test('studio: an event with two albums, shared', async ({ page, context }) => {
@@ -140,29 +142,23 @@ test('client: code check, picking within the limit, Selection tab, submit', asyn
   expect(doc).toBeLessThanOrEqual(win)
 })
 
-test('studio: Download Selected — permission refused, local copy, originals from the cloud (no ZIP), Selected Photos', async ({ page }) => {
+test('studio: Download Selected — permission refused, local copy of the exact originals (no cloud, no ZIP), Selected Photos', async ({ page }) => {
   await fakeFolderPicker(page)
   await login(page)
   await page.goto(`/photo-selection/${sel.id}`)
   await expect(page.locator('.ef-info-end .psx-status')).toHaveText('Selected')
   await page.getByTestId('download-selected').click()
   const dialog = page.getByRole('dialog', { name: 'Get selected files' })
-  await expect(dialog.getByRole('button', { name: /Copy from my computer/ })).toBeVisible()
-  await expect(dialog.getByRole('button', { name: /Download from cloud/ })).toBeVisible()
-
-  // Copy from my computer → Back returns; Esc closes.
-  await dialog.getByRole('button', { name: /Copy from my computer/ }).click()
-  const local = page.getByRole('dialog', { name: 'Find your originals' })
-  await expect(local.getByText('Pick the top folder. We’ll look inside every subfolder.')).toBeVisible()
-  await local.getByRole('button', { name: 'Back' }).click()
-  await expect(page.getByRole('dialog', { name: 'Get selected files' })).toBeVisible()
+  await expect(dialog.getByTestId('select-original-folder')).toContainText('Copy from my computer')
+  await expect(dialog.getByText('Pick the top folder. We look inside every subfolder.')).toBeVisible()
+  // Originals are never online: no cloud download.
+  await expect(dialog.getByText(/Download from cloud/)).toHaveCount(0)
   await page.keyboard.press('Escape')
   await expect(page.getByRole('dialog')).toHaveCount(0)
 
   // "Don't Allow" in the browser's prompt.
   await page.evaluate(() => ((window as unknown as { __fsMode: string }).__fsMode = 'deny'))
   await page.getByTestId('download-selected').click()
-  await page.getByRole('button', { name: /Copy from my computer/ }).click()
   await page.getByTestId('select-original-folder').click()
   await expect(page.getByText('Permission needed to copy selected photos')).toBeVisible()
 
@@ -179,14 +175,8 @@ test('studio: Download Selected — permission refused, local copy, originals fr
   await expect(page.getByTestId('selected-grid').locator('li')).toHaveCount(1)
   await expect(page.locator('.ef-info-end .psx-status')).toHaveText('Downloaded')
 
-  // Download from cloud: the pick's full-quality original, verified, into a "Selected - …/<album>" folder. No ZIP.
+  // Downloaded selections can still be copied again from this computer.
   await page.getByTestId('download-selected').click()
-  const zips: string[] = []
-  page.on('download', (d) => zips.push(d.suggestedFilename()))
-  await page.getByTestId('download-from-cloud').click()
-  await expect(page.getByTestId('cloud-summary')).toContainText('1 originals saved · 1 verified')
-  const after = await page.evaluate(() => (window as unknown as { __written: string[] }).__written)
-  expect(after).toHaveLength(2)
-  expect(after[1]).toMatch(new RegExp(`^Selected - ${customer} - ${eventTitle} - \\d{4}-\\d{2}-\\d{2}/Haldi/[^/]+$`))
-  expect(zips.filter((n) => /\.zip$/i.test(n))).toEqual([])
+  await page.getByTestId('select-original-folder').click()
+  await expect(page.getByTestId('copy-summary')).toContainText('1 copied · 0 not found')
 })

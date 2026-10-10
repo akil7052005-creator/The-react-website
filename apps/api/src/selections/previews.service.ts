@@ -1,11 +1,11 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { Injectable, Logger } from '@nestjs/common'
 import type { StoredFile } from '@prisma/client'
-import { CUSTOMER_COPY_PX, CUSTOMER_COPY_QUALITY, watermarkBox, type WatermarkPosition } from '@weddyzone/shared'
+import { CUSTOMER_COPY_PX, CUSTOMER_COPY_QUALITY, PREVIEW_EDGE_PX, PREVIEW_WEBP_QUALITY, THUMB_EDGE_PX, THUMB_WEBP_QUALITY, watermarkBox, type WatermarkPosition } from '@weddyzone/shared'
 import sharp from 'sharp'
 import type { Readable } from 'stream'
 import { sha256 } from '../common/util'
-import { StorageService } from '../infra/storage.service'
+import { renderedPreviewKey, StorageService } from '../infra/storage.service'
 import { PrismaService } from '../prisma/prisma.service'
 
 // Client galleries never get the original file. They get a preview: at most PREVIEW_PX on the long
@@ -106,6 +106,22 @@ export async function renderImage(input: Buffer, w: WatermarkSpec | null, logo: 
   return img.jpeg(jpegFor(maxPx ? CUSTOMER_COPY_QUALITY : 92)).toBuffer()
 }
 
+/**
+ * The two copies a photo is stored as (the same the browser makes): a 2048 px WebP preview at 80%
+ * and a 400 px WebP thumbnail at 70%, turned upright, without EXIF/GPS. Plus the photo's pixel size.
+ */
+export async function renderUploadCopies(input: Buffer) {
+  const base = sharp(input, { failOn: 'none', limitInputPixels: 300_000_000 }).rotate()
+  const meta = await sharp(input, { failOn: 'none', limitInputPixels: 300_000_000 }).metadata()
+  const turned = (meta.orientation ?? 1) >= 5
+  const fit = (px: number) => ({ width: px, height: px, fit: 'inside' as const, withoutEnlargement: true })
+  const [preview, thumb] = await Promise.all([
+    base.clone().resize(fit(PREVIEW_EDGE_PX)).webp({ quality: Math.round(PREVIEW_WEBP_QUALITY * 100) }).toBuffer(),
+    base.clone().resize(fit(THUMB_EDGE_PX)).webp({ quality: Math.round(THUMB_WEBP_QUALITY * 100) }).toBuffer(),
+  ])
+  return { preview, thumb, width: (turned ? meta.height : meta.width) ?? null, height: (turned ? meta.width : meta.height) ?? null }
+}
+
 export async function readAll(stream: Readable) {
   const chunks: Buffer[] = []
   for await (const c of stream) chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c))
@@ -160,16 +176,14 @@ export class PhotoPreviewService {
   }
 
   /**
-   * What a client download gets: the original (or a 1600 px copy without the Original Quality
-   * add-on), watermarked when the event says so. Rendered on request, not stored.
+   * What a client download gets: the preview ("Download (preview quality)"), watermarked when the
+   * event says so. Rendered on request, not stored. Originals are never online.
    */
-  async downloadFor(file: StoredFile, watermark: WatermarkSpec | null, original: boolean): Promise<Buffer | null> {
+  async downloadFor(file: StoredFile, watermark: WatermarkSpec | null): Promise<Buffer | null> {
     return this.slot(async () => {
       const stream = await this.storage.open(file.storageKey)
       if (!stream) return null
-      const input = await readAll(stream)
-      if (!watermark && original) return input
-      return renderImage(input, watermark, await this.bytes(watermark?.logoFileId ?? null), original ? null : PREVIEW_PX)
+      return renderImage(await readAll(stream), watermark, await this.bytes(watermark?.logoFileId ?? null), PREVIEW_PX)
     })
   }
 
@@ -182,7 +196,9 @@ export class PhotoPreviewService {
         const stream = await this.storage.open(photo.file.storageKey)
         if (!stream) return null
         const out = await renderImage(await readAll(stream), watermark, await this.bytes(watermark?.logoFileId ?? null), px)
-        const storageKey = await this.storage.save(out, 'jpg', 'image/jpeg')
+        // Kept beside the uploaded preview, under previews/ like every photo copy.
+        const storageKey = renderedPreviewKey(photo.eventId, `${photo.id}-${previewTag(watermark, px)}-${randomBytes(4).toString('hex')}`)
+        await this.storage.saveAt(storageKey, out, 'image/jpeg')
         // File row and link in one statement: an unlinked preview would count as studio storage.
         const updated = await this.prisma.$transaction(async (tx) => {
           if (photo.previewFileId) await tx.storedFile.update({ where: { id: photo.previewFileId }, data: { deletedAt: new Date() } })

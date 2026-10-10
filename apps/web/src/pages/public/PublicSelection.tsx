@@ -541,8 +541,8 @@ export default function PublicSelection() {
               {open! + 1} / {photos.length}
             </span>
             {current.downloadUrl ? (
-              <a className="icon-btn" href={fileUrl(current.downloadUrl)} download aria-label="Download original">
-                <i className="bi bi-download" />
+              <a className="btn btn-sm btn-ghost cg-dl" href={fileUrl(current.downloadUrl)} download>
+                <i className="bi bi-download" aria-hidden="true" /> Download (preview quality)
               </a>
             ) : (
               <span />

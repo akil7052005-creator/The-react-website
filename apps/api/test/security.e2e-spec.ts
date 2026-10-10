@@ -38,6 +38,8 @@ describe('Security — auth on every route, tenant isolation, public tokens', ()
       path === '/api/v1/health' ||
       // Called by the payment gateway, authenticated by its HMAC signature instead of a session.
       path === '/api/v1/webhooks/payments' ||
+      // Local storage's stand-in for the bucket's signed PUT: authorised by the signed token in the URL.
+      path === '/api/v1/uploads/local/:token' ||
       ['/api/v1/auth/signup', '/api/v1/auth/login', '/api/v1/auth/refresh', '/api/v1/auth/logout', '/api/v1/auth/forgot-password', '/api/v1/auth/reset-password'].includes(path) ||
       path.startsWith('/api/docs')
     const failures: string[] = []

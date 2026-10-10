@@ -2325,3 +2325,90 @@ a.ps-upload {
 .ss-block > .ss-pill {
   justify-self: start;
 }
+
+/* ---- Upload Folder: previews only (resume, estimate, offline, summary) ---- */
+.uf-resume,
+.uf-done,
+.uf-offline,
+.uf-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.uf-resume {
+  background: var(--color-primary-soft, #fdecf1);
+  border: 1px solid var(--color-primary, #e0144a);
+}
+.uf-resume > span {
+  flex: 1 1 220px;
+}
+.uf-resume-actions {
+  display: flex;
+  gap: 8px;
+}
+.uf-summary {
+  background: var(--color-surface-2, #f5f5f5);
+  color: var(--color-text, #404040);
+}
+.uf-offline {
+  background: #fff4e5;
+  color: #8a4b00;
+  margin: 8px 0 0;
+}
+.uf-done {
+  flex-direction: column;
+  align-items: flex-start;
+  background: #eaf7ee;
+  color: #1f6b3a;
+}
+.uf-done details {
+  width: 100%;
+}
+.uf-done ul {
+  max-height: 160px;
+  overflow: auto;
+  margin: 6px 0 0;
+  padding-left: 18px;
+  word-break: break-word;
+}
+.uf-upgrade {
+  font-weight: 700;
+  text-decoration: underline;
+}
+.ef-reminder {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--color-text-muted, #6b6b6b);
+}
+.dl-missing {
+  max-height: 140px;
+  overflow: auto;
+  margin: 4px 0 8px;
+  padding-left: 18px;
+  font-size: 13px;
+  text-align: left;
+  word-break: break-word;
+}
+.csm {
+  margin-top: 12px;
+}
+.csm-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+.cg-dl {
+  white-space: nowrap;
+}

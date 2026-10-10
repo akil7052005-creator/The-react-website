@@ -40,7 +40,7 @@ export type FolderType = (typeof FOLDER_TYPES)[number]
  * The copy customers see and pick from: at most CUSTOMER_COPY_PX on the long side, JPEG quality
  * CUSTOMER_COPY_QUALITY (standard tables, so "82" means 82). About 250–350 KB for a camera photo.
  */
-export const CUSTOMER_COPY_PX = 1600
+export const CUSTOMER_COPY_PX = 2048
 export const CUSTOMER_COPY_QUALITY = 82
 
 /** Longest folder/album name: the Windows and macOS folder-name limit. */
@@ -111,12 +111,10 @@ export interface EventSettings {
   galleryExpiry: number | null | 'custom'
   /** YYYY-MM-DD, or null with no expiry. */
   galleryExpiresOn: string | null
-  /** Downloads are the full original file (add-on); otherwise a 1600 px copy. */
-  originalQuality: boolean
   videoDownload: boolean
   /** The client can pick photos (off: they can only look). */
   allowSelection: boolean
-  /** Client previews at full size (1600 px); off: lighter 1280 px previews. */
+  /** Client previews at full size (2048 px); off: lighter 1280 px previews. */
   highQuality: boolean
   /** Picks are capped at selectionLimit; off: no cap. */
   limitOn: boolean
@@ -125,7 +123,7 @@ export interface EventSettings {
   videoSelection: boolean
   watermark: WatermarkSettings
   /** What the studio's plan includes. */
-  addons: { originalQuality: boolean; videoDownload: boolean }
+  addons: { videoDownload: boolean }
 }
 
 export const DEFAULT_WATERMARK: Omit<WatermarkSettings, 'logoUrl' | 'enabled'> = { position: 'bottom-right', sizePct: 20, spacingPct: 2, opacityPct: 80 }
@@ -136,7 +134,6 @@ export interface StoredEventSettings {
   downloadAllFolder: boolean
   instagramFollow: boolean
   favoriteOption: boolean
-  originalQuality: boolean
   videoDownload: boolean
   allowSelection: boolean
   highQuality: boolean
@@ -160,7 +157,6 @@ export function resolveStoredSettings(raw: unknown): StoredEventSettings {
     downloadAllFolder: bool(r.downloadAllFolder, false),
     instagramFollow: bool(r.instagramFollow, false),
     favoriteOption: bool(r.favoriteOption, true),
-    originalQuality: bool(r.originalQuality, false),
     videoDownload: bool(r.videoDownload, false),
     allowSelection: bool(r.allowSelection, true),
     highQuality: bool(r.highQuality, true),

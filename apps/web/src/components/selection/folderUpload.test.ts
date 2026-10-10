@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { folderPathOf, groupInputFiles, isRaw, mediaOf, rejectReason, targetsOf, toRow } from './folderUpload'
+import { folderPathOf, groupInputFiles, isRaw, mediaOf, rejectReason, scanInputFiles, targetsOf, toRow } from './folderUpload'
 
 const file = (name: string, path?: string) => ({ name, size: 10, type: '', webkitRelativePath: path ?? '' }) as unknown as File
 
 describe('mediaOf', () => {
-  it('keeps photos (JPG, JPEG, PNG, WebP, HEIC) and videos (MP4, MOV), any case', () => {
-    expect(['a.jpg', 'b.JPEG', 'c.png', 'd.webp', 'e.HEIC'].map(mediaOf)).toEqual(['image', 'image', 'image', 'image', 'image'])
-    expect(['clip.mp4', 'CLIP.MOV'].map(mediaOf)).toEqual(['video', 'video'])
+  it('keeps photos (JPG, JPEG, PNG, WebP, HEIC), any case; videos are not uploaded from a folder', () => {
+    expect(['a.jpg', 'b.JPEG', 'c.png', 'd.webp', 'e.HEIC', 'f.jfif'].map(mediaOf)).toEqual(['image', 'image', 'image', 'image', 'image', 'image'])
+    expect(['clip.mp4', 'CLIP.MOV'].map(mediaOf)).toEqual([null, null])
   })
   it('takes camera RAW files as photos (uploaded as a compressed copy of their preview)', () => {
     expect(['IMG_1.CR2', 'a.nef', 'b.ARW', 'c.dng', 'd.cr3'].map(mediaOf)).toEqual(['image', 'image', 'image', 'image', 'image'])
@@ -18,11 +18,10 @@ describe('mediaOf', () => {
 })
 
 describe('folder rows', () => {
-  it('counts only photos and videos, labels video-only folders', () => {
+  it('counts only photos', () => {
     const r = toRow({ name: 'Pictures', files: [file('a.jpg'), file('b.png'), file('x.txt'), file('c.mp4')] }, 'k')
-    expect(r).toMatchObject({ name: 'Pictures', images: 2, videos: 1, label: 'Photo' })
-    expect(r.files).toHaveLength(3)
-    expect(toRow({ name: 'Clips', files: [file('a.mov')] }, 'k').label).toBe('Video')
+    expect(r).toMatchObject({ name: 'Pictures', images: 2, videos: 0, label: 'Photo' })
+    expect(r.files).toHaveLength(2)
   })
 
   it('blocks a folder already listed or already in the event (any case), and empty ones', () => {
@@ -31,7 +30,7 @@ describe('folder rows', () => {
     expect(rejectReason(r, ['pictures'], [])).toEqual(dup)
     expect(rejectReason(r, [], ['PICTURES'])).toEqual(dup)
     expect(rejectReason(r, ['Haldi'], ['Wedding'])).toBeNull()
-    expect(rejectReason(toRow({ name: 'Docs', files: [file('a.pdf')] }, 'k'), [], [])).toEqual({ message: 'This folder has no photos or videos', name: 'Docs' })
+    expect(rejectReason(toRow({ name: 'Docs', files: [file('a.pdf')] }, 'k'), [], [])).toEqual({ message: 'This folder has no photos', name: 'Docs' })
   })
 })
 
@@ -90,6 +89,23 @@ describe('groupInputFiles', () => {
     ])
     expect(g.map((x) => [x.name, x.files.map((f) => f.name)])).toEqual([['Haldi', ['a.jpg']]])
     expect(groupInputFiles([file('b.jpg', 'Selected - Priya - Wedding - 2026-10-04/Haldi/b.jpg')])).toEqual([])
+  })
+
+  it('skips hidden and system files and folders quietly, and lists files that are not photos', () => {
+    const { folders, skipped } = scanInputFiles([
+      file('a.jpg', 'Wedding/Haldi/a.jpg'),
+      file('b.jpg', 'Wedding/.thumbnails/b.jpg'),
+      file('c.jpg', 'Wedding/__MACOSX/Haldi/c.jpg'),
+      file('d.jpg', 'Wedding/$RECYCLE.BIN/d.jpg'),
+      file('.DS_Store', 'Wedding/Haldi/.DS_Store'),
+      file('clip.mp4', 'Wedding/Haldi/clip.mp4'),
+      file('notes.txt', 'Wedding/notes.txt'),
+    ])
+    expect(folders.map((x) => [x.name, x.files.map((f) => f.name)])).toEqual([['Haldi', ['a.jpg']]])
+    expect(skipped).toEqual([
+      { name: 'Wedding/Haldi/clip.mp4', reason: 'Not a photo' },
+      { name: 'Wedding/notes.txt', reason: 'Not a photo' },
+    ])
   })
 
   it('keeps the full folder path of each file', () => {

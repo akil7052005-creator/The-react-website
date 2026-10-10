@@ -131,7 +131,7 @@ function Tile({ item, index, selection, onOpen, onPatch }: { item: MediaItem; in
         )}
       </button>
       {item.downloadUrl && (
-        <a className="cp-round cp-dl" href={clientFileUrl(selection.id, item.downloadUrl)} download aria-label={`Download ${item.type} ${index + 1}`}>
+        <a className="cp-round cp-dl" href={clientFileUrl(selection.id, item.downloadUrl)} download aria-label={item.type === 'video' ? `Download video ${index + 1}` : `Download (preview quality) photo ${index + 1}`} title={item.type === 'video' ? 'Download' : 'Download (preview quality)'}>
           <i className="bi bi-download" aria-hidden="true" />
         </a>
       )}

@@ -268,7 +268,9 @@ export class SelectionWorkflowService {
       orderBy: { position: 'asc' },
     })
     if (!photos.length) throw badRequest(scope === 'picked' ? 'No picked photos to download yet.' : 'No photos to download.')
-    const names = zipNames(photos.map((p) => ({ folder: p.folderRef?.name ?? null, name: p.file.originalName })))
+    // Previews carry the original's name; give each the extension of what it really is (WebP / JPEG).
+    const asStored = (f: { originalName: string; mimeType: string }) => (f.mimeType === 'image/webp' ? f.originalName.replace(/\.[^.]+$/, '') + '.webp' : f.originalName)
+    const names = zipNames(photos.map((p) => ({ folder: p.folderRef?.name ?? null, name: asStored(p.file) })))
     const base = (scope === 'picked' ? `${s.event.title}-selected` : `${s.code}-${s.event.title}`)
       .replace(/[^\w-]+/g, '-')
       .replace(/-+/g, '-')
@@ -279,7 +281,7 @@ export class SelectionWorkflowService {
     // The ZIP is streamed (no Content-Length); the files' total lets the browser show progress.
     res.setHeader('X-Total-Bytes', String(photos.reduce((n, p) => n + p.file.size, 0)))
     res.setHeader('Access-Control-Expose-Headers', 'X-Total-Bytes, Content-Disposition')
-    // Photos are already compressed: store them as they are (fast, same size).
+    // Previews are already compressed: store them as they are (fast, same size).
     const zip = archiver('zip', { store: true })
     zip.on('warning', (e) => this.logger.warn(`ZIP ${s.code}: ${e.message}`))
     zip.on('error', (e) => {

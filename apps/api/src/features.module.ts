@@ -17,6 +17,8 @@ import { SelectionWorkflowService } from './selections/selection-workflow.servic
 import { ClientSelectionController, PublicSelectionsController, SelectionDefaultsController, SelectionsController } from './selections/selections.controller'
 import { ClientSelectionService } from './selections/client-selection.service'
 import { SelectionsService } from './selections/selections.service'
+import { UploadsController, UploadsService } from './selections/uploads'
+import { PreviewCleanupService } from './selections/preview-cleanup.service'
 import { SharePreviewController, SharePreviewService } from './selections/share-preview'
 import { UploadLimitsController, UploadLimitsService } from './selections/upload-limits'
 import { PlatformWhatsAppService } from './infra/platform-whatsapp.service'
@@ -41,6 +43,7 @@ import { WebhooksController } from './subscriptions/webhooks.controller'
     SharePreviewController,
     SelectionDefaultsController,
     UploadLimitsController,
+    UploadsController,
     AlbumsController,
     PublicAlbumsController,
     PlansController,
@@ -59,6 +62,8 @@ import { WebhooksController } from './subscriptions/webhooks.controller'
   providers: [
     SelectionsService,
     UploadLimitsService,
+    UploadsService,
+    PreviewCleanupService,
     SelectionWorkflowService,
     SelectionRemindersService,
     EventSettingsService,
