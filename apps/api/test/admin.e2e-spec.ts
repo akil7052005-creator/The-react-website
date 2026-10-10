@@ -37,7 +37,7 @@ describe('Platform admin area', () => {
     ;({ app, prisma } = await createTestApp())
     await resetDb(prisma)
     studio = await signup(app)
-    const created = await createAdmin(prisma, { email: 'Ops@Weddyzone.test', name: 'Priya Ops' })
+    const created = await createAdmin(prisma, { email: 'Ops@Wedmanage.test', name: 'Priya Ops' })
     adminId = (await prisma.user.findUniqueOrThrow({ where: { email: 'ops@weddyzone.test' } })).id
     admin = request.agent(app.getHttpServer())
     adminLogin = await admin.post('/api/v1/auth/login').send({ email: created.email, password: created.password }).expect(200)

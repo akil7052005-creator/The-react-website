@@ -44,9 +44,9 @@ export function configureApp(app: INestApplication) {
   // Interactive API docs are for development only; production doesn't publish the API's map.
   if (c.NODE_ENV === 'production') return
   const doc = new DocumentBuilder()
-    .setTitle('Weddyzone Studio API')
+    .setTitle('Wedmanage Studio API')
     .setDescription(
-      'REST API for Weddyzone Studio. Auth uses httpOnly cookies (log in via POST /api/v1/auth/login). ' +
+      'REST API for Wedmanage Studio. Auth uses httpOnly cookies (log in via POST /api/v1/auth/login). ' +
         'Errors: { error: { code, message, fields? } }. Money is in paise in responses and rupees in request bodies.',
     )
     .setVersion('1.0')

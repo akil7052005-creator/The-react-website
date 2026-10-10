@@ -90,7 +90,7 @@ export class SupportService {
       messages: messages.map((m) => ({
         id: m.id,
         body: m.body,
-        authorName: m.fromSupport ? 'Weddyzone Support' : m.author.name,
+        authorName: m.fromSupport ? 'Wedmanage Support' : m.author.name,
         fromSupport: m.fromSupport,
         attachmentUrl: m.attachment && !admin ? fileUrls.studio(m.attachment.id) : null,
         attachmentName: m.attachment?.originalName ?? null,
@@ -129,7 +129,7 @@ export class SupportService {
     if (fromSupport) {
       await this.notifications.notify(t.studioId, {
         type: 'TICKET_REPLY',
-        title: 'Weddyzone Support',
+        title: 'Wedmanage Support',
         body: `replied to ${t.code}: ${t.subject}`,
         link: `/support?ticket=${t.id}`,
         icon: 'headset',

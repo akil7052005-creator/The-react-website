@@ -98,7 +98,7 @@ function TicketThread({ id, onClose }: { id: string; onClose: () => void }) {
             ))}
           </ol>
           <form onSubmit={form.handleSubmit((v) => reply.mutate(v))} noValidate>
-            <TextAreaField form={form} name="body" label="Reply as Weddyzone Support" required maxLength={5000} rows={4} />
+            <TextAreaField form={form} name="body" label="Reply as Wedmanage Support" required maxLength={5000} rows={4} />
             <div className="form-foot">
               <span className="muted">The studio is notified in the app.</span>
               <SubmitButton busy={reply.isPending} icon="send">
@@ -128,7 +128,7 @@ export default function AdminTickets() {
 
   return (
     <div className="stack">
-      <PageHeader title="Support inbox" subtitle="Every studio's tickets. Replies reach the studio as Weddyzone Support." />
+      <PageHeader title="Support inbox" subtitle="Every studio's tickets. Replies reach the studio as Wedmanage Support." />
       <Card
         title="Tickets"
         flush

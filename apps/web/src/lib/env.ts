@@ -25,7 +25,7 @@ export function fileUrl(path: string | null | undefined): string | undefined {
 }
 
 /** Shown in "Powered by …" on the customer pages. */
-export const APP_NAME = VITE_APP_NAME?.trim() || 'Weddyzone Studio'
+export const APP_NAME = VITE_APP_NAME?.trim() || 'Wedmanage Studio'
 
 const clean = (v: string | undefined) => v?.trim().replace(/\/+$/, '') || null
 

@@ -218,7 +218,7 @@ describe('Phase 4 — referrals, website, banners, help, support, admin', () => 
       expect(list.body.data.find((t: { id: string }) => t.id === ticketId).studioName).toBeDefined()
       const replied = await admin.post(`/api/v1/admin/tickets/${ticketId}/messages`).send({ body: 'We are looking into it.' }).expect(201)
       expect(replied.body).toMatchObject({ status: 'IN_PROGRESS' })
-      expect(replied.body.messages[1]).toMatchObject({ fromSupport: true, authorName: 'Weddyzone Support' })
+      expect(replied.body.messages[1]).toMatchObject({ fromSupport: true, authorName: 'Wedmanage Support' })
       expect(await prisma.notification.count({ where: { studioId: A.studioId, type: 'TICKET_REPLY' } })).toBe(1)
 
       const resolved = await A.agent.patch(`/api/v1/tickets/${ticketId}/status`).send({ status: 'RESOLVED' }).expect(200)

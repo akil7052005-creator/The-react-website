@@ -5,7 +5,7 @@ import { MailService } from '../src/infra/mail.service'
 
 describe('MailService', () => {
   const saved = { ...process.env }
-  const msg = { to: 'asha@example.com', subject: 'Reset your Weddyzone Studio password', text: 'Use this link…' }
+  const msg = { to: 'asha@example.com', subject: 'Reset your Wedmanage Studio password', text: 'Use this link…' }
   let fetchMock: jest.SpyInstance
 
   const withEnv = (env: Record<string, string>) => {
@@ -26,13 +26,13 @@ describe('MailService', () => {
 
   it('sends through Resend when RESEND_API_KEY is set', async () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ id: 'email_1' }), { status: 200 }))
-    await withEnv({ RESEND_API_KEY: 're_123', MAIL_FROM: 'Weddyzone <no-reply@mail.weddyzone.app>' }).send(msg)
+    await withEnv({ RESEND_API_KEY: 're_123', MAIL_FROM: 'Wedmanage <no-reply@mail.weddyzone.app>' }).send(msg)
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
     expect(url).toBe('https://api.resend.com/emails')
     expect(init.headers).toMatchObject({ Authorization: 'Bearer re_123' })
-    expect(JSON.parse(String(init.body))).toEqual({ from: 'Weddyzone <no-reply@mail.weddyzone.app>', to: ['asha@example.com'], subject: msg.subject, text: msg.text })
+    expect(JSON.parse(String(init.body))).toEqual({ from: 'Wedmanage <no-reply@mail.weddyzone.app>', to: ['asha@example.com'], subject: msg.subject, text: msg.text })
   })
 
   it.each([

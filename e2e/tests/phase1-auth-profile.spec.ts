@@ -107,7 +107,7 @@ test('reset a forgotten password with the emailed link', async ({ page, context 
   // Console-mode emails are saved to MAIL_OUTBOX_DIR by the e2e API server.
   await expect.poll(() => latestMailTo(email), { timeout: 10_000 }).not.toBeNull()
   const mail = latestMailTo(email)!
-  expect(mail.subject).toBe('Reset your Weddyzone Studio password')
+  expect(mail.subject).toBe('Reset your Wedmanage Studio password')
   const link = mail.text.match(/https?:\/\/\S+\/reset-password\?token=\S+/)?.[0]
   expect(link).toBeTruthy()
 

@@ -1,4 +1,4 @@
-// Weddyzone Studio data model.
+// Wedmanage Studio data model.
 // - Every studio-owned table has studio_id and every query is scoped by it.
 // - Money is integer paise.
 // - User content is soft-deleted with deleted_at.
@@ -762,7 +762,7 @@ model PlatformSetting {
   @@map("platform_settings")
 }
 
-/// Platform-wide sequences, e.g. `invoice:2026` for Weddyzone's own GST invoices to studios.
+/// Platform-wide sequences, e.g. `invoice:2026` for Wedmanage's own GST invoices to studios.
 model PlatformCounter {
   key   String @id
   value Int    @default(0)

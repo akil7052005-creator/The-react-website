@@ -650,7 +650,7 @@ export class SubscriptionLifecycleService {
           channels: ['IN_APP'],
           type: 'SUBSCRIPTION_CHANGED',
           title: `${plan.name} plan`,
-          message: `Weddyzone moved your studio to ${plan.name} (${CYCLE_LABELS[cycle]}) until ${istDay(sub.currentPeriodEnd)}`,
+          message: `Wedmanage moved your studio to ${plan.name} (${CYCLE_LABELS[cycle]}) until ${istDay(sub.currentPeriodEnd)}`,
           link: '/my-subscription',
           icon: 'patch-check',
           subscriptionId: id,
@@ -676,7 +676,7 @@ export class SubscriptionLifecycleService {
           channels: ['IN_APP', 'EMAIL'],
           type: 'SUBSCRIPTION_CANCELLED',
           title: 'Plan cancelled',
-          message: `Your ${sub.plan.name} plan was cancelled by Weddyzone. Your studio is read-only; your photos and albums are safe. Contact support or choose a plan to continue.`,
+          message: `Your ${sub.plan.name} plan was cancelled by Wedmanage. Your studio is read-only; your photos and albums are safe. Contact support or choose a plan to continue.`,
           link: '/subscriptions',
           icon: 'x-octagon',
           subscriptionId: id,
@@ -713,7 +713,7 @@ export class SubscriptionLifecycleService {
       link,
       icon: 'alarm',
       subscriptionId: id,
-      email: { subject: `Your Weddyzone ${sub.plan.name} plan`, text: `Hi ${sub.studio.name},\n\n${message}\n\nRenew in one click: ${absoluteUrl(link)}` },
+      email: { subject: `Your Wedmanage ${sub.plan.name} plan`, text: `Hi ${sub.studio.name},\n\n${message}\n\nRenew in one click: ${absoluteUrl(link)}` },
       whatsapp:
         status === 'GRACE'
           ? { template: 'PLAN_EXPIRED_GRACE', vars: { studioName: sub.studio.name, planName: sub.plan.name, date, graceDays: String(settings.graceDays), link: absoluteUrl(link) } }

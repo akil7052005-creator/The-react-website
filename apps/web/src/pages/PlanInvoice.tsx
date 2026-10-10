@@ -6,7 +6,7 @@ import { CardSkeleton, EmptyState, ErrorState } from '../components/ui'
 import { api, isApiError } from '../lib/api'
 import { formatDate, formatMoney } from '../utils/format'
 
-/** Studio: Weddyzone's GST tax invoice for one of its own plan payments. */
+/** Studio: Wedmanage's GST tax invoice for one of its own plan payments. */
 export default function PlanInvoice() {
   const { id = '' } = useParams()
   return <PlanInvoiceView path={`/subscription/payments/${id}/invoice`} backTo="/my-subscription" backLabel="Back to my subscription" />
@@ -20,7 +20,7 @@ export function AdminPlanInvoice() {
   return <PlanInvoiceView path={`/admin/payments/${id}/invoice`} onBack={back} backLabel="Back" />
 }
 
-/** Weddyzone's GST tax invoice for a plan payment. Print / Save as PDF from the browser. */
+/** Wedmanage's GST tax invoice for a plan payment. Print / Save as PDF from the browser. */
 function PlanInvoiceView({ path, backTo, onBack, backLabel }: { path: string; backTo?: string; onBack?: () => void; backLabel: string }) {
   const q = useQuery({ queryKey: ['plan-invoice', path], queryFn: () => api.get<PlatformInvoiceDto>(path) })
   const inv = q.data
@@ -35,7 +35,7 @@ function PlanInvoiceView({ path, backTo, onBack, backLabel }: { path: string; ba
   )
 
   useEffect(() => {
-    if (inv) document.title = `${inv.number} · Weddyzone`
+    if (inv) document.title = `${inv.number} · Wedmanage`
   }, [inv])
 
   if (q.isPending) {
@@ -136,7 +136,7 @@ function PlanInvoiceView({ path, backTo, onBack, backLabel }: { path: string; ba
           <tbody>
             <tr>
               <td>1</td>
-              <td>Weddyzone Studio subscription — {inv.description}</td>
+              <td>Wedmanage Studio subscription — {inv.description}</td>
               <td className="mono">{inv.sac}</td>
               <td className="num">{formatMoney(inv.taxablePaise)}</td>
               <td className="num">18%</td>

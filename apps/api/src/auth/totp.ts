@@ -63,7 +63,7 @@ export function verifyTotp(secret: string, code: string, time = Date.now()): boo
   })
 }
 
-export function otpauthUrl(secret: string, account: string, issuer = 'Weddyzone Admin'): string {
+export function otpauthUrl(secret: string, account: string, issuer = 'Wedmanage Admin'): string {
   return `otpauth://totp/${encodeURIComponent(`${issuer}:${account}`)}?secret=${secret}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=${STEP_SECONDS}`
 }
 

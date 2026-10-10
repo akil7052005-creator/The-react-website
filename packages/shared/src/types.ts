@@ -402,7 +402,7 @@ export interface PaymentDto {
   createdAt: string
 }
 
-/** Tax invoice Weddyzone issues to a studio for a plan payment. */
+/** Tax invoice Wedmanage issues to a studio for a plan payment. */
 export interface PlatformInvoiceDto {
   number: string
   date: string

@@ -20,7 +20,7 @@ const referralFeatures: FeatureBarItem[] = [
     title: 'Zero Referral Limits',
     badge: 'Unlimited',
     icon: 'infinity',
-    summary: 'There is no upper ceiling on how much you can earn through the Weddyzone partner program.',
+    summary: 'There is no upper ceiling on how much you can earn through the Wedmanage partner program.',
     highlights: ['Earn ₹15,000 in wallet credit when 10 referred studios upgrade', 'Real-time referral status tracking'],
     tip: 'Post your referral link alongside your latest wedding gallery on Instagram.',
   },

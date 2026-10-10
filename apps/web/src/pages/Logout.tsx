@@ -23,7 +23,7 @@ function Logout() {
       <div className="card">
         <EmptyState
           icon="box-arrow-left"
-          title="Sign out of Weddyzone?"
+          title="Sign out of Wedmanage?"
           text="You'll need to sign in again to manage your events and galleries."
           action={
             <div className="page-actions">

@@ -6,7 +6,7 @@ import { config } from '../config'
 const PLATFORM_SAC = '998314'
 
 /**
- * Weddyzone's GST tax invoice for one paid plan payment. CGST + SGST when the studio is in the
+ * Wedmanage's GST tax invoice for one paid plan payment. CGST + SGST when the studio is in the
  * platform's state (PLATFORM_STATE_CODE), IGST otherwise. Shared by the studio and admin views.
  */
 export function platformInvoiceDto(p: Payment & { studio: Studio }): PlatformInvoiceDto {

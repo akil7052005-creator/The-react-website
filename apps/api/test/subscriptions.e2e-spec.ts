@@ -552,7 +552,7 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
       expect((await jobs.run(before)).digest).toBe(false)
       expect((await jobs.run(after)).digest).toBe(true)
       expect((await jobs.run(new Date(after.getTime() + 3_600_000))).digest).toBe(false)
-      const digest = mails.filter((m) => m.subject.startsWith('Weddyzone digest'))
+      const digest = mails.filter((m) => m.subject.startsWith('Wedmanage digest'))
       expect(digest).toHaveLength(1)
       expect(digest[0].to).toBe(adminEmail)
       expect(digest[0].text).toContain('Expiring in the next 7 days')

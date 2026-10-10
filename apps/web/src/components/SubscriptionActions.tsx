@@ -225,7 +225,7 @@ function RemindDialog({ row, onClose }: { row: Row; onClose: () => void }) {
         <p className="muted" style={{ margin: 0, fontSize: 13 }}>
           {whatsappOff
             ? 'WhatsApp needs the WhatsApp Cloud API (WHATSAPP_CLOUD_TOKEN) before alerts can go out on it.'
-            : "WhatsApp is sent from Weddyzone's number and never uses the studio's credits."}
+            : "WhatsApp is sent from Wedmanage's number and never uses the studio's credits."}
         </p>
       </fieldset>
     </Modal>

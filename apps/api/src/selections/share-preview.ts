@@ -134,7 +134,7 @@ export function sharePreviewHtml(p: SharePreview, origin: string, path: string) 
 <title>${t}</title>
 <meta name="description" content="${d}" />
 <meta property="og:type" content="website" />
-<meta property="og:site_name" content="Weddyzone Studio" />
+<meta property="og:site_name" content="Wedmanage Studio" />
 <meta property="og:title" content="${t}" />
 <meta property="og:description" content="${d}" />
 <meta property="og:url" content="${escapeHtml(url)}" />

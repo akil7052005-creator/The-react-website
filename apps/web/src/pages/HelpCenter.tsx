@@ -86,7 +86,7 @@ function HelpCenter() {
         eyebrow="Account & Support"
         featureBadge="Knowledge Base"
         title="Studio Help Center"
-        subtitle="Answers and guides for running your wedding photography studio on Weddyzone."
+        subtitle="Answers and guides for running your wedding photography studio on Wedmanage."
       />
 
       {/* Feature Capabilities Ribbon */}

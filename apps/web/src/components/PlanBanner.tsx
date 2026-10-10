@@ -95,7 +95,7 @@ export function PlanBanner({ always = false }: { always?: boolean }) {
   )
 }
 
-/** Cancel at period end, with the reason (shown to Weddyzone admins). */
+/** Cancel at period end, with the reason (shown to Wedmanage admins). */
 export function CancelPlanDialog({ sub, onClose }: { sub: SubscriptionDto; onClose: () => void }) {
   const { refresh } = usePlanActions()
   const form = useZodForm(cancelSubscriptionSchema, { defaultValues: { reason: undefined, details: '' } })

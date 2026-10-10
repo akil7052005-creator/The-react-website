@@ -26,7 +26,7 @@ export default function Signup() {
     mutationFn: (body: object) => api.post<MeDto>('/auth/signup', body),
     onSuccess: (me) => {
       qc.setQueryData(ME_KEY, me)
-      toast.success(`Welcome to Weddyzone, ${me.user.name.split(' ')[0]}! Your 14-day free trial has begun.`)
+      toast.success(`Welcome to Wedmanage, ${me.user.name.split(' ')[0]}! Your 14-day free trial has begun.`)
       const plan = params.get('plan')
       const months: Record<string, string> = { '1': 'MONTHLY', '3': 'QUARTERLY', '6': 'HALF_YEARLY', '12': 'YEARLY' }
       const cycle = months[params.get('months') ?? ''] ?? 'MONTHLY'

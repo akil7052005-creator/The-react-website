@@ -262,7 +262,7 @@ export class AuthService {
     // existing account, an accepted trade-off: silently "sending" nothing is worse for real users.
     await this.mail.send({
       to: user.email,
-      subject: 'Reset your Weddyzone Studio password',
+      subject: 'Reset your Wedmanage Studio password',
       text: `Hi ${user.name},\n\nUse this link to set a new password (valid for 1 hour):\n${link}\n\nIf you did not ask for this, you can ignore this email.`,
     })
   }

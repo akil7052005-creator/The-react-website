@@ -1,4 +1,4 @@
-// Comprehensive feature descriptions and cursor-hover information across Weddyzone studio platform.
+// Comprehensive feature descriptions and cursor-hover information across Wedmanage studio platform.
 
 export const featureInfo = {
   // Navigation & Core Services
@@ -78,7 +78,7 @@ export const featureInfo = {
     tip: 'Check your event quota before a busy wedding month.'
   },
   allAccess: {
-    title: 'Weddyzone All-Access Pass',
+    title: 'Wedmanage All-Access Pass',
     badge: 'VIP Unlimited',
     icon: 'stars',
     summary: 'The top studio tier: unlimited events and albums with the most storage and WhatsApp credits.',
@@ -94,7 +94,7 @@ export const featureInfo = {
     title: 'Partner Referral Network',
     badge: '₹1,500 Reward',
     icon: 'wallet2',
-    summary: 'Earn ₹1,500 in your studio wallet for every studio that joins Weddyzone with your link and upgrades to a paid plan.',
+    summary: 'Earn ₹1,500 in your studio wallet for every studio that joins Wedmanage with your link and upgrades to a paid plan.',
     highlights: [
       'Both you and your referred studio receive ₹1,500 in wallet credit',
       'Credited when the referred studio makes its first paid upgrade',
@@ -170,7 +170,7 @@ export const featureInfo = {
     title: 'Knowledge Base & Guides',
     badge: 'FAQs',
     icon: 'question-circle',
-    summary: 'Searchable answers to common questions about every tool in Weddyzone.',
+    summary: 'Searchable answers to common questions about every tool in Wedmanage.',
     highlights: [
       'Search FAQs by keyword or browse by category',
       'Tell us whether each answer was helpful',
@@ -259,7 +259,7 @@ export const featureInfo = {
     },
     'Dedicated account manager': {
       title: 'Dedicated Studio Concierge',
-      description: 'Coming soon: a dedicated Weddyzone account manager for your studio.'
+      description: 'Coming soon: a dedicated Wedmanage account manager for your studio.'
     },
     'Total Events': {
       title: 'Total Active & Delivered Events',

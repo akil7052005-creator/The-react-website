@@ -175,7 +175,7 @@ export class SubscriptionJobsService implements OnApplicationBootstrap, OnModule
             link: renew,
             icon: stage.kind === 'BEFORE' ? 'alarm' : 'exclamation-triangle',
             subscriptionId: row.id,
-            email: { subject: `${title} · Weddyzone`, text: `Hi ${owner},\n\n${message}\n\nRenew in one click: ${absoluteUrl(renew)}\n\nYour photos, albums and client galleries are never deleted when a plan ends.` },
+            email: { subject: `${title} · Wedmanage`, text: `Hi ${owner},\n\n${message}\n\nRenew in one click: ${absoluteUrl(renew)}\n\nYour photos, albums and client galleries are never deleted when a plan ends.` },
             whatsapp,
           },
           tx,
@@ -373,7 +373,7 @@ export class SubscriptionJobsService implements OnApplicationBootstrap, OnModule
     const revenue = sold.reduce((sum, p) => sum + p.amount, 0)
     const line = (s: string) => `  • ${s}`
     const text = [
-      `Weddyzone daily digest — ${istDay(now)}`,
+      `Wedmanage daily digest — ${istDay(now)}`,
       '',
       `Expiring in the next 7 days (${expiringSoon.length})`,
       ...(expiringSoon.length
@@ -404,7 +404,7 @@ export class SubscriptionJobsService implements OnApplicationBootstrap, OnModule
       message: `${expiringSoon.length} expiring this week · ${expired.length} expired yesterday · ${sold.length} paid (${inr(revenue)}) · ${failed.length} failed`,
       link: '/admin',
       icon: 'envelope-paper',
-      email: { subject: `Weddyzone digest ${istDay(now)}: ${expiringSoon.length} expiring, ${sold.length} new, ${failed.length} failed`, text },
+      email: { subject: `Wedmanage digest ${istDay(now)}: ${expiringSoon.length} expiring, ${sold.length} new, ${failed.length} failed`, text },
     })
     return queued.length > 0
   }

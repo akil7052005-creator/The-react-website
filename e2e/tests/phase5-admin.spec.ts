@@ -41,7 +41,7 @@ test('an admin answers a studio ticket from the support inbox', async ({ page, b
   await page.getByRole('searchbox', { name: 'Search tickets' }).fill(subject)
   await page.getByRole('cell', { name: subject, exact: true }).click()
   const thread = page.getByRole('dialog', { name: new RegExp(subject) })
-  await thread.getByLabel(/^Reply as Weddyzone Support/).fill('Open the album, then use Export → PDF.')
+  await thread.getByLabel(/^Reply as Wedmanage Support/).fill('Open the album, then use Export → PDF.')
   await thread.getByRole('button', { name: 'Send reply' }).click()
   await expect(page.getByText('Reply sent to the studio')).toBeVisible()
   await thread.getByLabel('Ticket status').selectOption('RESOLVED')

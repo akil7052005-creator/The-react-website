@@ -139,7 +139,7 @@ function FaceRecognition() {
             title="Step 1: Background AI Indexing"
             badge="Studio Side"
             icon="cloud-upload"
-            summary="Drop your event gallery into Weddyzone. Our neural network detects, aligns, and indexes every face in parallel."
+            summary="Drop your event gallery into Wedmanage. Our neural network detects, aligns, and indexes every face in parallel."
             highlights={['Processes 1,000 photos in 90 seconds', 'Identifies groups, candid moments, and portraits']}
             position="top"
             width={280}

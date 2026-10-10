@@ -34,7 +34,7 @@ const dateOnly = (offsetDays: number) => new Date(new Date(`${today}T00:00:00.00
 const ago = (days: number, hours = 0) => new Date(Date.now() - days * DAY - hours * 3_600_000)
 const token = () => randomBytes(18).toString('base64url')
 
-/** Weddyzone's own invoice numbers for the demo plan payments (same series the API uses). */
+/** Wedmanage's own invoice numbers for the demo plan payments (same series the API uses). */
 async function nextPlatformInvoice(prisma: PrismaClient, at: Date): Promise<string> {
   const fy = financialYearStart(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(at))
   const row = await prisma.platformCounter.upsert({ where: { key: `invoice:${fy}` }, create: { key: `invoice:${fy}`, value: 1 }, update: { value: { increment: 1 } } })
@@ -100,7 +100,7 @@ export async function seedDemo(prisma: PrismaClient, uploadDirRaw: string, webAs
   // --- Platform admin -------------------------------------------------------
   if (!(await prisma.user.findUnique({ where: { email: ADMIN_EMAIL } }))) {
     await prisma.user.create({
-      data: { name: 'Weddyzone Support', email: ADMIN_EMAIL, role: 'SUPER_ADMIN', passwordHash: await bcrypt.hash(ADMIN_PASSWORD, 10) },
+      data: { name: 'Wedmanage Support', email: ADMIN_EMAIL, role: 'SUPER_ADMIN', passwordHash: await bcrypt.hash(ADMIN_PASSWORD, 10) },
     })
   }
   const admin = await prisma.user.findUniqueOrThrow({ where: { email: ADMIN_EMAIL } })

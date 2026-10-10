@@ -81,7 +81,7 @@ export class PlansController {
     return this.subs.banner(studioId)
   }
 
-  /** Weddyzone's GST tax invoice for one of the studio's plan payments. */
+  /** Wedmanage's GST tax invoice for one of the studio's plan payments. */
   @Get('subscription/payments/:id/invoice')
   async invoice(@StudioId() studioId: string, @Param('id', ParseUUIDPipe) id: string): Promise<PlatformInvoiceDto> {
     const p = await this.prisma.payment.findFirst({ where: { id, studioId, purpose: 'SUBSCRIPTION', status: 'SUCCESS' }, include: { studio: true } })

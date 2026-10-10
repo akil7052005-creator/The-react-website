@@ -5,7 +5,7 @@
 param([switch]$InstallStartup, [switch]$RemoveStartup)
 
 $root = Split-Path -Parent $PSScriptRoot
-$startup = Join-Path ([Environment]::GetFolderPath('Startup')) 'Weddyzone servers.cmd'
+$startup = Join-Path ([Environment]::GetFolderPath('Startup')) 'Wedmanage servers.cmd'
 
 if ($RemoveStartup) {
   Remove-Item $startup -ErrorAction SilentlyContinue

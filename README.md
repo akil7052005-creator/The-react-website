@@ -1,4 +1,4 @@
-# Weddyzone Studio
+# Wedmanage Studio
 
 Studio management for wedding photographers in India: events and clients, private photo-selection galleries, 3D flipbook albums, GST invoices, WhatsApp messaging, plans and credits, a public portfolio website, gallery banners, help and support.
 

@@ -143,53 +143,53 @@ export const TEMPLATES = [
     key: 'REFERRAL_INVITE',
     name: 'Referral invite',
     body:
-      'I run my studio on Weddyzone Studio — selections, flipbook albums and GST invoices in one place. ' +
+      'I run my studio on Wedmanage Studio — selections, flipbook albums and GST invoices in one place. ' +
       'Sign up with my code {{code}} and we both get ₹1,500: {{link}}',
   },
-  // Weddyzone's own messages to studios (plan alerts). Sent from the platform's number: they cost the
+  // Wedmanage's own messages to studios (plan alerts). Sent from the platform's number: they cost the
   // studio no credits. With the WhatsApp Cloud API, each must exist as an approved template named
   // after its key in lower case, with its variables in the order of PLATFORM_TEMPLATE_PARAMS.
   {
     key: 'PLAN_EXPIRY_REMINDER',
     name: 'Plan expiry reminder',
     creditCost: 0,
-    body: 'Hi {{studioName}}, your Weddyzone {{planName}} plan expires on {{date}}. Renew in one click to keep working without a break: {{link}}',
+    body: 'Hi {{studioName}}, your Wedmanage {{planName}} plan expires on {{date}}. Renew in one click to keep working without a break: {{link}}',
   },
   {
     key: 'PLAN_EXPIRED_GRACE',
     name: 'Plan expired (grace)',
     creditCost: 0,
-    body: 'Hi {{studioName}}, your Weddyzone {{planName}} plan expired on {{date}}. Galleries are view-only and uploads are paused. Renew within {{graceDays}} days or your galleries close for customers: {{link}}',
+    body: 'Hi {{studioName}}, your Wedmanage {{planName}} plan expired on {{date}}. Galleries are view-only and uploads are paused. Renew within {{graceDays}} days or your galleries close for customers: {{link}}',
   },
   {
     key: 'PLAN_READ_ONLY',
     name: 'Account read-only',
     creditCost: 0,
-    body: 'Hi {{studioName}}, your Weddyzone {{planName}} plan has ended, so your account is read-only and your galleries are closed for customers. Renew within 30 days to keep your photo previews: {{link}}',
+    body: 'Hi {{studioName}}, your Wedmanage {{planName}} plan has ended, so your account is read-only and your galleries are closed for customers. Renew within 30 days to keep your photo previews: {{link}}',
   },
   {
     key: 'PLAN_PAYMENT_FAILED',
     name: 'Plan payment failed',
     creditCost: 0,
-    body: "Hi {{studioName}}, your payment for the Weddyzone {{planName}} plan didn't go through. Please retry here: {{link}}",
+    body: "Hi {{studioName}}, your payment for the Wedmanage {{planName}} plan didn't go through. Please retry here: {{link}}",
   },
   {
     key: 'PLAN_RENEWED',
     name: 'Plan renewed',
     creditCost: 0,
-    body: 'Hi {{studioName}}, your Weddyzone {{planName}} plan renewed successfully. Next renewal: {{date}}. Thank you!',
+    body: 'Hi {{studioName}}, your Wedmanage {{planName}} plan renewed successfully. Next renewal: {{date}}. Thank you!',
   },
   {
     key: 'PLAN_PURCHASED',
     name: 'Plan purchased',
     creditCost: 0,
-    body: 'Hi {{studioName}}, your Weddyzone {{planName}} plan is active until {{date}}. Invoice {{invoiceNumber}} is in My Subscription.',
+    body: 'Hi {{studioName}}, your Wedmanage {{planName}} plan is active until {{date}}. Invoice {{invoiceNumber}} is in My Subscription.',
   },
   {
     key: 'PLAN_WINBACK',
     name: 'Win-back offer',
     creditCost: 0,
-    body: 'Hi {{studioName}}, we miss you at Weddyzone! Come back with {{percent}}% off using code {{code}}, valid until {{date}}: {{link}}',
+    body: 'Hi {{studioName}}, we miss you at Wedmanage! Come back with {{percent}}% off using code {{code}}, valid until {{date}}: {{link}}',
   },
 ]
 

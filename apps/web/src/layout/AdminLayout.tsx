@@ -30,7 +30,7 @@ function AdminLayout() {
         <Link to="/admin" className="brand" onClick={close}>
           <span className="brand-mark">W</span>
           <div className="brand-info">
-            <span className="brand-name">Weddyzone</span>
+            <span className="brand-name">Wedmanage</span>
             <span className="brand-sub">Platform admin</span>
           </div>
         </Link>

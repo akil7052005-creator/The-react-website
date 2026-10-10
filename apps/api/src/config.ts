@@ -38,10 +38,10 @@ const schema = z.object({
   SMTP_PORT: z.coerce.number().default(587),
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
-  SMTP_FROM: z.string().default('Weddyzone Studio <no-reply@weddyzone.app>'),
+  SMTP_FROM: z.string().default('Wedmanage Studio <no-reply@weddyzone.app>'),
   // Resend (https://resend.com): when set, emails go through Resend's API instead of SMTP.
   RESEND_API_KEY: z.string().optional(),
-  // Sender for all emails, e.g. "Weddyzone Studio <no-reply@mail.yourdomain.com>". Its domain must be
+  // Sender for all emails, e.g. "Wedmanage Studio <no-reply@mail.yourdomain.com>". Its domain must be
   // verified in Resend. Falls back to SMTP_FROM.
   MAIL_FROM: z.string().optional(),
   // Console-mode only: also save each email as a JSON file here (used by the Playwright e2e run).
@@ -70,8 +70,8 @@ const schema = z.object({
   // Extra addresses for admin alert emails and the daily digest (comma-separated). Every platform
   // admin's own email gets them too.
   ADMIN_ALERT_EMAILS: z.string().default(''),
-  // Seller details printed on Weddyzone's GST invoices to studios.
-  PLATFORM_LEGAL_NAME: z.string().default('Weddyzone Studio'),
+  // Seller details printed on Wedmanage's GST invoices to studios.
+  PLATFORM_LEGAL_NAME: z.string().default('Wedmanage Studio'),
   PLATFORM_GSTIN: z.string().optional(),
   PLATFORM_STATE_CODE: z.string().optional(),
   PLATFORM_ADDRESS: z.string().optional(),
@@ -107,7 +107,7 @@ const schema = z.object({
     if (c.JWT_ACCESS_SECRET === c.JWT_REFRESH_SECRET) fail('JWT_REFRESH_SECRET', 'must differ from JWT_ACCESS_SECRET')
     // Without a provider, password-reset emails would only be logged and never reach anyone.
     if (!c.RESEND_API_KEY && !c.SMTP_HOST) fail('RESEND_API_KEY', 'is required in production (or set SMTP_HOST) so emails are delivered')
-    if (!c.MAIL_FROM) fail('MAIL_FROM', 'is required in production: a sender on your verified domain, e.g. "Weddyzone Studio <no-reply@mail.yourdomain.com>"')
+    if (!c.MAIL_FROM) fail('MAIL_FROM', 'is required in production: a sender on your verified domain, e.g. "Wedmanage Studio <no-reply@mail.yourdomain.com>"')
   })
 
 export type AppConfig = z.output<typeof schema>

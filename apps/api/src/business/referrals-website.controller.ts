@@ -68,7 +68,7 @@ export class ReferralsController {
         balanceAfterPaise: t.balanceAfter,
         createdAt: t.createdAt.toISOString(),
       })),
-      shareText: render(template?.body ?? 'Join me on Weddyzone Studio with code {{code}}: {{link}}', { code: studio.referralCode, link }),
+      shareText: render(template?.body ?? 'Join me on Wedmanage Studio with code {{code}}: {{link}}', { code: studio.referralCode, link }),
     }
   }
 }

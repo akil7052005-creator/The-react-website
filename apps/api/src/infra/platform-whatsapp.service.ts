@@ -4,7 +4,7 @@ import { render, waLink } from '../core/messaging.service'
 import { PrismaService } from '../prisma/prisma.service'
 
 /**
- * Weddyzone's own WhatsApp messages to studios (plan reminders, expiry, failed payments).
+ * Wedmanage's own WhatsApp messages to studios (plan reminders, expiry, failed payments).
  * They use the same template table as studio messages but are sent from the platform's number:
  * no studio credits are spent and nothing is written to the studio's message log.
  */

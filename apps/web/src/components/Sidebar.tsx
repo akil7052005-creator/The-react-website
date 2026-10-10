@@ -16,7 +16,7 @@ function Sidebar({ onNavigate }: { onNavigate: () => void }) {
       <Link to="/" className="brand" onClick={onNavigate}>
         <span className="brand-mark">W</span>
         <div className="brand-info">
-          <span className="brand-name">Weddyzone</span>
+          <span className="brand-name">Wedmanage</span>
           <span className="brand-sub">Studio OS</span>
         </div>
         <span className="brand-pro-tag">{planTag[studio.plan.code] ?? 'PRO'}</span>
