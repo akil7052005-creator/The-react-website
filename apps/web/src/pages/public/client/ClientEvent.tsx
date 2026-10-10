@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { clientFileUrl } from '../../../lib/clientSession'
 import { APP_NAME } from '../../../lib/env'
-import { ClientGate, ClientTabs, noSave, ShowcaseStrip, StudioLogo, SubmitSelection, SubmittedBanner, ThankYou } from './ClientParts'
+import { ClientGate, ClientTabs, noSave, StudioLogo, SubmitSelection, SubmittedBanner, ThankYou } from './ClientParts'
 
 const nf = new Intl.NumberFormat('en-IN')
 
@@ -56,7 +56,6 @@ function EventHome({ selection }: { selection: ClientSelectionDto }) {
   return (
     <div className="cp-page">
       <SubmittedBanner selection={selection} />
-      <ShowcaseStrip selection={selection} />
       <div className="cp-studio-pill">
         <StudioLogo selection={selection} className="cp-studio-logo" />
         {selection.studio.name}

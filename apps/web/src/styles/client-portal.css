@@ -363,67 +363,6 @@
   color: #6b7280;
 }
 
-/* showcase strip */
-.cp-showcase {
-  overflow: hidden;
-  padding: 22px 0 40px;
-  background: #fff;
-  border-bottom: 1px solid #eceef2;
-}
-.cp-show-track {
-  display: flex;
-  gap: 22px;
-  width: max-content;
-  animation: cp-marquee 40s linear infinite;
-}
-.cp-showcase:hover .cp-show-track,
-.cp-showcase:focus-within .cp-show-track {
-  animation-play-state: paused;
-}
-@keyframes cp-marquee {
-  to {
-    transform: translateX(calc(-50% - 11px));
-  }
-}
-.cp-show-card {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin: 0;
-  flex-shrink: 0;
-}
-.cp-show-card img {
-  width: 132px;
-  height: 88px;
-  object-fit: cover;
-  border-radius: 999px;
-  box-shadow: 0 8px 20px -10px rgba(15, 23, 42, 0.35);
-  user-select: none;
-  -webkit-user-drag: none;
-}
-.cp-show-card figcaption {
-  display: grid;
-  line-height: 1.25;
-  font-family: var(--font-display);
-  font-size: 15px;
-  white-space: nowrap;
-}
-.cp-show-card figcaption span {
-  color: #1f2937;
-}
-.cp-show-card figcaption strong {
-  color: var(--cp-red);
-  font-weight: 600;
-}
-@media (prefers-reduced-motion: reduce) {
-  .cp-show-track {
-    animation: none;
-  }
-  .cp-showcase {
-    overflow-x: auto;
-  }
-}
-
 .cp-studio-pill {
   position: relative;
   z-index: 1;
@@ -432,7 +371,7 @@
   gap: 10px;
   width: fit-content;
   max-width: calc(100% - 32px);
-  margin: -22px auto 0;
+  margin: 16px auto 0;
   padding: 10px 22px;
   border-radius: 99px;
   background: var(--cp-navy);
