@@ -22,6 +22,8 @@ import { PreviewCleanupService } from './selections/preview-cleanup.service'
 import { SharePreviewController, SharePreviewService } from './selections/share-preview'
 import { UploadLimitsController, UploadLimitsService } from './selections/upload-limits'
 import { PlatformWhatsAppService } from './infra/platform-whatsapp.service'
+import { AdminStudiosController } from './subscriptions/admin-studios.controller'
+import { AdminStudiosService } from './subscriptions/admin-studios.service'
 import { AdminSubscriptionsController } from './subscriptions/admin-subscriptions.controller'
 import { AdminSubscriptionsService } from './subscriptions/admin-subscriptions.service'
 import { AlertsService } from './subscriptions/alerts.service'
@@ -57,6 +59,7 @@ import { WebhooksController } from './subscriptions/webhooks.controller'
     SupportController,
     AdminController,
     AdminSubscriptionsController,
+    AdminStudiosController,
     WebhooksController,
   ],
   providers: [
@@ -79,6 +82,7 @@ import { WebhooksController } from './subscriptions/webhooks.controller'
     SubscriptionLifecycleService,
     SubscriptionJobsService,
     AdminSubscriptionsService,
+    AdminStudiosService,
   ],
   exports: [SubscriptionJobsService, SubscriptionLifecycleService],
 })

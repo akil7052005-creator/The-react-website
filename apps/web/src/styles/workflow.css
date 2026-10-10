@@ -2577,3 +2577,37 @@ a.ps-upload {
   text-decoration: underline;
   cursor: pointer;
 }
+
+/* Admin → Studios */
+.admin-studios .as-email {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.as-status {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.as-status.ok {
+  background: #e7f6ec;
+  color: #157a3b;
+}
+.as-status.warn {
+  background: #fff4dc;
+  color: #a35d00;
+}
+.as-status.off {
+  background: #eef0f3;
+  color: #5b6472;
+}
+.admin-studios tr.is-removed td {
+  color: var(--text-2);
+}
+.as-removed {
+  white-space: nowrap;
+  font-size: 13px;
+}

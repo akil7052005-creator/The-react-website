@@ -813,3 +813,23 @@ export interface TwoFactorSetupDto {
   secret: string
   otpauthUrl: string
 }
+
+/** Admin → Studios: one registered studio. */
+export interface AdminStudioRowDto {
+  id: string
+  name: string
+  owner: { name: string; phone: string | null } | null
+  email: string | null
+  /** "Trial", "Pro", "VIP" or null (never had a plan). */
+  plan: string | null
+  /** "1 month", "1 year", … (null on Trial / no plan). */
+  period: string | null
+  startDate: string | null
+  expiryDate: string | null
+  /** Whole days to expiry; negative once expired. */
+  daysLeft: number | null
+  status: 'ACTIVE' | 'EXPIRING' | 'EXPIRED' | 'NONE'
+  createdAt: string
+  /** Removed (restorable until purgeAt). */
+  removed: { at: string; by: string | null; purgeAt: string } | null
+}

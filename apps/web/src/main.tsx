@@ -63,6 +63,7 @@ const AdminFaqs = page(() => import('./pages/admin/AdminFaqs'))
 const AdminPlans = page(() => import('./pages/admin/AdminPlans'))
 const AdminDashboard = page(() => import('./pages/admin/AdminDashboard'))
 const AdminSubscriptions = page(() => import('./pages/admin/AdminSubscriptions'))
+const AdminStudios = page(() => import('./pages/admin/AdminStudios'))
 const AdminSubscriptionDetail = page(() => import('./pages/admin/AdminSubscriptionDetail'))
 const AdminAlerts = page(() => import('./pages/admin/AdminAlerts'))
 const AdminSettings = page(() => import('./pages/admin/AdminSettings'))
@@ -160,6 +161,7 @@ const router = createBrowserRouter([
         ),
         children: [
           { index: true, element: <AdminDashboard /> },
+          { path: 'studios', element: <AdminStudios /> },
           { path: 'subscriptions', element: <AdminSubscriptions /> },
           { path: 'subscriptions/:id', element: <AdminSubscriptionDetail /> },
           { path: 'alerts', element: <AdminAlerts /> },

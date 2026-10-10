@@ -90,3 +90,17 @@ export const totpCodeSchema = z.object({
     .regex(/^\d{6}$/, 'Enter the 6-digit code from your authenticator app'),
 })
 
+
+// ---------------------------------------------------------------- admin: studios table
+
+export const ADMIN_STUDIO_PLAN_FILTERS = ['all', 'TRIAL', 'PRO', 'VIP', 'NONE', 'REMOVED'] as const
+export type AdminStudioPlanFilter = (typeof ADMIN_STUDIO_PLAN_FILTERS)[number]
+
+export const adminStudioQuerySchema = listQuerySchema.extend({
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+  plan: z.preprocess(emptyToUndefined, z.enum(ADMIN_STUDIO_PLAN_FILTERS).default('all')),
+})
+export type AdminStudioQuery = z.output<typeof adminStudioQuerySchema>
+
+/** Remove a studio: the admin types the studio's name to confirm. */
+export const removeStudioSchema = z.object({ confirmName: z.string().trim().min(1, 'Type the studio name to confirm').max(200) })

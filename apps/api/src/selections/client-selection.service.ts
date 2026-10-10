@@ -97,7 +97,7 @@ export class ClientSelectionService {
    * selection: CODE_MAX_FAILURES of them lock the link for CODE_LOCK_MINUTES.
    */
   private async checkLinkCode(shareToken: string, code: string) {
-    const s = await this.prisma.selection.findFirst({ where: { publicToken: shareToken, deletedAt: null }, select: { id: true, code: true, codeFailures: true, codeLockedUntil: true } })
+    const s = await this.prisma.selection.findFirst({ where: { publicToken: shareToken, deletedAt: null, studio: { removedAt: null } }, select: { id: true, code: true, codeFailures: true, codeLockedUntil: true } })
     if (!s) throw new AppError(HttpStatus.NOT_FOUND, ERROR_CODES.NOT_FOUND, 'This link is not valid. Please ask your photographer for a new one.')
     if (s.codeLockedUntil && s.codeLockedUntil > new Date()) throw codeLocked(s.codeLockedUntil)
     if (s.code === code) {
@@ -122,7 +122,7 @@ export class ClientSelectionService {
       id = await this.checkLinkCode(shareToken, code)
     } else {
       // Codes are unique; two matches would be old data, and then neither is safe to open.
-      const rows = await this.prisma.selection.findMany({ where: { code, deletedAt: null }, select: { id: true }, take: 2 })
+      const rows = await this.prisma.selection.findMany({ where: { code, deletedAt: null, studio: { removedAt: null } }, select: { id: true }, take: 2 })
       if (rows.length !== 1) throw new AppError(HttpStatus.NOT_FOUND, ERROR_CODES.NOT_FOUND, 'Invalid code', { code: 'Invalid code' })
       id = rows[0].id
     }

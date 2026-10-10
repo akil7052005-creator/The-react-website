@@ -7,6 +7,7 @@ import { PageSkeleton } from '../components/ui'
 const adminNav = [
   { label: 'Revenue', items: [
     { to: '/admin', label: 'Dashboard', icon: 'speedometer2', end: true },
+    { to: '/admin/studios', label: 'Studios', icon: 'shop' },
     { to: '/admin/subscriptions', label: 'Subscriptions', icon: 'credit-card-2-front' },
   ] },
   { label: 'Manage', items: [

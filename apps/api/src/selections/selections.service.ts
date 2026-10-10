@@ -692,9 +692,11 @@ export class SelectionsService {
   async openGallery(where: { publicToken: string } | { id: string }) {
     const s = await this.prisma.selection.findFirst({
       where: { ...where, deletedAt: null },
-      include: { ...include, studio: { select: { name: true, logoFileId: true, phone: true, instagramHandle: true } } },
+      include: { ...include, studio: { select: { name: true, logoFileId: true, phone: true, instagramHandle: true, removedAt: true } } },
     })
     if (!s) throw notFound('Selection')
+    // The studio was removed by the platform admin: its customer links are closed.
+    if (s.studio.removedAt) throw notFound('Selection')
     const studio = { name: s.studio.name, logoUrl: s.studio.logoFileId ? fileUrls.public(s.studio.logoFileId) : null, phone: s.studio.phone }
     const settings = resolveStoredSettings(s.settings)
     if (!settings.allowClientView) {
@@ -714,7 +716,7 @@ export class SelectionsService {
 
   /** Checks a gallery PIN. Wrong PINs are counted per selection; too many lock the gallery for a while. */
   async enterPin(token: string, pin: string) {
-    const s = await this.prisma.selection.findFirst({ where: { publicToken: token, deletedAt: null } })
+    const s = await this.prisma.selection.findFirst({ where: { publicToken: token, deletedAt: null, studio: { removedAt: null } } })
     if (!s) throw notFound('Selection')
     if (!s.pinHash) return { key: null }
     if (s.pinLockedUntil && s.pinLockedUntil > new Date()) throw pinLocked(s.pinLockedUntil)

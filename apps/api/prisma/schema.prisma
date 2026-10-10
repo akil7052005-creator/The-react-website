@@ -222,6 +222,10 @@ model Studio {
   creditBalance     Int      @default(0) @map("credit_balance")
   // Defaults for new selections: { watermark, allowDownload, galleryDays, notesAllowed }.
   selectionDefaults Json?    @map("selection_defaults")
+  // Removed by a platform admin: closed at once, restorable for 30 days, then purged (row kept for tax records).
+  removedAt         DateTime? @map("removed_at")
+  removedById       String?   @map("removed_by_id") @db.Uuid
+  purgedAt          DateTime? @map("purged_at")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
@@ -248,6 +252,7 @@ model Studio {
   counters        Counter[]
   usageAddons     UsageAddon[]
 
+  @@index([removedAt])
   @@map("studios")
 }
 

@@ -48,6 +48,9 @@ export function refreshTtlMs(role: User['role']): number {
   return role === 'SUPER_ADMIN' ? c.ADMIN_SESSION_HOURS * 3_600_000 : c.REFRESH_TOKEN_TTL_DAYS * 86_400_000
 }
 
+/** A studio removed by the platform admin can't sign in. */
+const studioRemoved = () => new AppError(HttpStatus.FORBIDDEN, 'STUDIO_REMOVED', 'This studio account has been removed. Please contact support.')
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -65,8 +68,9 @@ export class AuthService {
   }
 
   async me(userId: string): Promise<MeDto> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } })
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, include: { studio: { select: { removedAt: true } } } })
     if (!user) throw unauthenticated()
+    if (user.studio?.removedAt) throw studioRemoved()
     return {
       user: { id: user.id, name: user.name, email: user.email, phone: user.phone, role: user.role },
       studio: user.studioId ? await this.studios.dto(user.studioId) : null,
@@ -158,6 +162,7 @@ export class AuthService {
         password: 'Incorrect email or password',
       })
     }
+    if (user.studioId && (await this.prisma.studio.findUnique({ where: { id: user.studioId }, select: { removedAt: true } }))?.removedAt) throw studioRemoved()
     // Two-factor sign-in (platform admins who turned it on): the password alone is not enough.
     if (user.totpEnabledAt && user.totpSecret) {
       if (!input.otp) {
@@ -221,8 +226,9 @@ export class AuthService {
       throw expired()
     }
     if (record.expiresAt < new Date()) throw expired()
-    const user = await this.prisma.user.findUnique({ where: { id: record.userId } })
+    const user = await this.prisma.user.findUnique({ where: { id: record.userId }, include: { studio: { select: { removedAt: true } } } })
     if (!user) throw expired()
+    if (user.studio?.removedAt) throw studioRemoved()
     // Only one concurrent refresh wins; the loser gets a normal "expired" and the client retries with the new cookie.
     const revoked = await this.prisma.refreshToken.updateMany({
       where: { id: record.id, revokedAt: null },

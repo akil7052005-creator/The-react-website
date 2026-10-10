@@ -104,7 +104,7 @@ export class SubscriptionJobsService implements OnApplicationBootstrap, OnModule
     // Everything near or past its deadline (60 days back covers grace and win-back).
     const horizon = addDays(now, Math.max(...settings.reminderDays) + 1)
     const rows = await this.prisma.subscription.findMany({
-      where: { currentPeriodEnd: { lte: horizon, gte: addDays(now, -Math.max(60, (settings.winbackAfterDays ?? 0) + settings.graceDays + 7)) } },
+      where: { studio: { removedAt: null }, currentPeriodEnd: { lte: horizon, gte: addDays(now, -Math.max(60, (settings.winbackAfterDays ?? 0) + settings.graceDays + 7)) } },
       include: { plan: true, studio: true },
     })
     report.checked = rows.length
@@ -304,7 +304,7 @@ export class SubscriptionJobsService implements OnApplicationBootstrap, OnModule
   /** Admin alert when a studio passes 80% of its events or uploads in this 30-day window: an upsell lead. */
   private async usageAlerts(now: Date): Promise<number> {
     const settings = await this.settings.alerts()
-    const subs = await this.prisma.subscription.findMany({ include: { plan: true, studio: true } })
+    const subs = await this.prisma.subscription.findMany({ where: { studio: { removedAt: null } }, include: { plan: true, studio: true } })
     const live = subs.filter((s) => !['EXPIRED', 'CANCELLED'].includes(computeStatus(stateOf(s), now, settings)))
     let sent = 0
     for (const s of live) {
