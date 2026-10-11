@@ -610,25 +610,17 @@
   box-shadow: 0 0 0 3px rgba(224, 20, 74, 0.15);
 }
 
-/* ---------- Sticky hero: sections slide up over the photo ---------- */
-.pub-hero-sticky {
-  position: sticky;
-  top: 65px; /* header height (64px row + 1px border) */
-  height: calc(100svh - 65px);
+/* ---------- Home hero: photo stays still while the page scrolls ---------- */
+.pub-hero-fixed {
+  height: calc(100svh - 65px); /* header height (64px row + 1px border) */
   min-height: 0;
-  z-index: 0;
+  clip-path: inset(0); /* limits the fixed photo to the hero area */
 }
-.pub-hero-sticky .pub-hero-img {
+.pub-hero-fixed .pub-hero-img {
+  position: fixed;
+  top: 65px;
+  left: 0;
+  width: 100%;
+  height: calc(100svh - 65px);
   object-position: center 60%; /* keeps the sofa and arch in view */
-}
-main > .pub-hero-sticky ~ * {
-  position: relative;
-  z-index: 1;
-  background: var(--pub-bg);
-}
-main > .pub-hero-sticky ~ .pub-section.alt {
-  background: #fff;
-}
-main > .pub-hero-sticky + * {
-  box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.25);
 }
