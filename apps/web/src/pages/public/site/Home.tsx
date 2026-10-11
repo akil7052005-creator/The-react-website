@@ -23,7 +23,7 @@ export default function Home() {
         <img className="pub-hero-img" src={heroJpg} alt="Floral wedding mandap with a decorated stage sofa" fetchPriority="high" />
         <div className="pub-wrap pub-hero-copy">
           <p className="pub-tagline">For wedding photographers</p>
-          <h1>Let the couple pick their photos, without the back and forth.</h1>
+          <h1>Let the couple pick their favorites effortlessly</h1>
           <div className="pub-actions">
             <Link to="/signup" className="pub-btn">
               Start free trial <Arrow />
