@@ -1,4 +1,4 @@
-/* Public website (/, /about, /pricing) and the login restyle. Accent #E0144A, pill buttons,
+﻿/* Public website (/, /about, /pricing) and the login restyle. Accent #E0144A, pill buttons,
    compact spacing: 48px sections on desktop, 32px on phones. */
 .pub,
 .auth-shell {
@@ -27,7 +27,7 @@
   box-sizing: border-box;
 }
 
-/* Buttons: pill, uppercase 14px bold, with → */
+/* Buttons: pill, uppercase 14px bold, with â†’ */
 .pub-btn,
 .auth-shell .btn-primary {
   display: inline-flex;
@@ -608,4 +608,27 @@
 .auth-shell .auth-card input:focus {
   border-color: var(--pub-accent);
   box-shadow: 0 0 0 3px rgba(224, 20, 74, 0.15);
+}
+
+/* ---------- Sticky hero: sections slide up over the photo ---------- */
+.pub-hero-sticky {
+  position: sticky;
+  top: 65px; /* header height (64px row + 1px border) */
+  height: calc(100svh - 65px);
+  min-height: 0;
+  z-index: 0;
+}
+.pub-hero-sticky .pub-hero-img {
+  object-position: center 60%; /* keeps the sofa and arch in view */
+}
+main > .pub-hero-sticky ~ * {
+  position: relative;
+  z-index: 1;
+  background: var(--pub-bg);
+}
+main > .pub-hero-sticky ~ .pub-section.alt {
+  background: #fff;
+}
+main > .pub-hero-sticky + * {
+  box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.25);
 }

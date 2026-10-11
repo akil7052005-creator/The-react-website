@@ -19,7 +19,7 @@ export default function Home() {
   usePageMeta('Photo selection for wedding studios', `${APP_NAME}: upload a wedding, share it on WhatsApp and get the couple's photo picks back. Free 14-day trial.`)
   return (
     <PublicShell>
-      <section className="pub-hero">
+      <section className="pub-hero pub-hero-sticky">
         <img className="pub-hero-img" src={heroJpg} alt="Floral wedding mandap with a decorated stage sofa" fetchPriority="high" />
         <div className="pub-wrap pub-hero-copy">
           <p className="pub-tagline">For wedding photographers</p>
