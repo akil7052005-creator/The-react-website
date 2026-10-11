@@ -1,4 +1,4 @@
-﻿/* Public website (/, /about, /pricing) and the login restyle. Accent #E0144A, pill buttons,
+/* Public website (/, /about, /pricing) and the login restyle. Accent #E0144A, pill buttons,
    compact spacing: 48px sections on desktop, 32px on phones. */
 .pub,
 .auth-shell {
@@ -27,7 +27,7 @@
   box-sizing: border-box;
 }
 
-/* Buttons: pill, uppercase 14px bold, with â†’ */
+/* Buttons: pill, uppercase 14px bold, with → */
 .pub-btn,
 .auth-shell .btn-primary {
   display: inline-flex;
