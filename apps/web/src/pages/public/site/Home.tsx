@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import heroJpg from '../../../assets/wedding-photo.jpg'
+import heroJpg from '../../../assets/home-hero-mandap.jpg'
 import { Arrow, PublicShell, SectionTitle, usePageMeta } from '../../../components/public/PublicShell'
 import { APP_NAME } from '../../../lib/brand'
 
@@ -20,7 +20,7 @@ export default function Home() {
   return (
     <PublicShell>
       <section className="pub-hero">
-        <img className="pub-hero-img" src={heroJpg} alt="Bride and groom at their wedding" fetchPriority="high" />
+        <img className="pub-hero-img" src={heroJpg} alt="Floral wedding mandap with a decorated stage sofa" fetchPriority="high" />
         <div className="pub-wrap pub-hero-copy">
           <p className="pub-tagline">For wedding photographers</p>
           <h1>Let the couple pick their photos, without the back and forth.</h1>
