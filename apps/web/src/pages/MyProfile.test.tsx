@@ -16,8 +16,6 @@ const studio = {
   addressLine1: null,
   addressLine2: null,
   pincode: '600006',
-  gstin: '33ABCDE1234F1Z5',
-  pan: 'ABCDE1234F',
   website: null,
   bio: 'Candid storytellers',
   logoUrl: null,
@@ -48,14 +46,15 @@ describe('Profile form', () => {
     await userEvent.type(bio, 'Wedding films and photos')
     await waitFor(() => expect(save).toBeEnabled())
 
-    const gstin = form().getByLabelText(/^GSTIN/)
-    await userEvent.clear(gstin)
-    await userEvent.type(gstin, '29ABCDE1234F1Z5')
-    expect(await screen.findByText(/GSTIN must start with 33/)).toBeInTheDocument()
+    const pin = form().getByLabelText(/^PIN code/)
+    await userEvent.clear(pin)
+    await userEvent.type(pin, '012345')
+    await userEvent.tab()
+    expect(await screen.findByText('Enter a valid 6-digit PIN code')).toBeInTheDocument()
     await waitFor(() => expect(save).toBeDisabled())
 
     await userEvent.click(form().getByRole('button', { name: 'Reset' }))
-    expect(form().getByLabelText(/^GSTIN/)).toHaveValue('33ABCDE1234F1Z5')
+    expect(form().getByLabelText(/^PIN code/)).toHaveValue('600006')
     expect(form().getByLabelText(/^About your studio/)).toHaveValue('Candid storytellers')
     expect(save).toBeDisabled()
   })
@@ -87,6 +86,9 @@ describe('Profile form', () => {
     expect(await screen.findByText('This website is not allowed')).toBeInTheDocument()
     const patch = (fetch.mock.calls as unknown as [string, RequestInit | undefined][]).find(([, init]) => init?.method === 'PATCH')
     expect(patch).toBeDefined()
-    expect(JSON.parse(String(patch![1]!.body))).toMatchObject({ website: 'goldenhour.studio', phone: '+919876543210', gstin: '33ABCDE1234F1Z5' })
+    const sent = JSON.parse(String(patch![1]!.body))
+    expect(sent).toMatchObject({ website: 'goldenhour.studio', phone: '+919876543210' })
+    expect(sent).not.toHaveProperty('gstin')
+    expect(sent).not.toHaveProperty('pan')
   })
 })

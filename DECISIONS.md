@@ -41,7 +41,7 @@ Choices made where the build brief was ambiguous or where the environment forced
 | **Pages are converted to TypeScript as they are wired** | During the migration `allowJs` is on; it will be switched off once no `.jsx` remains. |
 | **New UI pieces reuse the existing tokens** (`additions.css`) | Modals, confirm dialogs, skeletons, field errors, counters, selects, pagination and auth screens use the same colours, radii, shadows and fonts. |
 | **Auth forms use `method="post"`** | If JavaScript hasn't started yet, a submit can never put the password in the URL. |
-| **Profile form**: added State, PAN, address and PIN code fields | State is required to pick CGST+SGST vs IGST and to validate the GSTIN prefix. |
+| **Profile form**: added State, address and PIN code fields (PAN and GSTIN were removed in Update 9) | State is required to pick CGST+SGST vs IGST. |
 | **Global search** results link to the list page with an id in the query string | e.g. `/billing?invoice=<id>` opens that invoice. |
 | **`.btn-lg` has no style of its own** | It appeared in the original markup without CSS; adding one would change approved buttons. |
 | **Marketing copy kept verbatim** | Feature ribbons, tooltips and the WhatsApp preview's side panel keep the approved wording even where it describes more than v1 does (e.g. "Official Verified Meta API", "98% read rate"). Only text that showed mock numbers or the hidden face feature changed. **Product owner: please review these claims before launch** — v1 sends through the studio's own WhatsApp via `wa.me` links. |

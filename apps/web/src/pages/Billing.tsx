@@ -17,7 +17,6 @@ import {
 } from '../components/ui'
 import { CreateInvoiceModal } from '../components/billing/CreateInvoiceModal'
 import { InvoiceDetailModal, RecordPaymentModal, useInvoiceActions } from '../components/billing/InvoiceDialogs'
-import { useMe } from '../auth/AuthProvider'
 import { formatDate, formatMoney } from '../utils/format'
 import { featureInfo } from '../data/featureInfo'
 import { useDebouncedUrlSearch, useUrlState } from '../hooks/useUrlState'
@@ -36,7 +35,7 @@ const billingFeatures: FeatureBarItem[] = [
     badge: 'SAC 9983',
     icon: 'file-earmark-check',
     summary: 'Automated 18% GST (9% CGST + 9% SGST or 18% IGST) calculations formatted for Indian tax compliance.',
-    highlights: ['Includes studio GSTIN & client details', 'Automated sequential invoice numbers', 'Print-ready invoice layout'],
+    highlights: ['Includes studio & client details', 'Automated sequential invoice numbers', 'Print-ready invoice layout'],
     tip: 'Add your studio state in My Profile so the right GST split is applied.',
   },
   {
@@ -50,7 +49,6 @@ const billingFeatures: FeatureBarItem[] = [
 ]
 
 function Billing() {
-  const { studio } = useMe()
   const [url, setUrl] = useUrlState({ status: '', search: '', page: '1', invoice: '', create: '' })
   const [search, setSearch] = useDebouncedUrlSearch(url.search, (v) => setUrl({ search: v }))
   const [paying, setPaying] = useState<InvoiceDto | null>(null)
@@ -158,11 +156,6 @@ function Billing() {
             <i className="bi bi-search" />
             <input type="search" placeholder="Search invoice number, client or event" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search invoices" />
           </label>
-          {!studio.gstin && (
-            <span className="pill pill-warning" title="Add your GSTIN in My Profile so it prints on invoices">
-              <i className="bi bi-info-circle" /> GSTIN not set in profile
-            </span>
-          )}
         </div>
         {list.isPending ? (
           <TableSkeleton rows={6} cols={7} />

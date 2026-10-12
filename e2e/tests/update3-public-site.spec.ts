@@ -1,33 +1,71 @@
 import { expect, test, type Page } from '@playwright/test'
 import { DEMO } from './helpers'
 
-// Public site: the top menu opens panels under the header (desktop) or a drawer with accordions
-// and bottom sheets (phones); old links open Home with their panel; no sideways scroll.
+// Public site: the hero with the Create your studio card; the top menu opens panels under the
+// header (desktop) or a drawer with accordions and a Login sheet (phones); old links open Home
+// with their panel; prices for 1, 6 or 12 months; no sideways scroll.
 
 const noSidewaysScroll = async (page: Page, label: string) => {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
   expect(overflow, label).toBeLessThanOrEqual(0)
 }
+const card = (page: Page) => page.getByRole('region', { name: 'Create your studio' })
 
-test('home: one h1, meta, sections, footer; every image has alt text; no sideways scroll', async ({ page }) => {
+test('home: one h1, the hero with its card, sections, footer; alt text; no sideways scroll', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1)
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Photo selection made simple for wedding studios')
   await expect(page).toHaveTitle(/Photo selection for wedding studios/)
   await expect(page.locator('meta[property="og:title"]')).toHaveAttribute('content', /Photo selection/)
+  await expect(card(page)).toBeVisible()
+  await expect(card(page).getByRole('radio', { name: 'Trial' })).toHaveAttribute('aria-checked', 'true')
+  await expect(card(page).getByText('14-day free trial · no card needed')).toBeVisible()
+  // No demo video configured here: no Watch demo button.
+  await expect(page.getByRole('button', { name: /Watch demo/ })).toHaveCount(0)
   await expect(page.getByRole('heading', { name: 'How it works' })).toBeVisible()
   await expect(page.locator('#about')).toBeAttached()
-  await expect(page.getByTestId('public-plans').locator('article')).toHaveCount(3)
   await expect(page.getByText('[Owner to add]').first()).toBeAttached()
   for (const img of await page.locator('img').all()) expect(await img.getAttribute('alt')).not.toBeNull()
   await noSidewaysScroll(page, '/')
+
+  // Start Free Trial puts the cursor in the card's first field; Login → opens the Login panel.
+  await page.getByRole('button', { name: /^Start Free Trial/ }).click()
+  await expect(card(page).getByLabel('Your name')).toBeFocused()
+  await page.getByRole('button', { name: 'Login →' }).click()
+  await expect(page.getByRole('dialog', { name: 'Log in' })).toBeVisible()
+})
+
+test('pricing: 1, 6 or 12 months with the new prices and savings', async ({ page }) => {
+  await page.goto('/')
+  const plans = page.getByTestId('public-plans')
+  await expect(plans.locator('article')).toHaveCount(3)
+  await expect(page.locator('#pricing').getByRole('tab')).toHaveText(['1 month', '6 months', '1 year'])
+  await expect(page.getByTestId('public-plan-PRO').locator('.pub-price')).toContainText('₹600')
+  await expect(page.getByTestId('public-plan-ALL_ACCESS').locator('.pub-price')).toContainText('₹1,200')
+  await page.locator('#pricing').getByRole('tab', { name: '6 months' }).click()
+  await expect(page.getByTestId('public-plan-PRO')).toContainText('₹3,000')
+  await expect(page.getByTestId('public-plan-PRO')).toContainText('Save 17%')
+  await page.locator('#pricing').getByRole('tab', { name: '1 year' }).click()
+  await expect(page.getByTestId('public-plan-PRO')).toContainText('₹5,000')
+  await expect(page.getByTestId('public-plan-ALL_ACCESS')).toContainText('₹10,000')
+  await expect(page.getByTestId('public-plan-ALL_ACCESS')).toContainText('Save 31%')
+  // Choose VIP: the card switches to VIP for a year, with its price, and the first field is focused.
+  await page.getByTestId('public-plan-ALL_ACCESS').getByRole('button', { name: /Choose/ }).click()
+  await expect(card(page).getByRole('radio', { name: 'VIP' })).toHaveAttribute('aria-checked', 'true')
+  await expect(card(page).getByLabel('Billing period')).toHaveValue('YEARLY')
+  await expect(card(page)).toContainText('₹10,000 + GST')
+  await expect(card(page).getByText('14-day free trial · no card needed')).toHaveCount(0)
+  await expect(card(page).getByLabel('Your name')).toBeFocused()
 })
 
 test.describe('desktop menu', () => {
   test.beforeEach(({}, info) => test.skip(info.project.name === 'mobile', 'desktop only'))
 
-  test('About Us and Plans & Pricing open panels under the header without leaving the page', async ({ page }) => {
+  test('About Us and Plans & Pricing open panels under the header; no Start free trial in the header', async ({ page }) => {
     await page.goto('/')
     const nav = page.getByRole('navigation', { name: 'Main' })
+    await expect(nav.getByRole('button', { name: /Start free trial/i })).toHaveCount(0)
+    await expect(nav.getByRole('button')).toHaveText([/About Us/, /Plans & Pricing/, /Login/])
     const about = nav.getByRole('button', { name: 'About Us' })
 
     // Hover opens after a short delay; the caret item says it's expanded.
@@ -39,20 +77,21 @@ test.describe('desktop menu', () => {
     await aboutPanel.getByRole('menuitem', { name: /Contact/ }).hover()
     await expect(page.getByTestId('about-detail')).toContainText('WhatsApp: [Owner to add]')
     // Moving away closes it (after the grace period).
-    await page.mouse.move(600, 600)
+    await page.mouse.move(600, 700)
     await expect(aboutPanel).toBeHidden()
     expect(new URL(page.url()).pathname).toBe('/')
 
-    // Click opens Plans & Pricing; only one panel at a time; Esc closes and focus returns.
+    // Click opens Plans & Pricing (1 / 6 / 12 months); Esc closes and focus returns.
     const pricing = nav.getByRole('button', { name: 'Plans & Pricing' })
     await pricing.click()
     const pricePanel = page.locator('#pub-panel-pricing')
     await expect(pricePanel).toBeVisible()
+    await expect(pricePanel.getByRole('tab')).toHaveText(['1 month', '6 months', '1 year'])
     await expect(page.getByTestId('menu-plans').locator('article')).toHaveCount(3)
-    await expect(page.getByTestId('menu-plan-PRO')).toContainText('Most popular')
-    const monthly = await page.getByTestId('menu-plan-PRO').locator('.pub-mini-price').textContent()
+    await expect(page.getByTestId('menu-plan-PRO')).toContainText('₹600')
     await pricePanel.getByRole('tab', { name: '1 year' }).click()
-    await expect(page.getByTestId('menu-plan-PRO').locator('.pub-mini-price')).not.toHaveText(monthly ?? '')
+    await expect(page.getByTestId('menu-plan-PRO')).toContainText('₹5,000')
+    await expect(page.getByTestId('menu-plan-PRO')).toContainText('Save 31%')
     await page.keyboard.press('Escape')
     await expect(pricePanel).toBeHidden()
     await expect(pricing).toBeFocused()
@@ -60,23 +99,18 @@ test.describe('desktop menu', () => {
     // Compare all plans scrolls to the full pricing section.
     await pricing.click()
     await page.getByRole('button', { name: 'Compare all plans →' }).click()
-    await expect(page.locator('#pub-panel-pricing')).toBeHidden()
+    await expect(pricePanel).toBeHidden()
     await expect(page.locator('#pricing')).toBeInViewport()
 
-    // Choose Pro: the sign-up panel shows Pro; a click outside closes it.
+    // Choose Pro in the panel: the card switches to Pro and gets the cursor.
     await pricing.click()
     await page.getByTestId('menu-plan-PRO').getByRole('button', { name: /Choose/ }).click()
-    const trial = page.getByRole('dialog', { name: 'Start free trial' })
-    await expect(trial).toBeVisible()
-    await expect(trial.getByTestId('signup-plan')).toContainText('Pro')
-    await page.mouse.click(10, 500)
-    await expect(trial).toBeHidden()
-    // The header button is the Trial plan.
-    await nav.getByRole('button', { name: 'Start free trial' }).click()
-    await expect(page.getByRole('dialog', { name: 'Start free trial' }).getByTestId('signup-plan')).toContainText('Trial')
-    await page.getByRole('dialog', { name: 'Start free trial' }).getByRole('button', { name: 'Log in' }).click()
-    await expect(page.getByRole('dialog', { name: 'Log in' })).toBeVisible()
-    expect(new URL(page.url()).pathname).toBe('/')
+    await expect(pricePanel).toBeHidden()
+    await expect(card(page).getByRole('radio', { name: 'Pro' })).toHaveAttribute('aria-checked', 'true')
+    await expect(card(page).getByLabel('Your name')).toBeFocused()
+    // Switch back to Trial on the card.
+    await card(page).getByRole('radio', { name: 'Trial' }).click()
+    await expect(card(page).getByText('14-day free trial · no card needed')).toBeVisible()
   })
 
   test('Login panel: show/hide password, errors inside, forgot password and back; then log in to the dashboard', async ({ page }) => {
@@ -112,7 +146,7 @@ test.describe('desktop menu', () => {
     await expect(page.getByRole('heading', { name: /^Good (morning|afternoon|evening)/ })).toBeVisible()
   })
 
-  test('old links open Home with their panel', async ({ page }) => {
+  test('old links open Home with their panel; /signup focuses the card with the linked plan', async ({ page }) => {
     await page.goto('/about')
     await expect(page.locator('#pub-panel-about')).toBeVisible()
     await page.goto('/pricing')
@@ -120,10 +154,12 @@ test.describe('desktop menu', () => {
     await page.goto('/login')
     await expect(page.getByRole('dialog', { name: 'Log in' })).toBeVisible()
     await page.goto('/signup?plan=ALL_ACCESS&months=12')
-    await expect(page.getByRole('dialog', { name: 'Start free trial' }).getByTestId('signup-plan')).toContainText('1 year')
+    await expect(card(page).getByRole('radio', { name: 'VIP' })).toHaveAttribute('aria-checked', 'true')
+    await expect(card(page).getByLabel('Billing period')).toHaveValue('YEARLY')
+    await expect(card(page).getByLabel('Your name')).toBeFocused()
     for (const path of ['/about', '/pricing', '/login', '/signup']) {
       await page.goto(path)
-      await expect(page.getByRole('heading', { level: 1 })).toContainText('favorites')
+      await expect(page.getByRole('heading', { level: 1 })).toContainText('Photo selection made simple')
       await noSidewaysScroll(page, path)
     }
   })
@@ -132,26 +168,35 @@ test.describe('desktop menu', () => {
 test.describe('phone menu', () => {
   test.beforeEach(({}, info) => test.skip(info.project.name !== 'mobile', 'phone only'))
 
-  test('☰ drawer with accordions; Login and Start free trial as bottom sheets; no sideways scroll', async ({ page }) => {
+  test('☰ drawer with accordions and no Start free trial; Choose goes to the card; Login as a bottom sheet', async ({ page }) => {
     await page.goto('/')
+    // The card stacks under the hero buttons, full width.
+    const hero = await page.getByRole('button', { name: /^Start Free Trial/ }).boundingBox()
+    const box = await card(page).boundingBox()
+    expect(box!.y).toBeGreaterThan(hero!.y)
+    expect(box!.width).toBeGreaterThan(340)
+
     await page.getByRole('button', { name: 'Open menu' }).click()
     const drawer = page.getByRole('dialog', { name: 'Menu' })
     await expect(drawer).toBeVisible()
+    await expect(drawer.getByRole('button', { name: /Start free trial/i })).toHaveCount(0)
     await drawer.getByRole('button', { name: 'About Us' }).click()
     await expect(drawer.getByTestId('about-detail')).toContainText('Our story')
     await drawer.getByRole('button', { name: 'Plans & Pricing' }).click()
     await expect(drawer.getByTestId('menu-plans').locator('article')).toHaveCount(3)
     await noSidewaysScroll(page, 'drawer')
     await drawer.getByTestId('menu-plan-PRO').getByRole('button', { name: /Choose/ }).click()
-    const sheet = page.getByRole('dialog', { name: 'Start free trial' })
-    await expect(sheet).toBeVisible()
-    await expect(sheet.getByTestId('signup-plan')).toContainText('Pro')
-    await noSidewaysScroll(page, 'sheet')
-    await sheet.getByRole('button', { name: 'Log in' }).click()
-    await expect(page.getByRole('dialog', { name: 'Log in' })).toBeVisible()
-    await page.getByRole('dialog', { name: 'Log in' }).getByRole('button', { name: 'Close' }).click()
-    await expect(page.getByRole('dialog', { name: 'Log in' })).toBeHidden()
+    await expect(drawer).toBeHidden()
+    await expect(card(page).getByRole('radio', { name: 'Pro' })).toHaveAttribute('aria-checked', 'true')
+    await expect(card(page).getByLabel('Your name')).toBeFocused()
+    await expect(card(page)).toBeInViewport()
 
+    await page.getByRole('button', { name: 'Login →' }).click()
+    const sheet = page.getByRole('dialog', { name: 'Log in' })
+    await expect(sheet).toBeVisible()
+    await noSidewaysScroll(page, 'sheet')
+    await sheet.getByRole('button', { name: 'Close' }).click()
+    await expect(sheet).toBeHidden()
     await page.getByRole('button', { name: 'Open menu' }).click()
     await page.getByRole('dialog', { name: 'Menu' }).getByRole('button', { name: 'Login' }).click()
     await expect(page.getByRole('dialog', { name: 'Log in' })).toBeVisible()

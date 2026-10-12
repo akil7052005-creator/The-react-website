@@ -62,7 +62,7 @@ export class ClientsController {
     await this.get(studioId, id)
     const c = await this.prisma.client.update({
       where: { id },
-      data: { ...body, email: body.email ?? null, city: body.city ?? null, stateCode: body.stateCode ?? null, gstin: body.gstin ?? null, notes: body.notes ?? null },
+      data: { ...body, email: body.email ?? null, city: body.city ?? null, stateCode: body.stateCode ?? null, notes: body.notes ?? null },
     })
     return clientDto(c)
   }

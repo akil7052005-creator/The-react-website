@@ -339,7 +339,7 @@ export class SubscriptionLifecycleService {
       `Thank you — your payment for the ${label} plan was received. Your plan runs from ${istDay(start)} to ${istDay(end)}.`,
       '',
       `Tax invoice ${p.invoiceNumber}`,
-      `Seller: ${c.PLATFORM_LEGAL_NAME}${c.PLATFORM_GSTIN ? ` · GSTIN ${c.PLATFORM_GSTIN}` : ''}`,
+      `Seller: ${c.PLATFORM_LEGAL_NAME}`,
       `Amount (before GST): ${inr(p.amount - p.gst)}`,
       `GST @ 18%: ${inr(p.gst)}`,
       `Total paid: ${inr(p.amount)} (${amountInWords(p.amount)})`,

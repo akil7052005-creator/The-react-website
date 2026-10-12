@@ -1,4 +1,5 @@
-// Plans: Trial, Pro and VIP, billed for 1, 3, 6 or 12 months. Limits and prices live in the plan
+// Plans: Trial, Pro and VIP, billed for 1, 6 or 12 months (3 months is no longer sold; older
+// subscriptions bought for 3 months keep it until they renew). Limits and prices live in the plan
 // rows (editable by platform admins); this file holds their shape, defaults and the usage-window
 // maths shared by the API (enforcement) and the web app (meters, pricing).
 //
@@ -10,8 +11,20 @@ import type { BillingCycle, PlanCode } from './enums'
 /** Months in each billing period. */
 export const CYCLE_MONTHS: Record<BillingCycle, number> = { MONTHLY: 1, QUARTERLY: 3, HALF_YEARLY: 6, YEARLY: 12 }
 export const CYCLE_LABELS: Record<BillingCycle, string> = { MONTHLY: '1 month', QUARTERLY: '3 months', HALF_YEARLY: '6 months', YEARLY: '1 year' }
-/** The order the pricing switch shows them in. */
-export const PRICING_CYCLES: BillingCycle[] = ['MONTHLY', 'QUARTERLY', 'HALF_YEARLY', 'YEARLY']
+/** The periods on sale, in the order the pricing switch shows them. */
+export const PRICING_CYCLES: BillingCycle[] = ['MONTHLY', 'HALF_YEARLY', 'YEARLY']
+
+/**
+ * "Save 17%": how much cheaper a longer period is than paying monthly for as long, rounded to a
+ * whole percent; null for monthly, a missing price or no saving.
+ */
+export function cycleSavingPct(prices: PlanPrices | undefined, cycle: BillingCycle): number | null {
+  const monthly = prices?.MONTHLY
+  const price = prices?.[cycle]
+  if (cycle === 'MONTHLY' || !monthly || !price) return null
+  const pct = Math.round((1 - price / (monthly * CYCLE_MONTHS[cycle])) * 100)
+  return pct > 0 ? pct : null
+}
 
 /** Display names: the codes stay as they are in the database (Starter → Trial, All-Access → VIP). */
 export const PLAN_NAMES: Record<PlanCode, string> = { STARTER: 'Trial', PRO: 'Pro', STUDIO: 'Studio', ALL_ACCESS: 'VIP' }

@@ -4,20 +4,22 @@ import { DEMO, latestMailTo, login, uniqueTag } from './helpers'
 test('deep links redirect to login, then back after logging in', async ({ page }) => {
   await page.goto('/profile')
   await expect(page).toHaveURL(/\/login\?next=%2Fprofile/)
-  await page.getByRole('textbox', { name: 'Email' }).fill(DEMO.email)
-  await page.getByRole('textbox', { name: 'Password', exact: true }).fill(DEMO.password)
-  await page.getByRole('button', { name: 'Log in' }).click()
+  const panel = page.getByRole('dialog', { name: 'Log in' })
+  await panel.getByRole('textbox', { name: 'Email' }).fill(DEMO.email)
+  await panel.getByRole('textbox', { name: 'Password', exact: true }).fill(DEMO.password)
+  await panel.getByRole('button', { name: 'Log in' }).click()
   await expect(page).toHaveURL(/\/profile$/)
   await expect(page.getByRole('heading', { name: 'My Profile' })).toBeVisible()
 })
 
 test('login shows inline errors for bad input and wrong password', async ({ page }) => {
   await page.goto('/login')
-  await page.getByRole('button', { name: 'Log in' }).click()
-  await expect(page.getByText('Enter your email or mobile number')).toBeVisible()
-  await page.getByRole('textbox', { name: 'Email' }).fill(DEMO.email)
-  await page.getByRole('textbox', { name: 'Password', exact: true }).fill('WrongPass1')
-  await page.getByRole('button', { name: 'Log in' }).click()
+  const panel = page.getByRole('dialog', { name: 'Log in' })
+  await panel.getByRole('button', { name: 'Log in' }).click()
+  await expect(panel.getByText('Enter your email or mobile number')).toBeVisible()
+  await panel.getByRole('textbox', { name: 'Email' }).fill(DEMO.email)
+  await panel.getByRole('textbox', { name: 'Password', exact: true }).fill('WrongPass1')
+  await panel.getByRole('button', { name: 'Log in' }).click()
   await expect(page.locator('.field-error', { hasText: 'Incorrect email or password' })).toBeVisible()
 })
 
@@ -28,14 +30,16 @@ test('log in, edit profile, reset, save, and log out', async ({ page }) => {
   const save = form.getByRole('button', { name: 'Save changes' })
   await expect(save).toBeDisabled()
 
-  // Invalid GSTIN for Tamil Nadu (33) shows an inline error and keeps Save disabled.
-  await form.getByLabel('GSTIN').fill('29ABCDE1234F1Z5')
-  await expect(page.getByText(/must start with 33/)).toBeVisible()
+  // No GSTIN or PAN on the profile. An invalid PIN shows an inline error and keeps Save disabled.
+  await expect(form.getByLabel(/GSTIN|PAN/)).toHaveCount(0)
+  await form.getByLabel('PIN code').fill('012345')
+  await form.getByLabel('PIN code').blur()
+  await expect(page.getByText('Enter a valid 6-digit PIN code')).toBeVisible()
   await expect(save).toBeDisabled()
 
   // Reset restores the saved values.
   await form.getByRole('button', { name: 'Reset' }).click()
-  await expect(form.getByLabel('GSTIN')).toHaveValue('33ABCDE1234F1Z5')
+  await expect(form.getByLabel('PIN code')).toHaveValue('600006')
 
   // Unique text: the other viewport's run (same database) may already have saved a bio.
   const bio = `Candid storytellers across South India (${uniqueTag()}).`
@@ -51,17 +55,18 @@ test('log in, edit profile, reset, save, and log out', async ({ page }) => {
   await expect(page).toHaveURL(/\/login$/)
   // Logged out, / is the public home page.
   await page.goto('/')
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('pick their favorites')
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Photo selection made simple')
 })
 
 test('sign up a new studio', async ({ page }) => {
   await page.goto('/signup')
-  await page.getByLabel('Studio name').fill('Lotus Frames')
-  await page.getByLabel('Your name').fill('Meena Iyer')
-  await page.getByRole('textbox', { name: 'Email' }).fill(`meena.${Date.now()}@example.com`)
-  await page.getByLabel('Mobile number').fill('98400 11223')
-  await page.getByRole('textbox', { name: 'Password', exact: true }).fill('Lotus2026')
-  await page.getByRole('dialog', { name: 'Start free trial' }).getByRole('button', { name: 'Start free trial' }).click()
+  const card = page.getByRole('region', { name: 'Create your studio' })
+  await card.getByLabel('Studio name').fill('Lotus Frames')
+  await card.getByLabel('Your name').fill('Meena Iyer')
+  await card.getByRole('textbox', { name: 'Email' }).fill(`meena.${Date.now()}@example.com`)
+  await card.getByLabel('Phone (+91)').fill('98400 11223')
+  await card.getByRole('textbox', { name: 'Password', exact: true }).fill('Lotus2026')
+  await card.getByRole('button', { name: 'Create studio' }).click()
   await expect(page).toHaveURL(/\/$/)
   // Lands on the dashboard, on the Starter trial (plan tag in the sidebar): New Selection, the
   // highlights carousel, and an empty Recent Events list.
@@ -90,12 +95,13 @@ test('sign up a new studio', async ({ page }) => {
 test('reset a forgotten password with the emailed link', async ({ page, context }) => {
   const email = `reset.${Date.now()}@example.com`
   await page.goto('/signup')
-  await page.getByLabel('Studio name').fill('Reset Frames')
-  await page.getByLabel('Your name').fill('Kiran Rao')
-  await page.getByRole('textbox', { name: 'Email' }).fill(email)
-  await page.getByLabel('Mobile number').fill('98400 22334')
-  await page.getByRole('textbox', { name: 'Password', exact: true }).fill('Before2026')
-  await page.getByRole('dialog', { name: 'Start free trial' }).getByRole('button', { name: 'Start free trial' }).click()
+  const card = page.getByRole('region', { name: 'Create your studio' })
+  await card.getByLabel('Studio name').fill('Reset Frames')
+  await card.getByLabel('Your name').fill('Kiran Rao')
+  await card.getByRole('textbox', { name: 'Email' }).fill(email)
+  await card.getByLabel('Phone (+91)').fill('98400 22334')
+  await card.getByRole('textbox', { name: 'Password', exact: true }).fill('Before2026')
+  await card.getByRole('button', { name: 'Create studio' }).click()
   await expect(page).toHaveURL(/\/$/)
   await context.clearCookies()
 
@@ -139,10 +145,10 @@ test('visiting /login while logged in offers the dashboard or log out', async ({
 
   await page.goto('/login')
   await page.getByRole('button', { name: 'Log out' }).click()
-  await expect(page.getByRole('textbox', { name: 'Email' })).toBeVisible()
+  await expect(page.getByRole('dialog', { name: 'Log in' }).getByRole('textbox', { name: 'Email' })).toBeVisible()
   await expect(page.getByTestId('signed-in-notice')).toHaveCount(0)
   // The old session is really gone.
   // Logged out, / is the public home page.
   await page.goto('/')
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('pick their favorites')
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Photo selection made simple')
 })

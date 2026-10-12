@@ -48,7 +48,7 @@ export class InvoicesService {
     return {
       id: i.id,
       number: i.number,
-      client: { ...clientRef(i.client), email: i.client.email, gstin: i.client.gstin, city: i.client.city, stateCode: i.client.stateCode },
+      client: { ...clientRef(i.client), email: i.client.email, city: i.client.city, stateCode: i.client.stateCode },
       event: i.event ? eventRef(i.event) : null,
       issueDate: toIso(i.issueDate),
       dueDate: toIso(i.dueDate),

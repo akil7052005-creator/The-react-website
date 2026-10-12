@@ -1,29 +1,37 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { signupSchema, type BillingCycle, type MeDto } from '@weddyzone/shared'
+import { CYCLE_LABELS, cycleSavingPct, PRICING_CYCLES, signupSchema, type BillingCycle, type MeDto } from '@weddyzone/shared'
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { ME_KEY } from '../../auth/AuthProvider'
 import { applyApiErrors, SubmitButton, TextField, useZodForm } from '../../components/form/form'
 import { api, isApiError } from '../../lib/api'
+import { priceFor, usePlans } from '../../lib/billing'
+import { formatMoney } from '../../utils/format'
 import { PasswordField } from './AuthLayout'
 
-/** The plan picked in Plans & Pricing (a pill on the form); paid plans continue to checkout after sign-up. */
-export interface ChosenPlan {
-  code: string
-  name: string
-  cycle: BillingCycle
-  cycleLabel?: string
+/** The plan picked for a new studio: null = Trial; Pro/VIP go on to payment after sign-up. */
+export type SignupPlan = { code: 'PRO' | 'ALL_ACCESS'; cycle: BillingCycle } | null
+
+const PAID = ['PRO', 'ALL_ACCESS'] as const
+const isPaid = (code: string | null): code is (typeof PAID)[number] => (PAID as readonly string[]).includes(code ?? '')
+
+/** A /signup?plan=PRO&months=6 link's plan (only periods on sale; anything else is Trial / 1 month). */
+export function planFromParams(params: URLSearchParams): SignupPlan {
+  const code = params.get('plan')
+  const months: Record<string, BillingCycle> = { '1': 'MONTHLY', '6': 'HALF_YEARLY', '12': 'YEARLY' }
+  return isPaid(code) ? { code, cycle: months[params.get('months') ?? ''] ?? 'MONTHLY' } : null
 }
 
 /**
- * The sign-up form (the public site's Start free trial panel; /signup opens it). Every studio
- * starts on the trial; a chosen Pro or VIP plan goes on to My Subscription to pay for it.
+ * Create your studio (the home page card; /signup focuses it). Every studio starts on the trial;
+ * with Pro or VIP picked it goes on to My Subscription to pay for that plan.
  */
-export function SignupForm({ plan, onLogin }: { plan: ChosenPlan | null; onLogin: () => void }) {
+export function SignupForm({ plan, onPlanChange }: { plan: SignupPlan; onPlanChange: (p: SignupPlan) => void }) {
   const [params] = useSearchParams()
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const plans = usePlans()
   const [failure, setFailure] = useState<string | null>(null)
   const form = useZodForm(signupSchema, {
     defaultValues: {
@@ -32,6 +40,7 @@ export function SignupForm({ plan, onLogin }: { plan: ChosenPlan | null; onLogin
       email: '',
       phone: '',
       password: '',
+      // Referral links (/signup?ref=CODE) still apply the code; the field itself isn't shown.
       referralCode: params.get('ref') ?? '',
     },
   })
@@ -42,40 +51,75 @@ export function SignupForm({ plan, onLogin }: { plan: ChosenPlan | null; onLogin
     onSuccess: (me) => {
       qc.setQueryData(ME_KEY, me)
       toast.success(`Welcome to Wedmanage, ${me.user.name.split(' ')[0]}! Your 14-day free trial has begun.`)
-      const paid = plan && (plan.code === 'PRO' || plan.code === 'ALL_ACCESS')
-      navigate(paid ? `/subscriptions?renew=${plan.code}&cycle=${plan.cycle}` : '/', { replace: true })
+      navigate(plan ? `/subscriptions?renew=${plan.code}&cycle=${plan.cycle}` : '/', { replace: true })
     },
     onError: (e) => {
       if (!applyApiErrors(form, e, { toast: false })) setFailure(isApiError(e) ? e.message : 'Something went wrong. Please try again.')
     },
   })
 
+  const planRow = plan ? plans.data?.find((p) => p.code === plan.code) : undefined
+  const price = planRow && plan ? priceFor(planRow, plan.cycle) : null
+  const save = planRow && plan ? cycleSavingPct(planRow.prices, plan.cycle) : null
+  const nameOf = (code: string, fallback: string) => plans.data?.find((p) => p.code === code)?.name ?? fallback
+
   return (
-    <form method="post" onSubmit={form.handleSubmit((v) => signup.mutate(v))} noValidate>
-      <p className="pub-plan-pill" data-testid="signup-plan">
-        <i className="bi bi-stars" aria-hidden="true" /> Plan: <strong>{plan ? plan.name : 'Trial'}</strong>
-        {plan?.cycleLabel ? ` · ${plan.cycleLabel}` : ''}
-      </p>
+    <form method="post" onSubmit={form.handleSubmit((v) => signup.mutate(v))} noValidate className="pub-signup-form">
+      <div className="pub-plan-switch" role="radiogroup" aria-label="Plan" data-testid="signup-plan">
+        {(
+          [
+            [null, 'Trial'],
+            ['PRO', nameOf('PRO', 'Pro')],
+            ['ALL_ACCESS', nameOf('ALL_ACCESS', 'VIP')],
+          ] as const
+        ).map(([code, label]) => {
+          const on = (plan?.code ?? null) === code
+          return (
+            <button
+              key={label}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              className={on ? 'on' : ''}
+              onClick={() => onPlanChange(code ? { code, cycle: plan?.cycle ?? 'MONTHLY' } : null)}
+            >
+              {label}
+            </button>
+          )
+        })}
+      </div>
+      {plan && (
+        <div className="pub-plan-period">
+          <label htmlFor="su-period">Billing period</label>
+          <select id="su-period" value={plan.cycle} onChange={(e) => onPlanChange({ ...plan, cycle: e.target.value as BillingCycle })}>
+            {PRICING_CYCLES.map((c) => (
+              <option key={c} value={c}>
+                {CYCLE_LABELS[c]}
+              </option>
+            ))}
+          </select>
+          {price !== null && (
+            <span className="pub-plan-price">
+              {formatMoney(price)} + GST{save ? <span className="pub-save">Save {save}%</span> : null}
+            </span>
+          )}
+        </div>
+      )}
       {failure && (
-        <div className="notice danger" role="alert" style={{ marginBottom: 12 }}>
+        <div className="notice danger" role="alert" style={{ marginBottom: 10 }}>
           <i className="bi bi-exclamation-triangle" />
           <span>{failure}</span>
         </div>
       )}
-      <TextField form={form} name="ownerName" label="Your name" required autoComplete="name" placeholder="Arjun Mehta" maxLength={80} />
-      <TextField form={form} name="studioName" label="Studio name" required autoComplete="organization" placeholder="Golden Hour Studios" maxLength={80} />
-      <TextField form={form} name="phone" label="Mobile number" type="tel" required autoComplete="tel" placeholder="98765 43210" hint="Used for WhatsApp messages" />
-      <TextField form={form} name="email" label="Email" type="email" required autoComplete="email" placeholder="you@studio.com" />
-      <PasswordField form={form} name="password" label="Password" autoComplete="new-password" hint="At least 8 characters, with a letter and a number" />
+      <TextField form={form} idPrefix="su" name="ownerName" label="Your name" required autoComplete="name" placeholder="Arjun Mehta" maxLength={80} />
+      <TextField form={form} idPrefix="su" name="studioName" label="Studio name" required autoComplete="organization" placeholder="Golden Hour Studios" maxLength={80} />
+      <TextField form={form} idPrefix="su" name="phone" label="Phone (+91)" type="tel" required autoComplete="tel" placeholder="98765 43210" />
+      <TextField form={form} idPrefix="su" name="email" label="Email" type="email" required autoComplete="email" placeholder="you@studio.com" />
+      <PasswordField form={form} idPrefix="su" name="password" label="Password" autoComplete="new-password" />
       <SubmitButton busy={signup.isPending} className="pub-btn block">
-        Start free trial →
+        Create studio →
       </SubmitButton>
-      <p className="pub-panel-foot">
-        Already have an account?{' '}
-        <button type="button" className="pub-link" onClick={onLogin}>
-          Log in
-        </button>
-      </p>
+      {!plan && <p className="pub-signup-note">14-day free trial · no card needed</p>}
     </form>
   )
 }

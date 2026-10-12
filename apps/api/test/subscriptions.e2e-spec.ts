@@ -142,7 +142,7 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
 
     it('activates the plan, issues a GST invoice and alerts studio and admin — once', async () => {
       const order = await pendingOrder(A.studioId, 'PRO', 'YEARLY')
-      expect(order.amount).toBe(2_359_882) // ₹19,999 + 18% GST
+      expect(order.amount).toBe(590_000) // ₹5,000 + 18% GST
       mails.length = 0
       const body = captured(order.gatewayOrderId!, order.amount, 'pay_studiored_1')
       const first = await hook(body, { eventId: 'evt_1' }).expect(200)
@@ -153,7 +153,7 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
       expect((await hook(body, { eventId: 'evt_2' }).expect(200)).body.handled).toBe('already_paid')
 
       const sub = await prisma.subscription.findUniqueOrThrow({ where: { studioId: A.studioId }, include: { plan: true } })
-      expect(sub).toMatchObject({ status: 'ACTIVE', isTrial: false, cycle: 'YEARLY', amountPaid: 2_359_882, gstAmount: 359_982 })
+      expect(sub).toMatchObject({ status: 'ACTIVE', isTrial: false, cycle: 'YEARLY', amountPaid: 590_000, gstAmount: 90_000 })
       expect(sub.plan.code).toBe('PRO')
       // Deadline = +1 year in IST.
       const s = istParts(sub.currentPeriodStart)
@@ -166,29 +166,29 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
 
       const events = await prisma.subscriptionEvent.findMany({ where: { subscriptionId: sub.id }, orderBy: { createdAt: 'asc' } })
       expect(events.map((x) => x.type)).toEqual(['CREATED', 'CREATED'])
-      expect(events[1]).toMatchObject({ fromPlan: 'Trial (trial)', toPlan: 'Pro', amount: 2_359_882 })
+      expect(events[1]).toMatchObject({ fromPlan: 'Trial (trial)', toPlan: 'Pro', amount: 590_000 })
 
       const adminAlerts = await prisma.notification.findMany({ where: { recipientType: 'ADMIN', type: 'SUBSCRIPTION_PURCHASED' } })
       expect(adminAlerts.map((n) => n.channel).sort()).toEqual(['EMAIL', 'IN_APP'])
       expect(adminAlerts[0].title).toBe('StudioRed chose Pro (Yearly)')
       // Admin amounts exclude GST.
-      expect(adminAlerts[0].body).toMatch(/^₹19,999 \+ GST · created · expires \d{2} \w{3} \d{4}$/)
+      expect(adminAlerts[0].body).toMatch(/^₹5,000 \+ GST · created · expires \d{2} \w{3} \d{4}$/)
       // Instant admin email + studio confirmation with the invoice, each sent once despite the retries.
       expect(mails.filter((m) => m.to === adminEmail && /StudioRed chose Pro \(Yearly\)/.test(m.subject))).toHaveLength(1)
       const confirmation = mails.filter((m) => m.to === A.email)
       expect(confirmation).toHaveLength(1)
       expect(confirmation[0].text).toContain(payment.invoiceNumber!)
-      expect(confirmation[0].text).toContain('GST @ 18%: ₹3,599.82')
+      expect(confirmation[0].text).toContain('GST @ 18%: ₹900')
 
       const invoice = await A.agent.get(`/api/v1/subscription/payments/${payment.id}/invoice`).expect(200)
-      expect(invoice.body).toMatchObject({ number: payment.invoiceNumber, taxablePaise: 1_999_900, totalPaise: 2_359_882, igstPaise: 359_982 })
+      expect(invoice.body).toMatchObject({ number: payment.invoiceNumber, taxablePaise: 500_000, totalPaise: 590_000, igstPaise: 90_000 })
     })
 
     it('shows the new purchase in the admin table and bell straight away', async () => {
       const list = await admin.get('/api/v1/admin/subscriptions').query({ search: 'studiored' }).expect(200)
       expect(list.body.meta.total).toBe(1)
-      // Admin amounts exclude GST: ₹19,999, not the ₹23,598.82 charged.
-      expect(list.body.data[0]).toMatchObject({ studio: { name: 'StudioRed' }, plan: { code: 'PRO' }, cycle: 'YEARLY', amountPaise: 1_999_900, status: 'ACTIVE', tone: 'green' })
+      // Admin amounts exclude GST: ₹5,000, not the ₹5,900 charged.
+      expect(list.body.data[0]).toMatchObject({ studio: { name: 'StudioRed' }, plan: { code: 'PRO' }, cycle: 'YEARLY', amountPaise: 500_000, status: 'ACTIVE', tone: 'green' })
       expect(list.body.data[0].owner).toMatchObject({ email: A.email, phone: '+919876543210' })
       const bell = await admin.get('/api/v1/admin/notifications').expect(200)
       expect(bell.body.unreadCount).toBeGreaterThanOrEqual(1)
@@ -536,8 +536,8 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
       expect(coupons).toHaveLength(1)
       expect(coupons[0].percentOff).toBe(20)
       const res = await W.agent.post('/api/v1/subscription/change').send({ planCode: 'PRO', cycle: 'MONTHLY', couponCode: coupons[0].code.toLowerCase() }).expect(200)
-      // ₹1,999 − 20% = ₹1,599.20, + 18% GST
-      expect(res.body.payment.amountPaise).toBe(159_920 + Math.round(159_920 * 0.18))
+      // ₹600 − 20% = ₹480, + 18% GST
+      expect(res.body.payment.amountPaise).toBe(48_000 + Math.round(48_000 * 0.18))
       await W.agent.post('/api/v1/subscription/change').send({ planCode: 'ALL_ACCESS', cycle: 'MONTHLY', couponCode: coupons[0].code }).expect(400)
     })
   })

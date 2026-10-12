@@ -40,8 +40,6 @@ function toFormValues(s: StudioDto): ProfileInput {
     addressLine1: s.addressLine1 ?? '',
     addressLine2: s.addressLine2 ?? '',
     pincode: s.pincode ?? '',
-    gstin: s.gstin ?? '',
-    pan: s.pan ?? '',
     website: s.website ?? '',
     instagramHandle: s.instagramHandle ?? '',
     bio: s.bio ?? '',
@@ -77,8 +75,6 @@ function ProfileForm({ studio }: { studio: StudioDto }) {
         <TextField form={form} name="phone" label="Mobile number" type="tel" required hint="10-digit Indian mobile" />
         <SelectField form={form} name="city" label="City" required kind="creatable" options={cityOptions} placeholder="Select or type a city" />
         <SelectField form={form} name="stateCode" label="State" required options={stateOptions} placeholder="Select state" hint="Decides CGST+SGST vs IGST on invoices" />
-        <TextField form={form} name="gstin" label="GSTIN" placeholder="33ABCDE1234F1Z5" style={{ textTransform: 'uppercase' }} hint="Optional — must match your state" />
-        <TextField form={form} name="pan" label="PAN" placeholder="ABCDE1234F" style={{ textTransform: 'uppercase' }} />
         <TextField form={form} name="addressLine1" label="Address line 1" maxLength={120} />
         <TextField form={form} name="addressLine2" label="Address line 2" maxLength={120} />
         <TextField form={form} name="pincode" label="PIN code" inputMode="numeric" placeholder="600006" />

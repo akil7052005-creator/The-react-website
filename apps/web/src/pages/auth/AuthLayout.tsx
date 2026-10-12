@@ -71,15 +71,18 @@ export function PasswordField<T extends FieldValues>({
   label,
   autoComplete,
   hint,
+  idPrefix = 'f',
 }: {
   form: AnyForm<T>
   name: FieldPath<T>
   label: string
   autoComplete: string
   hint?: ReactNode
+  /** Keeps ids unique when two forms with a password field are on one page. */
+  idPrefix?: string
 }) {
   const [show, setShow] = useState(false)
-  const id = `f-${name}`
+  const id = `${idPrefix}-${name}`
   const error = (form.formState.errors[name]?.message as string | undefined) ?? undefined
   return (
     <FieldShell label={label} htmlFor={id} required error={error} hint={hint}>

@@ -1,8 +1,7 @@
 import { useEffect, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { APP_NAME } from '../../lib/brand'
-import type { PanelId } from './headerPanels'
-import { PublicMenu, scrollToSection, usePublicMenu } from './SiteHeader'
+import { PublicMenu, scrollToSection, usePublicMenu, type Arrival } from './SiteHeader'
 
 function setMeta(attr: 'name' | 'property', key: string, content: string) {
   let el = document.head.querySelector<HTMLMetaElement>(`meta[${attr}="${key}"]`)
@@ -47,7 +46,7 @@ export function Logo({ light }: { light?: boolean }) {
 }
 
 /** The public website's frame: sticky top menu with its panels (drawer on phones) and footer. */
-export function PublicShell({ children, panel }: { children: ReactNode; panel?: PanelId }) {
+export function PublicShell({ children, panel }: { children: ReactNode; panel?: Arrival }) {
   return (
     <PublicMenu initial={panel}>
       {(menu) => (
@@ -62,7 +61,7 @@ export function PublicShell({ children, panel }: { children: ReactNode; panel?: 
 }
 
 function Footer() {
-  const { openPanel } = usePublicMenu()
+  const { openPanel, startTrial } = usePublicMenu()
   return (
     <footer className="pub-footer">
       <div className="pub-wrap pub-footer-grid">
@@ -94,7 +93,7 @@ function Footer() {
               </button>
             </li>
             <li>
-              <button type="button" onClick={() => openPanel('trial', null)}>
+              <button type="button" onClick={() => startTrial(null)}>
                 Start free trial
               </button>
             </li>

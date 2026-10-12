@@ -28,21 +28,24 @@ export function uniqueTag(): string {
 /** Signs up a brand-new studio (on the Starter trial) and lands on its dashboard. */
 export async function signupStudio(page: Page, email = `studio.${Date.now()}@example.com`, password = 'Fresh2026x') {
   await page.goto('/signup')
-  await page.getByLabel('Studio name').fill('Fresh Frames')
-  await page.getByLabel('Your name').fill('Asha Menon')
-  await page.getByRole('textbox', { name: 'Email' }).fill(email)
-  await page.getByLabel('Mobile number').fill('98400 33445')
-  await page.getByRole('textbox', { name: 'Password', exact: true }).fill(password)
-  // /signup opens the Start free trial panel (the header has its own Start free trial button too).
-  await page.getByRole('dialog', { name: 'Start free trial' }).getByRole('button', { name: 'Start free trial' }).click()
+  // The home page's Create your studio card (the Login panel has an Email field too).
+  const card = page.getByRole('region', { name: 'Create your studio' })
+  await card.getByLabel('Studio name').fill('Fresh Frames')
+  await card.getByLabel('Your name').fill('Asha Menon')
+  await card.getByRole('textbox', { name: 'Email' }).fill(email)
+  await card.getByLabel('Phone (+91)').fill('98400 33445')
+  await card.getByRole('textbox', { name: 'Password', exact: true }).fill(password)
+  await card.getByRole('button', { name: 'Create studio' }).click()
   await expect(page).toHaveURL(/\/$/)
   return { email, password }
 }
 
 export async function login(page: Page, email = DEMO.email, password = DEMO.password) {
   await page.goto('/login')
-  await page.getByRole('textbox', { name: 'Email' }).fill(email)
-  await page.getByRole('textbox', { name: 'Password', exact: true }).fill(password)
-  await page.getByRole('button', { name: 'Log in' }).click()
+  // The Login panel (the Create your studio card on the same page has Email and Password too).
+  const panel = page.getByRole('dialog', { name: 'Log in' })
+  await panel.getByRole('textbox', { name: 'Email' }).fill(email)
+  await panel.getByRole('textbox', { name: 'Password', exact: true }).fill(password)
+  await panel.getByRole('button', { name: 'Log in' }).click()
   await expect(page).not.toHaveURL(/\/login/)
 }

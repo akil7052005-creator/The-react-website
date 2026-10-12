@@ -205,7 +205,6 @@ export class AdminSubscriptionsService {
       studioProfile: {
         city: s.studio.city,
         stateCode: s.studio.stateCode,
-        gstin: s.studio.gstin,
         email: s.studio.email,
         phone: s.studio.phone,
         createdAt: s.studio.createdAt.toISOString(),

@@ -122,7 +122,7 @@ export const featureInfo = {
     icon: 'receipt',
     summary: 'Create professional, GST-compliant photography invoices and track milestone payments.',
     highlights: [
-      'Automated CGST, SGST, and IGST rate breakdown with your studio GSTIN',
+      'Automated CGST, SGST and IGST rate breakdown based on your state',
       'Send invoices to clients on WhatsApp and print them',
       'Track advance deposits, part-payments, and overdue balances'
     ],
@@ -161,10 +161,10 @@ export const featureInfo = {
     summary: 'Keep your studio name, contact details, address and GST configuration up to date.',
     highlights: [
       'Studio and owner details shown to clients',
-      'GSTIN, PAN and state used on your invoices',
+      'Address and state used on your invoices',
       'Change your account password'
     ],
-    tip: 'Add your state and GSTIN before creating your first invoice.'
+    tip: 'Add your state and address before creating your first invoice.'
   },
   help: {
     title: 'Knowledge Base & Guides',

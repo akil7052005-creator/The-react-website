@@ -1,4 +1,4 @@
-import { CYCLE_LABELS, PRICING_CYCLES, quotaOf, type BillingCycle, type PlanDto } from '@weddyzone/shared'
+import { CYCLE_LABELS, cycleSavingPct, PRICING_CYCLES, quotaOf, type BillingCycle, type PlanDto } from '@weddyzone/shared'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { PageHeader, Skeleton } from '../components/ui'
@@ -58,7 +58,12 @@ function AllAccess() {
                 {price !== null ? formatMoney(price) : vip ? '—' : <Skeleton width={180} height={40} />}
                 <small style={{ fontSize: 16, fontWeight: 500, opacity: 0.8 }}> / {CYCLE_LABELS[cycle]}</small>
               </p>
-              {price !== null && cycle !== 'MONTHLY' && <span className="save-badge">{formatMoney(perMonth(price, cycle))} a month</span>}
+              {price !== null && cycle !== 'MONTHLY' && (
+                <span className="save-badge">
+                  {formatMoney(perMonth(price, cycle))} a month
+                  {vip && cycleSavingPct(vip.prices, cycle) ? ` · Save ${cycleSavingPct(vip.prices, cycle)}%` : ''}
+                </span>
+              )}
             </div>
             <div className="store-btns" style={{ marginTop: 22 }}>
               <button className="btn btn-gold btn-lg" disabled={!vip || !current || (onVip && current?.cycle === cycle) || price === null} onClick={() => vip && change(vip, cycle, current)}>

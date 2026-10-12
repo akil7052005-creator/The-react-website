@@ -1,5 +1,4 @@
 // Indian states and union territories with their GST state codes.
-// The code is the first two digits of any GSTIN registered in that state.
 export interface IndianState {
   code: string
   name: string

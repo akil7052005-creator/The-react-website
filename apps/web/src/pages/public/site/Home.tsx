@@ -1,9 +1,10 @@
 import aboutJpg from '../../../assets/Wedding_image.jpg'
 import heroJpg from '../../../assets/home-hero-mandap.jpg'
-import type { PanelId } from '../../../components/public/headerPanels'
+import { useMeQuery } from '../../../auth/AuthProvider'
+import { HeroActions, SignupCard } from '../../../components/public/HeroSignup'
 import { PricingSection } from '../../../components/public/PricingSection'
-import { Arrow, PublicShell, SectionTitle, usePageMeta } from '../../../components/public/PublicShell'
-import { scrollToSection, usePublicMenu } from '../../../components/public/SiteHeader'
+import { PublicShell, SectionTitle, usePageMeta } from '../../../components/public/PublicShell'
+import type { Arrival } from '../../../components/public/SiteHeader'
 import { APP_NAME } from '../../../lib/brand'
 
 const STUDIO_STEPS = [
@@ -17,28 +18,35 @@ const COUPLE_STEPS = [
   { icon: 'heart', text: 'Pick your favourite photos, then submit your selection.' },
 ]
 
-const META: Record<PanelId | 'home', [string, string]> = {
+const META: Record<Arrival | 'home', [string, string]> = {
   home: ['Photo selection for wedding studios', `${APP_NAME}: upload a wedding, share it on WhatsApp and get the couple's photo picks back. Free 14-day trial.`],
   about: ['About Us', `The story behind ${APP_NAME}, photo selection made for Indian wedding studios.`],
-  pricing: ['Plans & Pricing', 'Trial, Pro and VIP plans for wedding studios, for 1, 3, 6 or 12 months. Start with a free 14-day trial.'],
+  pricing: ['Plans & Pricing', 'Trial, Pro and VIP plans for wedding studios, for 1, 6 or 12 months. Start with a free 14-day trial.'],
   login: ['Log in', `Log in to your ${APP_NAME} studio.`],
-  trial: ['Start free trial', `Create your ${APP_NAME} studio: free for 14 days, no card needed.`],
+  signup: ['Start free trial', `Create your ${APP_NAME} studio: free for 14 days, no card needed.`],
 }
 
 /**
- * Public home page (logged-in studios get their dashboard at / instead). /about, /pricing, /login
- * and /signup show it too, with that menu panel open (About and Pricing scroll to their section on phones).
+ * Public home page (logged-in studios get their dashboard at / instead): the hero with the Create
+ * your studio card. /about, /pricing and /login show it with that menu panel open (About and
+ * Pricing scroll to their section on phones); /signup focuses the card.
  */
-export default function Home({ panel }: { panel?: PanelId }) {
+export default function Home({ panel }: { panel?: Arrival }) {
   usePageMeta(...META[panel ?? 'home'])
+  // /about, /pricing and /login also reach logged-in studios: no sign-up card for them.
+  const signedIn = Boolean(useMeQuery({ cached: true }).data?.studio)
   return (
     <PublicShell panel={panel}>
       <section className="pub-hero pub-hero-fixed">
         <img className="pub-hero-img" src={heroJpg} alt="Floral wedding mandap with a decorated stage sofa" fetchPriority="high" />
-        <div className="pub-wrap pub-hero-copy">
-          <p className="pub-tagline">For wedding photographers</p>
-          <h1>Let the couple pick their favorites effortlessly</h1>
-          <HeroActions />
+        <div className={`pub-wrap pub-hero-grid${signedIn ? ' solo' : ''}`}>
+          <div className="pub-hero-copy">
+            <p className="pub-tagline">For wedding photographers</p>
+            <h1>Photo selection made simple for wedding studios</h1>
+            <p className="pub-hero-line">Upload a wedding, share it on WhatsApp and get the couple's picks back, with your originals safe on your computer.</p>
+            <HeroActions signedIn={signedIn} />
+          </div>
+          {!signedIn && <SignupCard />}
         </div>
       </section>
 
@@ -112,19 +120,5 @@ export default function Home({ panel }: { panel?: PanelId }) {
 
       <PricingSection />
     </PublicShell>
-  )
-}
-
-function HeroActions() {
-  const { openPanel } = usePublicMenu()
-  return (
-    <div className="pub-actions">
-      <button type="button" className="pub-btn" onClick={() => openPanel('trial', null)}>
-        Start free trial <Arrow />
-      </button>
-      <button type="button" className="pub-btn ghost" onClick={() => scrollToSection('pricing')}>
-        See pricing <Arrow />
-      </button>
-    </div>
   )
 }

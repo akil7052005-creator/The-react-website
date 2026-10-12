@@ -21,7 +21,6 @@ export const clientDto = (c: Client): ClientDto => ({
   email: c.email,
   city: c.city,
   stateCode: c.stateCode,
-  gstin: c.gstin,
   notes: c.notes,
   createdAt: c.createdAt.toISOString(),
 })

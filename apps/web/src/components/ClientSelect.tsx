@@ -43,7 +43,7 @@ export function ClientFormModal({
 }) {
   const qc = useQueryClient()
   const form = useZodForm(clientSchema, {
-    values: { name: initialName, phone: '', email: '', city: '', stateCode: '', gstin: '', notes: '' },
+    values: { name: initialName, phone: '', email: '', city: '', stateCode: '', notes: '' },
     resetOptions: { keepDirtyValues: false },
   })
   const create = useMutation({
@@ -84,7 +84,6 @@ export function ClientFormModal({
           <TextField form={form} name="email" label="Email" type="email" />
           <SelectField form={form} name="city" label="City" kind="creatable" options={cityOptions} placeholder="Select or type a city" isClearable />
           <SelectField form={form} name="stateCode" label="State" options={stateOptions} placeholder="Select state" isClearable />
-          <TextField form={form} name="gstin" label="Client GSTIN" placeholder="For B2B invoices" style={{ textTransform: 'uppercase' }} />
           <TextAreaField form={form} name="notes" label="Notes" maxLength={500} rows={3} />
         </div>
       </form>

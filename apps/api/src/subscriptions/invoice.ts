@@ -18,8 +18,8 @@ export function platformInvoiceDto(p: Payment & { studio: Studio }): PlatformInv
   return {
     number: p.invoiceNumber!,
     date: (p.paidAt ?? p.createdAt).toISOString(),
-    seller: { name: c.PLATFORM_LEGAL_NAME, gstin: c.PLATFORM_GSTIN ?? null, address: c.PLATFORM_ADDRESS ?? null, stateCode: c.PLATFORM_STATE_CODE ?? null },
-    buyer: { name: p.studio.name, gstin: p.studio.gstin, address: address || null, stateCode: p.studio.stateCode, email: p.studio.email },
+    seller: { name: c.PLATFORM_LEGAL_NAME, address: c.PLATFORM_ADDRESS ?? null, stateCode: c.PLATFORM_STATE_CODE ?? null },
+    buyer: { name: p.studio.name, address: address || null, stateCode: p.studio.stateCode, email: p.studio.email },
     description: p.description,
     sac: PLATFORM_SAC,
     taxablePaise: taxable,

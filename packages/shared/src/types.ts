@@ -54,8 +54,6 @@ export interface StudioDto {
   addressLine1: string | null
   addressLine2: string | null
   pincode: string | null
-  gstin: string | null
-  pan: string | null
   website: string | null
   /** Instagram handle without the @ (Profile » Social Setup). */
   instagramHandle?: string | null
@@ -88,7 +86,6 @@ export interface ClientDto {
   email: string | null
   city: string | null
   stateCode: string | null
-  gstin: string | null
   notes: string | null
   createdAt: string
 }
@@ -406,8 +403,8 @@ export interface PaymentDto {
 export interface PlatformInvoiceDto {
   number: string
   date: string
-  seller: { name: string; gstin: string | null; address: string | null; stateCode: string | null }
-  buyer: { name: string; gstin: string | null; address: string | null; stateCode: string | null; email: string | null }
+  seller: { name: string; address: string | null; stateCode: string | null }
+  buyer: { name: string; address: string | null; stateCode: string | null; email: string | null }
   description: string
   sac: string
   taxablePaise: number
@@ -484,7 +481,7 @@ export interface InvoicePaymentDto {
 export interface InvoiceDto {
   id: string
   number: string
-  client: ClientRef & { email: string | null; gstin: string | null; city: string | null; stateCode: string | null }
+  client: ClientRef & { email: string | null; city: string | null; stateCode: string | null }
   event: EventRef | null
   issueDate: string
   dueDate: string
@@ -755,7 +752,6 @@ export interface AdminSubscriptionDetailDto extends AdminSubscriptionRowDto {
   studioProfile: {
     city: string | null
     stateCode: string | null
-    gstin: string | null
     email: string | null
     phone: string | null
     createdAt: string

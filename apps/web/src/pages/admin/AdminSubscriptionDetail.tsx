@@ -155,8 +155,6 @@ export default function AdminSubscriptionDetail() {
             <dd>{s.owner.phone ? <a className="link" href={`tel:${s.owner.phone}`}>{s.owner.phone}</a> : '—'}</dd>
             <dt>Location</dt>
             <dd>{[s.studioProfile.city, stateName(s.studioProfile.stateCode)].filter(Boolean).join(', ') || '—'}</dd>
-            <dt>GSTIN</dt>
-            <dd>{s.studioProfile.gstin ?? '—'}</dd>
             <dt>Joined</dt>
             <dd>{formatIstDate(s.studioProfile.createdAt)}</dd>
             <dt>Website</dt>

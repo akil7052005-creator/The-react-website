@@ -38,9 +38,9 @@ export const PLANS = [
     code: 'PRO' as const,
     name: 'Pro',
     tagline: 'For busy wedding studios',
-    monthlyPrice: 199_900,
-    yearlyPrice: 1_999_900,
-    prices: { MONTHLY: 199_900, QUARTERLY: 539_900, HALF_YEARLY: 1_019_900, YEARLY: 1_999_900 },
+    monthlyPrice: 60_000,
+    yearlyPrice: 500_000,
+    prices: { MONTHLY: 60_000, HALF_YEARLY: 300_000, YEARLY: 500_000 },
     popular: true,
     sortOrder: 2,
     limits: {
@@ -81,9 +81,9 @@ export const PLANS = [
     code: 'ALL_ACCESS' as const,
     name: 'VIP',
     tagline: 'Unlimited events, favourites included',
-    monthlyPrice: 499_900,
-    yearlyPrice: 4_999_900,
-    prices: { MONTHLY: 499_900, QUARTERLY: 1_349_900, HALF_YEARLY: 2_549_900, YEARLY: 4_999_900 },
+    monthlyPrice: 120_000,
+    yearlyPrice: 1_000_000,
+    prices: { MONTHLY: 120_000, HALF_YEARLY: 600_000, YEARLY: 1_000_000 },
     popular: false,
     sortOrder: 3,
     limits: {
@@ -194,7 +194,7 @@ export const TEMPLATES = [
 ]
 
 export const FAQS = [
-  ['Getting started', 'How do I set up my studio?', 'Fill in My Profile (studio name, GSTIN, state and logo), then create your first client and event from the dashboard with New Event. Your plan, credits and website are ready from day one.'],
+  ['Getting started', 'How do I set up my studio?', 'Fill in My Profile (studio name, address, state and logo), then create your first client and event from the dashboard with New Event. Your plan, credits and website are ready from day one.'],
   ['Getting started', 'Can I add my team?', 'Team seats depend on your plan: Trial and Pro include 1 account and VIP includes 10.'],
   ['Selections & albums', 'How do clients select their photos?', 'Create a Photo Selection for the event, upload the photos and share the link over WhatsApp. Clients heart their favourites, and you see the selection update live.'],
   ['Selections & albums', 'What happens when a client reaches the quota?', 'The selection locks at the quota: clients must remove a photo before adding another. The page tells them exactly how many picks they have left.'],

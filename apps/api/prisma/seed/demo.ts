@@ -118,8 +118,6 @@ export async function seedDemo(prisma: PrismaClient, uploadDirRaw: string, webAs
       addressLine1: '12, Khader Nawaz Khan Road',
       addressLine2: 'Nungambakkam',
       pincode: '600006',
-      gstin: '33ABCDE1234F1Z5',
-      pan: 'ABCDE1234F',
       website: 'goldenhour.weddyzone.com',
       bio: 'Candid wedding storytellers capturing South Indian weddings since 2016.',
       referralCode: 'GOLDEN25',
@@ -622,9 +620,9 @@ export async function seedDemo(prisma: PrismaClient, uploadDirRaw: string, webAs
       [false, 'I pointed gallery.goldenhour.studio to your servers but the certificate is not active yet.'],
       [true, 'Thanks Arjun! DNS has propagated; the certificate will be issued within 24 hours. We will update you here.'],
     ]],
-    [501, 'Invoice GST number format', 'BILLING', 'LOW', 'RESOLVED', 20, [
-      [false, 'Can the invoice show our GSTIN under the studio name?'],
-      [true, 'Yes — your GSTIN from My Profile now prints under the studio name on every invoice.'],
+    [501, 'Invoice address', 'BILLING', 'LOW', 'RESOLVED', 20, [
+      [false, 'Can the invoice show our full address under the studio name?'],
+      [true, 'Yes — the address from My Profile now prints under the studio name on every invoice.'],
     ]],
   ]
   for (const [tcode, subject, category, priority, status, days, msgs] of tickets) {

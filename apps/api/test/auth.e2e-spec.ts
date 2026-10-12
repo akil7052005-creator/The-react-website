@@ -193,8 +193,6 @@ describe('Auth & profile', () => {
       phone: '+91 98765 43210',
       city: 'Chennai',
       stateCode: '33',
-      gstin: '33ABCDE1234F1Z5',
-      pan: 'abcde1234f',
       pincode: '600006',
       bio: 'Candid storytellers',
     }
@@ -202,15 +200,16 @@ describe('Auth & profile', () => {
     it('updates the profile and owner name', async () => {
       const { agent } = await signup(app)
       const res = await agent.patch('/api/v1/studio/profile').send(valid).expect(200)
-      expect(res.body).toMatchObject({ name: 'Golden Hour Studios', ownerName: 'Arjun Mehta', email: 'hello@goldenhour.studio', pan: 'ABCDE1234F', stateCode: '33' })
+      expect(res.body).toMatchObject({ name: 'Golden Hour Studios', ownerName: 'Arjun Mehta', email: 'hello@goldenhour.studio', stateCode: '33' })
       const me = await agent.get('/api/v1/auth/me').expect(200)
       expect(me.body.user.name).toBe('Arjun Mehta')
     })
 
-    it('rejects a GSTIN from another state', async () => {
+    it('has no GSTIN or PAN: an older app sending them is ignored', async () => {
       const { agent } = await signup(app)
-      const res = await agent.patch('/api/v1/studio/profile').send({ ...valid, stateCode: '29' }).expect(400)
-      expect(res.body.error.fields.gstin).toMatch(/must start with 29/)
+      const res = await agent.patch('/api/v1/studio/profile').send({ ...valid, gstin: '33ABCDE1234F1Z5', pan: 'ABCDE1234F' }).expect(200)
+      expect(res.body).not.toHaveProperty('gstin')
+      expect(res.body).not.toHaveProperty('pan')
     })
 
     it('uploads a logo after checking the real file type', async () => {

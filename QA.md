@@ -68,7 +68,7 @@ Legend: ✅ checked and passing · 🤖 covered by automated tests · ⚠️ kno
 - ✅🤖 Create Invoice: client/event selects, dates, place of supply, line items (SAC default 998386, qty, rate, GST 0/5/12/18/28), add/remove rows, live totals with CGST+SGST vs IGST, milestones must equal the total — Web + E2E.
 - ✅🤖 Sequential FY numbering in a transaction, concurrent-safe — API.
 - ✅🤖 Tabs All/Pending/Overdue/Paid (overdue derived), search; view/print, WhatsApp, record payment, mark paid, cancel — API + E2E.
-- ✅ Print view: GSTINs, tax split, amount in words, milestones, payments; Save as PDF.
+- ✅ Print view: studio and client details (no GSTIN/PAN), tax split, amount in words, milestones, payments; Save as PDF.
 
 ## My Website
 - ✅🤖 Section toggles + order save with a toast; Live Preview updates instantly — E2E.
@@ -79,7 +79,7 @@ Legend: ✅ checked and passing · 🤖 covered by automated tests · ⚠️ kno
 - ✅🤖 Upload with type/size validation and preview; title, CTA text + URL, dates, active toggle; reorder (optimistic); edit; delete with confirm — API + E2E.
 
 ## My Profile
-- ✅🤖 GET/PATCH; Reset restores last saved; Save enabled only when changed and valid; GSTIN/state/PAN checks; logo upload; change password — API + E2E.
+- ✅🤖 GET/PATCH; Reset restores last saved; Save enabled only when changed and valid; state and PIN checks (GSTIN and PAN removed in Update 9); logo upload; change password — API + E2E.
 
 ## Help Center
 - ✅🤖 FAQs by category, debounced search, topic filters, "Was this helpful?" (one vote per user) — API + E2E.

@@ -65,14 +65,14 @@ export function usageMax(u: UsageItem): number {
   return u.limit ?? Math.max(u.used, 1) * 4
 }
 
-/** A plan's price for one billing period (1, 3, 6 or 12 months), paise; null when not sold for it. */
+/** A plan's price for one billing period (1, 6 or 12 months; 3 for older subscriptions), paise; null when not sold for it. */
 export function priceFor(plan: PlanDto, cycle: BillingCycle): number | null {
   const p = plan.prices?.[cycle]
   if (p !== undefined) return p
   return cycle === 'YEARLY' ? plan.yearlyPricePaise || null : cycle === 'MONTHLY' ? plan.monthlyPricePaise : null
 }
 
-/** Per-month equivalent of a longer period, for "₹1,800 / month" under a 3-month price. */
+/** Per-month equivalent of a longer period, for "₹1,800 / month" under a 6-month price. */
 export const perMonth = (price: number, cycle: BillingCycle) => Math.round(price / CYCLE_MONTHS[cycle])
 
 export function TestModeNote() {

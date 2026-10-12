@@ -72,7 +72,6 @@ const schema = z.object({
   ADMIN_ALERT_EMAILS: z.string().default(''),
   // Seller details printed on Wedmanage's GST invoices to studios.
   PLATFORM_LEGAL_NAME: z.string().default('Wedmanage Studio'),
-  PLATFORM_GSTIN: z.string().optional(),
   PLATFORM_STATE_CODE: z.string().optional(),
   PLATFORM_ADDRESS: z.string().optional(),
   // WhatsApp Cloud API for platform alerts to studios (approved templates). Without it the alert is

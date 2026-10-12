@@ -1,8 +1,6 @@
 import { z } from 'zod'
 
 export const PHONE_REGEX = /^[6-9]\d{9}$/
-export const GSTIN_REGEX = /^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/
-export const PAN_REGEX = /^[A-Z]{5}\d{4}[A-Z]$/
 export const PINCODE_REGEX = /^[1-9]\d{5}$/
 export const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/
 
@@ -38,27 +36,10 @@ export const passwordSchema = z
   .max(128, 'Password must be at most 128 characters')
   .refine((p) => /[A-Za-z]/.test(p) && /\d/.test(p), 'Password must contain a letter and a number')
 
-export const panSchema = z
-  .string()
-  .trim()
-  .toUpperCase()
-  .refine((v) => PAN_REGEX.test(v), 'Enter a valid PAN (e.g. ABCDE1234F)')
-
 export const pincodeSchema = z
   .string()
   .trim()
   .refine((v) => PINCODE_REGEX.test(v), 'Enter a valid 6-digit PIN code')
-
-export const gstinFormatSchema = z
-  .string()
-  .trim()
-  .toUpperCase()
-  .refine((v) => GSTIN_REGEX.test(v), 'Enter a valid 15-character GSTIN')
-
-/** True when the GSTIN's first two digits equal the state code. */
-export function gstinMatchesState(gstin: string, stateCode: string): boolean {
-  return gstin.slice(0, 2) === stateCode
-}
 
 export function isValidDateString(v: string): boolean {
   if (!DATE_REGEX.test(v)) return false

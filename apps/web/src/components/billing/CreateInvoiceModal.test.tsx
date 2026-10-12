@@ -8,7 +8,7 @@ vi.mock('../../auth/AuthProvider', () => ({
   ME_KEY: ['me'],
   useMe: () => ({
     user: { id: 'u1', name: 'Arjun Mehta', email: 'a@b.com', phone: null, role: 'OWNER' },
-    studio: { id: 's1', name: 'Golden Hour Studios', stateCode: '33', gstin: '33ABCDE1234F1Z5', plan: { code: 'PRO', name: 'Pro' } },
+    studio: { id: 's1', name: 'Golden Hour Studios', stateCode: '33', plan: { code: 'PRO', name: 'Pro' } },
     features: { faceRecognition: false },
   }),
 }))

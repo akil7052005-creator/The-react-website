@@ -76,11 +76,6 @@ function PlanInvoiceView({ path, backTo, onBack, backLabel }: { path: string; ba
             <div>
               <h1>{inv.seller.name}</h1>
               {inv.seller.address && <p>{inv.seller.address}</p>}
-              {inv.seller.gstin && (
-                <p>
-                  <strong>GSTIN:</strong> {inv.seller.gstin}
-                </p>
-              )}
             </div>
           </div>
           <div className="inv-title">
@@ -103,11 +98,6 @@ function PlanInvoiceView({ path, backTo, onBack, backLabel }: { path: string; ba
             {inv.buyer.address && <p>{inv.buyer.address}</p>}
             {inv.buyer.stateCode && <p>{stateName(inv.buyer.stateCode)}</p>}
             {inv.buyer.email && <p>{inv.buyer.email}</p>}
-            {inv.buyer.gstin && (
-              <p>
-                <strong>GSTIN:</strong> {inv.buyer.gstin}
-              </p>
-            )}
           </div>
           <div>
             <h3>Supply details</h3>

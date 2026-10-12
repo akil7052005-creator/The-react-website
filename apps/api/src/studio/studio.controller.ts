@@ -47,8 +47,6 @@ export class StudioController {
           addressLine1: nullable(body.addressLine1),
           addressLine2: nullable(body.addressLine2),
           pincode: nullable(body.pincode),
-          gstin: nullable(body.gstin),
-          pan: nullable(body.pan),
           website: nullable(body.website),
           // Left out by older clients: keep what is saved.
           ...(body.instagramHandle !== undefined ? { instagramHandle: nullable(body.instagramHandle) } : {}),

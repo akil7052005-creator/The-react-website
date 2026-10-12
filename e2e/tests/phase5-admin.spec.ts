@@ -30,9 +30,10 @@ test('an admin answers a studio ticket from the support inbox', async ({ page, b
 
   // The admin signs in and lands in the admin area, not a studio dashboard.
   await page.goto('/login')
-  await page.getByRole('textbox', { name: 'Email' }).fill(ADMIN.email)
-  await page.getByRole('textbox', { name: 'Password', exact: true }).fill(ADMIN.password)
-  await page.getByRole('button', { name: 'Log in' }).click()
+  const panel = page.getByRole('dialog', { name: 'Log in' })
+  await panel.getByRole('textbox', { name: 'Email' }).fill(ADMIN.email)
+  await panel.getByRole('textbox', { name: 'Password', exact: true }).fill(ADMIN.password)
+  await panel.getByRole('button', { name: 'Log in' }).click()
   await expect(page).toHaveURL(/\/admin$/)
   await expect(page.getByRole('heading', { name: 'Subscriptions dashboard' })).toBeVisible()
   await page.goto('/admin/tickets')

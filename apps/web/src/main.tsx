@@ -132,7 +132,8 @@ const router = createBrowserRouter([
       { path: '/login', element: <Home panel="login" /> },
       { path: '/about', element: <Home panel="about" /> },
       { path: '/pricing', element: <Home panel="pricing" /> },
-      { path: '/signup', element: <RedirectIfAuthed><Home panel="trial" /></RedirectIfAuthed> },
+      // /signup: Home with the Create your studio card focused (?plan=PRO&months=6 preselects a plan).
+      { path: '/signup', element: <RedirectIfAuthed><Home panel="signup" /></RedirectIfAuthed> },
       { path: '/forgot-password', element: <ForgotPassword /> },
       { path: '/reset-password', element: <ResetPassword /> },
       // Client-facing pages: no login, access by unguessable token.

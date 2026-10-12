@@ -133,10 +133,12 @@ type TextFieldProps<T extends FieldValues> = {
   hint?: ReactNode
   full?: boolean
   showCounter?: boolean
+  /** Keeps ids unique when two forms with the same field names are on one page (default "f"). */
+  idPrefix?: string
 } & Omit<InputHTMLAttributes<HTMLInputElement>, 'name' | 'form'>
 
-export function TextField<T extends FieldValues>({ form, name, label, required, hint, full, showCounter, maxLength, ...rest }: TextFieldProps<T>) {
-  const id = `f-${String(name).replace(/\./g, '-')}`
+export function TextField<T extends FieldValues>({ form, name, label, required, hint, full, showCounter, maxLength, idPrefix = 'f', ...rest }: TextFieldProps<T>) {
+  const id = `${idPrefix}-${String(name).replace(/\./g, '-')}`
   const f = form as unknown as UseFormReturn<FieldValues>
   const error = errorAt(f, name)
   const value = showCounter && maxLength ? String(f.watch(name) ?? '') : ''

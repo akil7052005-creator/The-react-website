@@ -1,4 +1,4 @@
-import { CYCLE_LABELS, PRICING_CYCLES, type BillingCycle } from '@weddyzone/shared'
+import { CYCLE_LABELS, cycleSavingPct, PRICING_CYCLES, type BillingCycle } from '@weddyzone/shared'
 import { useState, type KeyboardEvent } from 'react'
 import { perMonth, priceFor, usePlans } from '../../lib/billing'
 import { APP_NAME } from '../../lib/brand'
@@ -6,10 +6,10 @@ import { isTrialPlan, planLimitLines } from '../../lib/planCopy'
 import { formatMoney } from '../../utils/format'
 import { LoginForm } from '../../pages/auth/Login'
 import { ForgotForm } from '../../pages/auth/Passwords'
-import { SignupForm, type ChosenPlan } from '../../pages/auth/Signup'
+import type { SignupPlan } from '../../pages/auth/Signup'
 import { ErrorState, Skeleton } from '../ui'
 
-export type PanelId = 'about' | 'pricing' | 'login' | 'trial'
+export type PanelId = 'about' | 'pricing' | 'login'
 
 export const CYCLE_SHORT: Record<BillingCycle, string> = { MONTHLY: '1 month', QUARTERLY: '3 months', HALF_YEARLY: '6 months', YEARLY: '1 year' }
 
@@ -108,8 +108,12 @@ export function AboutPanel({ stacked }: { stacked?: boolean }) {
   )
 }
 
+/** Choose on a plan card: the plan for the Create your studio card (null = Trial). */
+export const signupPlanOf = (code: string, trial: boolean, cycle: BillingCycle): SignupPlan =>
+  !trial && (code === 'PRO' || code === 'ALL_ACCESS') ? { code, cycle } : null
+
 /** Plans & Pricing: a period switch and the three plans from /plans, each with Choose. */
-export function PricingPanel({ onChoose, onCompare }: { onChoose: (plan: ChosenPlan | null) => void; onCompare: () => void }) {
+export function PricingPanel({ onChoose, onCompare }: { onChoose: (plan: SignupPlan) => void; onCompare: () => void }) {
   const [cycle, setCycle] = useState<BillingCycle>('MONTHLY')
   const plans = usePlans()
   return (
@@ -139,7 +143,12 @@ export function PricingPanel({ onChoose, onCompare }: { onChoose: (plan: ChosenP
                       {trial ? 'Free' : price === null ? '—' : formatMoney(price)}
                       <small> {trial ? '· 14 days' : `/ ${CYCLE_LABELS[cycle]}`}</small>
                     </p>
-                    {!trial && price !== null && cycle !== 'MONTHLY' && <p className="pub-per-month">{formatMoney(perMonth(price, cycle))} a month</p>}
+                    {!trial && price !== null && cycle !== 'MONTHLY' && (
+                      <p className="pub-per-month">
+                        {formatMoney(perMonth(price, cycle))} a month
+                        {cycleSavingPct(p.prices, cycle) && <span className="pub-save">Save {cycleSavingPct(p.prices, cycle)}%</span>}
+                      </p>
+                    )}
                     <ul className="pub-limits">
                       {planLimitLines(p)
                         .slice(0, 3)
@@ -152,7 +161,7 @@ export function PricingPanel({ onChoose, onCompare }: { onChoose: (plan: ChosenP
                     <button
                       type="button"
                       className={`pub-btn sm block${popular ? '' : ' ghost'}`}
-                      onClick={() => onChoose(trial ? null : { code: p.code, name: p.name, cycle, cycleLabel: CYCLE_SHORT[cycle] })}
+                      onClick={() => onChoose(signupPlanOf(p.code, trial, cycle))}
                     >
                       Choose {p.name}
                     </button>
@@ -189,16 +198,6 @@ export function LoginPanel({ onTrial }: { onTrial: () => void }) {
           ← Back to login
         </button>
       </p>
-    </>
-  )
-}
-
-export function TrialPanel({ plan, onLogin }: { plan: ChosenPlan | null; onLogin: () => void }) {
-  return (
-    <>
-      <h2 className="pub-panel-title">Create your studio</h2>
-      <p className="pub-panel-sub">Free for 14 days. No card needed.</p>
-      <SignupForm plan={plan} onLogin={onLogin} />
     </>
   )
 }

@@ -31,8 +31,6 @@ export class StudioMapper {
       addressLine1: studio.addressLine1,
       addressLine2: studio.addressLine2,
       pincode: studio.pincode,
-      gstin: studio.gstin,
-      pan: studio.pan,
       website: studio.website,
       instagramHandle: studio.instagramHandle,
       bio: studio.bio,

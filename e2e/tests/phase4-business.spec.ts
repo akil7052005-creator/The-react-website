@@ -95,7 +95,7 @@ test('help search and feedback, then raise and follow up a support ticket', asyn
   await expect(page.getByText(/Ticket TKT-\d+ created/)).toBeVisible()
 
   const thread = page.getByRole('dialog', { name: /TKT-\d+ · Need help with invoice numbering/ })
-  await thread.getByLabel(/^Reply/).fill('Adding: we have two GSTINs.')
+  await thread.getByLabel(/^Reply/).fill('Adding: we have two branches.')
   await thread.getByRole('button', { name: 'Send reply' }).click()
   await expect(page.getByText('Reply sent')).toBeVisible()
   await expect(thread.locator('.thread-msg')).toHaveCount(2)

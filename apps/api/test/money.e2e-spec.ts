@@ -181,46 +181,48 @@ describe('Phase 3 — plans, credits, invoices', () => {
         ['ALL_ACCESS', 'VIP'],
       ])
       const [, pro, vip] = res.body
-      expect(pro.prices).toEqual({ MONTHLY: 199_900, QUARTERLY: 539_900, HALF_YEARLY: 1_019_900, YEARLY: 1_999_900 })
-      expect(vip.prices).toEqual({ MONTHLY: 499_900, QUARTERLY: 1_349_900, HALF_YEARLY: 2_549_900, YEARLY: 4_999_900 })
+      // 1, 6 or 12 months (3 months is no longer sold).
+      expect(pro.prices).toEqual({ MONTHLY: 60_000, QUARTERLY: null, HALF_YEARLY: 300_000, YEARLY: 500_000 })
+      expect(vip.prices).toEqual({ MONTHLY: 120_000, QUARTERLY: null, HALF_YEARLY: 600_000, YEARLY: 1_000_000 })
       expect(pro.limits).toMatchObject({ eventsPerMonth: 10, photosPerEvent: 2000, uploadGbPerMonth: 500, addonEvents: 5 })
       expect(vip.limits).toMatchObject({ eventsPerMonth: null, photosPerEvent: 5000, uploadGbPerMonth: 1024, favourites: true })
       expect(res.body[0].limits).toMatchObject({ eventsTotal: 2, photosPerEvent: 100, uploadGbTotal: 2, trialDays: 14, galleryDays: 7 })
     })
 
-    it('buys Pro for 3 months (18% GST on top); the Trial itself is not for sale', async () => {
+    it('buys Pro for 6 months (18% GST on top); 3 months and the Trial itself are not for sale', async () => {
       await A.agent.post('/api/v1/subscription/change').send({ planCode: 'STARTER', cycle: 'MONTHLY' }).expect(400)
-      const res = await A.agent.post('/api/v1/subscription/change').send({ planCode: 'PRO', cycle: 'QUARTERLY' }).expect(200)
-      expect(res.body.subscription).toMatchObject({ plan: { code: 'PRO' }, cycle: 'QUARTERLY', isTrial: false, status: 'ACTIVE', pricePaise: 539_900 })
-      // ₹5,399 + 18% = ₹6,370.82
-      expect(res.body.payment).toMatchObject({ purpose: 'SUBSCRIPTION', amountPaise: 637_082, gstPaise: 97_182, status: 'SUCCESS' })
+      await A.agent.post('/api/v1/subscription/change').send({ planCode: 'PRO', cycle: 'QUARTERLY' }).expect(400)
+      const res = await A.agent.post('/api/v1/subscription/change').send({ planCode: 'PRO', cycle: 'HALF_YEARLY' }).expect(200)
+      expect(res.body.subscription).toMatchObject({ plan: { code: 'PRO' }, cycle: 'HALF_YEARLY', isTrial: false, status: 'ACTIVE', pricePaise: 300_000 })
+      // ₹3,000 + 18% = ₹3,540
+      expect(res.body.payment).toMatchObject({ purpose: 'SUBSCRIPTION', amountPaise: 354_000, gstPaise: 54_000, status: 'SUCCESS' })
       expect(res.body.payment.invoiceNumber).toMatch(/^WZ\/\d{4}-\d{2}\/\d{5}$/)
       const sub = await prisma.subscription.findUniqueOrThrow({ where: { studioId: A.studioId } })
-      // 3 months from today, and the monthly limits count from today.
-      const months = (sub.currentPeriodEnd.getTime() - sub.currentPeriodStart.getTime()) / 86_400_000
-      expect(months).toBeGreaterThanOrEqual(89)
-      expect(months).toBeLessThanOrEqual(92)
+      // 6 months from today, and the monthly limits count from today.
+      const days = (sub.currentPeriodEnd.getTime() - sub.currentPeriodStart.getTime()) / 86_400_000
+      expect(days).toBeGreaterThanOrEqual(180)
+      expect(days).toBeLessThanOrEqual(185)
       expect(sub.usageAnchor?.getTime()).toBe(sub.currentPeriodStart.getTime())
-      await A.agent.post('/api/v1/subscription/change').send({ planCode: 'PRO', cycle: 'QUARTERLY' }).expect(409)
+      await A.agent.post('/api/v1/subscription/change').send({ planCode: 'PRO', cycle: 'HALF_YEARLY' }).expect(409)
     })
 
     it('upgrades to VIP straight away, with credit for the unused days of Pro', async () => {
-      const res = await A.agent.post('/api/v1/subscription/change').send({ planCode: 'ALL_ACCESS', cycle: 'MONTHLY' }).expect(200)
-      expect(res.body.subscription).toMatchObject({ plan: { code: 'ALL_ACCESS', name: 'VIP' }, cycle: 'MONTHLY', status: 'ACTIVE' })
+      const res = await A.agent.post('/api/v1/subscription/change').send({ planCode: 'ALL_ACCESS', cycle: 'YEARLY' }).expect(200)
+      expect(res.body.subscription).toMatchObject({ plan: { code: 'ALL_ACCESS', name: 'VIP' }, cycle: 'YEARLY', status: 'ACTIVE' })
       const payment = await prisma.payment.findFirstOrThrow({ where: { studioId: A.studioId, purpose: 'SUBSCRIPTION', status: 'SUCCESS' }, orderBy: { createdAt: 'desc' } })
       const meta = payment.meta as { prorationPaise: number; basePaise: number }
-      // Almost the whole 3 months of Pro (₹5,399) is unused, so VIP for a month (₹4,999) costs about ₹1 + GST.
-      expect(meta.basePaise).toBe(499_900)
-      expect(meta.prorationPaise).toBeGreaterThan(490_000)
-      expect(payment.amount - payment.gst).toBe(499_900 - meta.prorationPaise)
+      // Almost the whole 6 months of Pro (₹3,000) is unused: VIP for a year (₹10,000) costs about ₹7,000 + GST.
+      expect(meta.basePaise).toBe(1_000_000)
+      expect(meta.prorationPaise).toBeGreaterThan(290_000)
+      expect(payment.amount - payment.gst).toBe(1_000_000 - meta.prorationPaise)
       expect(payment.description).toMatch(/credit for unused days/)
     })
 
     it("refuses a period a plan isn't sold for", async () => {
-      await prisma.plan.update({ where: { code: 'PRO' }, data: { prices: { MONTHLY: 199_900, YEARLY: 1_999_900 } } })
+      await prisma.plan.update({ where: { code: 'PRO' }, data: { prices: { MONTHLY: 60_000, YEARLY: 500_000 } } })
       const res = await B.agent.post('/api/v1/subscription/change').send({ planCode: 'PRO', cycle: 'HALF_YEARLY' }).expect(400)
       expect(res.body.error.fields.cycle).toMatch(/isn't available for 6 months/)
-      await prisma.plan.update({ where: { code: 'PRO' }, data: { prices: { MONTHLY: 199_900, QUARTERLY: 539_900, HALF_YEARLY: 1_019_900, YEARLY: 1_999_900 } } })
+      await prisma.plan.update({ where: { code: 'PRO' }, data: { prices: { MONTHLY: 60_000, HALF_YEARLY: 300_000, YEARLY: 500_000 } } })
     })
 
     it('cancels at period end and resumes', async () => {

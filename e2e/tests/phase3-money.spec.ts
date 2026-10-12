@@ -74,8 +74,8 @@ test('upgrade to VIP yearly, then cancel and resume', async ({ page }) => {
   await signupStudio(page)
   await page.goto('/subscriptions?months=12')
   await page.getByRole('button', { name: 'Choose VIP' }).click()
-  // ₹49,999 + 18% GST
-  await expect(page.getByText(/₹58,998\.82/).last()).toBeVisible()
+  // ₹10,000 + 18% GST
+  await expect(page.getByText(/₹11,800/).last()).toBeVisible()
   await page.getByTestId('confirm-ok').click()
   await expect(page.getByText("You're now on the VIP plan")).toBeVisible()
   await expect(page.getByRole('button', { name: 'Active Studio Plan' })).toBeDisabled()

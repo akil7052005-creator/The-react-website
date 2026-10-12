@@ -70,12 +70,6 @@ export default function InvoicePrint() {
                 {s.phone}
                 {s.email ? ` · ${s.email}` : ''}
               </p>
-              {s.gstin && (
-                <p>
-                  <strong>GSTIN:</strong> {s.gstin}
-                  {s.pan ? ` · PAN: ${s.pan}` : ''}
-                </p>
-              )}
             </div>
           </div>
           <div className="inv-title">
@@ -100,11 +94,6 @@ export default function InvoicePrint() {
             <p>{inv.client.phone}</p>
             {inv.client.email && <p>{inv.client.email}</p>}
             {(inv.client.city || inv.client.stateCode) && <p>{[inv.client.city, stateName(inv.client.stateCode)].filter(Boolean).join(', ')}</p>}
-            {inv.client.gstin && (
-              <p>
-                <strong>GSTIN:</strong> {inv.client.gstin}
-              </p>
-            )}
           </div>
           <div>
             <h3>Supply details</h3>

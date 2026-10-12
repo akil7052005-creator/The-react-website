@@ -39,9 +39,9 @@ describe('Phase 2 — clients, events, selections, albums, dashboard', () => {
       expect(byPhone.body.meta.total).toBeGreaterThan(0)
     })
 
-    it('validates clients (phone, GSTIN needs state)', async () => {
-      const res = await A.agent.post('/api/v1/clients').send({ name: 'X', phone: '123', gstin: '33ABCDE1234F1Z5' }).expect(400)
-      expect(Object.keys(res.body.error.fields).sort()).toEqual(['name', 'phone', 'stateCode'])
+    it('validates clients (name, phone)', async () => {
+      const res = await A.agent.post('/api/v1/clients').send({ name: 'X', phone: '123' }).expect(400)
+      expect(Object.keys(res.body.error.fields).sort()).toEqual(['name', 'phone'])
     })
 
     it('creates events with sequential codes and rejects past dates', async () => {

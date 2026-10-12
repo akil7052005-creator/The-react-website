@@ -55,7 +55,7 @@ describe('amounts', () => {
   })
 })
 
-describe('GSTIN, PAN and PIN on the profile', () => {
+describe('PIN on the profile; no GSTIN or PAN', () => {
   const base = {
     ownerName: 'Arjun Mehta',
     studioName: 'Golden Hour Studios',
@@ -64,27 +64,17 @@ describe('GSTIN, PAN and PIN on the profile', () => {
     city: 'Chennai',
     stateCode: '33',
   }
-  it('accepts a GSTIN matching the state', () => {
-    expect(profileSchema.safeParse({ ...base, gstin: '33abcde1234f1z5' }).success).toBe(true)
+  it('rejects a malformed PIN', () => {
+    expect(errorsOf(profileSchema.safeParse({ ...base, pincode: '012345' })).pincode).toBeDefined()
   })
-  it('rejects a GSTIN from another state', () => {
-    const r = profileSchema.safeParse({ ...base, gstin: '29ABCDE1234F1Z5' })
-    expect(errorsOf(r).gstin).toMatch(/must start with 33/)
+  it('treats an empty PIN as absent', () => {
+    expect(profileSchema.parse({ ...base, pincode: '' }).pincode).toBeUndefined()
   })
-  it('rejects a malformed GSTIN, PAN and PIN', () => {
-    const r = profileSchema.safeParse({ ...base, gstin: '33ABCDE1234F1X5', pan: 'ABCDE12345', pincode: '012345' })
-    const e = errorsOf(r)
-    expect(e.gstin).toBeDefined()
-    expect(e.pan).toBeDefined()
-    expect(e.pincode).toBeDefined()
-  })
-  it('treats empty optional fields as absent', () => {
-    const r = profileSchema.parse({ ...base, gstin: '', pan: '', pincode: '' })
-    expect(r.gstin).toBeUndefined()
-  })
-  it('client GSTIN needs a state', () => {
-    const r = clientSchema.safeParse({ name: 'Priya Raman', phone: '9876543210', gstin: '33ABCDE1234F1Z5' })
-    expect(errorsOf(r).stateCode).toBeDefined()
+  it('drops GSTIN and PAN sent by an older app', () => {
+    const r = profileSchema.parse({ ...base, gstin: '33ABCDE1234F1Z5', pan: 'ABCDE1234F' })
+    expect(r).not.toHaveProperty('gstin')
+    expect(r).not.toHaveProperty('pan')
+    expect(clientSchema.parse({ name: 'Priya Raman', phone: '9876543210', gstin: '33ABCDE1234F1Z5' })).not.toHaveProperty('gstin')
   })
 })
 
@@ -209,5 +199,17 @@ describe('amount in words', () => {
     expect(amountInWords(123_456_789_00)).toBe('Rupees Twelve Crore Thirty Four Lakh Fifty Six Thousand Seven Hundred Eighty Nine Only')
     expect(amountInWords(100_050)).toBe('Rupees One Thousand and Fifty Paise Only')
     expect(amountInWords(0)).toBe('Rupees Zero Only')
+  })
+})
+
+describe('billing periods on sale', () => {
+  it('sells 1, 6 and 12 months, and shows the saving against paying monthly', async () => {
+    const { PRICING_CYCLES, cycleSavingPct } = await import('./plans')
+    expect(PRICING_CYCLES).toEqual(['MONTHLY', 'HALF_YEARLY', 'YEARLY'])
+    const pro = { MONTHLY: 60_000, HALF_YEARLY: 300_000, YEARLY: 500_000 }
+    expect(cycleSavingPct(pro, 'MONTHLY')).toBeNull()
+    expect(cycleSavingPct(pro, 'HALF_YEARLY')).toBe(17)
+    expect(cycleSavingPct(pro, 'YEARLY')).toBe(31)
+    expect(cycleSavingPct({ MONTHLY: 120_000, HALF_YEARLY: 600_000, YEARLY: 1_000_000 }, 'YEARLY')).toBe(31)
   })
 })

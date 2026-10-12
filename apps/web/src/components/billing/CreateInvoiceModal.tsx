@@ -111,7 +111,7 @@ export function CreateInvoiceModal({ open, onClose }: { open: boolean; onClose: 
       open={open}
       onClose={close}
       title="Create GST Invoice"
-      subtitle={`${studio.name}${studio.gstin ? ` · GSTIN ${studio.gstin}` : ''} · ${stateName(studio.stateCode) || 'State not set'}`}
+      subtitle={`${studio.name} · ${stateName(studio.stateCode) || 'State not set'}`}
       icon="receipt"
       size="xl"
       busy={create.isPending}

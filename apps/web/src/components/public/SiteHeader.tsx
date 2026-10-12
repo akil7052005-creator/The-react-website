@@ -1,20 +1,17 @@
-import type { BillingCycle } from '@weddyzone/shared'
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
-import type { ChosenPlan } from '../../pages/auth/Signup'
-import { usePlans } from '../../lib/billing'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { planFromParams, type SignupPlan } from '../../pages/auth/Signup'
 import { APP_NAME } from '../../lib/brand'
-import { AboutPanel, arrowNav, CYCLE_SHORT, LoginPanel, PricingPanel, TrialPanel, type PanelId } from './headerPanels'
+import { AboutPanel, arrowNav, LoginPanel, PricingPanel, type PanelId } from './headerPanels'
 
 const OPEN_DELAY = 150
 const CLOSE_GRACE = 300
 const PHONE_QUERY = '(max-width: 899.98px)'
-const MONTHS: Record<string, BillingCycle> = { '1': 'MONTHLY', '3': 'QUARTERLY', '6': 'HALF_YEARLY', '12': 'YEARLY' }
-const FORM_PANELS: PanelId[] = ['login', 'trial']
-const LABELS: Record<PanelId, string> = { about: 'About Us', pricing: 'Plans & Pricing', login: 'Login', trial: 'Start free trial' }
+const FORM_PANELS: PanelId[] = ['login']
+const LABELS: Record<PanelId, string> = { about: 'About Us', pricing: 'Plans & Pricing', login: 'Login' }
 
-/** A plan from the menu or a /signup?plan=…&months=… link; its name comes from /plans when the link has only the code. */
-type PickedPlan = Omit<ChosenPlan, 'name'> & { name?: string }
+/** How the page was reached: an old link's panel, or /signup (the Create your studio card, focused). */
+export type Arrival = PanelId | 'signup'
 
 const isPhoneNow = () => typeof window !== 'undefined' && Boolean(window.matchMedia?.(PHONE_QUERY).matches)
 
@@ -50,12 +47,31 @@ function trapTab(e: KeyboardEvent<HTMLElement>) {
 
 const focusFirstField = (el: HTMLElement | null) => el?.querySelector<HTMLElement>('button, a[href]')?.focus()
 
-export const scrollToSection = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
+const smooth = (): ScrollBehavior => (window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth')
+export const scrollToSection = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: smooth() })
+
+/** The id of the home page's Create your studio card. */
+export const SIGNUP_CARD_ID = 'signup-card'
+
+/** Brings the Create your studio card into view and puts the cursor in its first field. False when it isn't on the page. */
+function focusSignupCard() {
+  const card = document.getElementById(SIGNUP_CARD_ID)
+  if (!card) return false
+  const r = card.getBoundingClientRect()
+  if (r.top < 64 || r.bottom > window.innerHeight) card.scrollIntoView({ behavior: smooth(), block: isPhoneNow() ? 'start' : 'center' })
+  card.querySelector<HTMLInputElement>('input:not([type="hidden"])')?.focus({ preventScroll: true })
+  return true
+}
 
 interface Menu {
   open: PanelId | null
-  openPanel: (id: PanelId, plan?: PickedPlan | null) => void
+  openPanel: (id: PanelId) => void
   close: (returnFocus?: boolean) => void
+  /** The plan on the Create your studio card (null = Trial). */
+  signupPlan: SignupPlan
+  setSignupPlan: (p: SignupPlan) => void
+  /** Start Free Trial / Choose: (optionally pick a plan,) close menus and go to the card's first field. */
+  startTrial: (plan?: SignupPlan) => void
 }
 const MenuContext = createContext<Menu | null>(null)
 
@@ -67,24 +83,23 @@ export function usePublicMenu() {
 }
 
 /**
- * The public site's top menu. About Us and Plans & Pricing open mega panels under the header,
- * Login and Start free trial open form panels (hover after 150 ms, or click / Enter). On phones:
- * ☰ opens a drawer with accordions; Login and Start free trial open as bottom sheets.
+ * The public site's top menu. About Us and Plans & Pricing open mega panels under the header, Login
+ * a form panel (hover after 150 ms, or click / Enter). Signing up is the home page's Create your
+ * studio card. On phones: ☰ opens a drawer with accordions; Login opens as a bottom sheet.
  */
-export function PublicMenu({ initial, children }: { initial?: PanelId; children: (menu: ReactNode) => ReactNode }) {
+export function PublicMenu({ initial, children }: { initial?: Arrival; children: (menu: ReactNode) => ReactNode }) {
   const [params] = useSearchParams()
+  const navigate = useNavigate()
   const phone = useIsPhone()
-  // Old links (/about, /pricing, /login, /signup) arrive with their panel open; on phones About and
-  // Pricing scroll to their section instead (below).
-  const [open, setOpen] = useState<PanelId | null>(() => (initial && !(isPhoneNow() && (initial === 'about' || initial === 'pricing')) ? initial : null))
+  // Old links (/about, /pricing, /login) arrive with their panel open; on phones About and Pricing
+  // scroll to their section instead, and /signup focuses the card (below).
+  const [open, setOpen] = useState<PanelId | null>(() =>
+    initial && initial !== 'signup' && !(isPhoneNow() && (initial === 'about' || initial === 'pricing')) ? initial : null,
+  )
   const [byHover, setByHover] = useState(false)
   // A form panel stays open on mouse leave once the user has typed in it.
   const [typed, setTyped] = useState(false)
-  const [plan, setPlan] = useState<PickedPlan | null>(() => {
-    const code = params.get('plan')
-    const cycle = MONTHS[params.get('months') ?? ''] ?? 'MONTHLY'
-    return code === 'PRO' || code === 'ALL_ACCESS' ? { code, cycle, cycleLabel: CYCLE_SHORT[cycle] } : null
-  })
+  const [signupPlan, setSignupPlan] = useState<SignupPlan>(() => planFromParams(params))
   const [drawer, setDrawer] = useState(false)
   const [section, setSection] = useState<'about' | 'pricing' | null>(null)
   const headerRef = useRef<HTMLElement>(null)
@@ -115,9 +130,8 @@ export function PublicMenu({ initial, children }: { initial?: PanelId; children:
   }, [])
 
   const openPanel = useCallback(
-    (id: PanelId, chosen?: PickedPlan | null) => {
+    (id: PanelId) => {
       clearTimers()
-      if (chosen !== undefined) setPlan(chosen)
       setDrawer(false)
       setTyped(false)
       setByHover(false)
@@ -131,8 +145,23 @@ export function PublicMenu({ initial, children }: { initial?: PanelId; children:
     [phone],
   )
 
+  const startTrial = useCallback(
+    (chosen?: SignupPlan) => {
+      if (chosen !== undefined) setSignupPlan(chosen)
+      close()
+      setDrawer(false)
+      // After the menus close (and a phone's page can scroll again).
+      requestAnimationFrame(() => {
+        // Logged in (no card): the plans page instead.
+        if (!focusSignupCard()) navigate(chosen ? `/subscriptions?renew=${chosen.code}&cycle=${chosen.cycle}` : '/')
+      })
+    },
+    [close, navigate],
+  )
+
   useEffect(() => {
     if (isPhoneNow() && (initial === 'about' || initial === 'pricing')) scrollToSection(initial)
+    if (initial === 'signup') requestAnimationFrame(() => focusSignupCard())
     // Only on arrival.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -203,8 +232,7 @@ export function PublicMenu({ initial, children }: { initial?: PanelId; children:
     clearTimeout(openTimer.current)
     if (open === id && byHover) setByHover(false)
     else if (open === id) close()
-    // The header's Start free trial is the Trial plan; Pro/VIP come from Plans & Pricing.
-    else openPanel(id, id === 'trial' ? null : undefined)
+    else openPanel(id)
   }
 
   /** Down arrow on an open item moves into its panel. */
@@ -227,19 +255,17 @@ export function PublicMenu({ initial, children }: { initial?: PanelId; children:
       <AboutPanel />
     ) : id === 'pricing' ? (
       <PricingPanel
-        onChoose={(p) => openPanel('trial', p)}
+        onChoose={startTrial}
         onCompare={() => {
           close()
           scrollToSection('pricing')
         }}
       />
-    ) : id === 'login' ? (
-      <LoginPanel onTrial={() => openPanel('trial')} />
     ) : (
-      <ResolvedTrial plan={plan} onLogin={() => openPanel('login')} />
+      <LoginPanel onTrial={() => startTrial(null)} />
     )
 
-  const menu: Menu = { open, openPanel, close }
+  const menu: Menu = { open, openPanel, close, signupPlan, setSignupPlan, startTrial }
 
   const header = (
     <header className="pub-header" ref={headerRef} onMouseEnter={() => clearTimeout(closeTimer.current)} onMouseLeave={leaveHeader}>
@@ -279,20 +305,6 @@ export function PublicMenu({ initial, children }: { initial?: PanelId; children:
                 {LABELS[id]} <i className="bi bi-chevron-down pub-caret" aria-hidden="true" />
               </button>
             ))}
-            <button
-              type="button"
-              ref={registerTrigger}
-              data-panel="trial"
-              aria-expanded={open === 'trial'}
-              aria-controls="pub-panel-trial"
-              onMouseEnter={() => hoverOpen('trial')}
-              onMouseLeave={stopOpening}
-              onClick={() => clickTrigger('trial')}
-              onKeyDown={(e) => arrowIntoPanel('trial', e)}
-              className="pub-btn sm pub-menu-item pub-trial-btn"
-            >
-              Start free trial
-            </button>
           </nav>
         )}
         {phone && (
@@ -367,16 +379,13 @@ export function PublicMenu({ initial, children }: { initial?: PanelId; children:
                   </button>
                   {section === id && (
                     <div id={`pub-acc-${id}`} className="pub-acc-body">
-                      {id === 'about' ? <AboutPanel stacked /> : <PricingPanel onChoose={(p) => openPanel('trial', p)} onCompare={() => openPanel('pricing')} />}
+                      {id === 'about' ? <AboutPanel stacked /> : <PricingPanel onChoose={startTrial} onCompare={() => openPanel('pricing')} />}
                     </div>
                   )}
                 </div>
               ))}
               <button type="button" className="pub-drawer-link" onClick={() => openPanel('login')}>
                 Login
-              </button>
-              <button type="button" className="pub-btn block" onClick={() => openPanel('trial', null)}>
-                Start free trial
               </button>
             </nav>
           </aside>
@@ -408,11 +417,3 @@ export function PublicMenu({ initial, children }: { initial?: PanelId; children:
   )
 }
 
-/** The sign-up panel, with the chosen plan's name from /plans (a /signup?plan= link only has the code). */
-function ResolvedTrial({ plan, onLogin }: { plan: PickedPlan | null; onLogin: () => void }) {
-  const plans = usePlans()
-  const name = plan ? (plan.name ?? plans.data?.find((p) => p.code === plan.code)?.name ?? (plan.code === 'ALL_ACCESS' ? 'VIP' : 'Pro')) : null
-  return <TrialPanel plan={plan && name ? { ...plan, name } : null} onLogin={onLogin} />
-}
-
-export type { PickedPlan }

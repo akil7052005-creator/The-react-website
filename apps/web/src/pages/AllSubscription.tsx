@@ -1,4 +1,4 @@
-import { BILLING_CYCLES, CYCLE_LABELS, PLAN_CODES, PRICING_CYCLES, type BillingCycle } from '@weddyzone/shared'
+import { BILLING_CYCLES, CYCLE_LABELS, cycleSavingPct, PLAN_CODES, PRICING_CYCLES, type BillingCycle } from '@weddyzone/shared'
 import { useEffect, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { ErrorState, PageHeader, Skeleton } from '../components/ui'
@@ -8,9 +8,10 @@ import { isTrialPlan, planLimitLines } from '../lib/planCopy'
 import { formatMoney } from '../utils/format'
 
 const CYCLE_PARAM: Record<BillingCycle, string> = { MONTHLY: '1', QUARTERLY: '3', HALF_YEARLY: '6', YEARLY: '12' }
-const cycleOf = (v: string | null | undefined): BillingCycle => (Object.entries(CYCLE_PARAM).find(([, p]) => p === v)?.[0] as BillingCycle | undefined) ?? 'MONTHLY'
+// Only periods on sale (an old ?months=3 link shows 1 month).
+const cycleOf = (v: string | null | undefined): BillingCycle => PRICING_CYCLES.find((c) => CYCLE_PARAM[c] === v) ?? 'MONTHLY'
 
-/** Plans & Pricing (in the app): Trial, Pro and VIP for 1, 3, 6 or 12 months. */
+/** Plans & Pricing (in the app): Trial, Pro and VIP for 1, 6 or 12 months. */
 function AllSubscription() {
   const [url, setUrl] = useUrlState({ months: '1' })
   const cycle = cycleOf(url.months)
@@ -47,7 +48,7 @@ function AllSubscription() {
         eyebrow="Plans & Pricing"
         featureBadge="Upgrade any time · Credit for unused days"
         title="Choose Your Studio Plan"
-        subtitle="Pay for 1, 3, 6 or 12 months. Limits reset every 30 days from your plan's start date."
+        subtitle="Pay for 1, 6 or 12 months. Limits reset every 30 days from your plan's start date."
         actions={
           <div className="tabs" role="tablist" aria-label="Billing period">
             {PRICING_CYCLES.map((c) => (
@@ -88,7 +89,12 @@ function AllSubscription() {
                       {trial ? 'Free' : price === null ? '—' : formatMoney(price)}
                       <small> {trial ? '· 14 days' : `/ ${CYCLE_LABELS[cycle]}`}</small>
                     </div>
-                    {!trial && price !== null && cycle !== 'MONTHLY' && <p className="muted plan-per-month">{formatMoney(perMonth(price, cycle))} a month</p>}
+                    {!trial && price !== null && cycle !== 'MONTHLY' && (
+                      <p className="muted plan-per-month">
+                        {formatMoney(perMonth(price, cycle))} a month
+                        {cycleSavingPct(p.prices, cycle) && <span className="pill pill-success plan-save">Save {cycleSavingPct(p.prices, cycle)}%</span>}
+                      </p>
+                    )}
 
                     <ul className="checklist" data-testid={`plan-limits-${p.code}`}>
                       {planLimitLines(p).map((line) => (
