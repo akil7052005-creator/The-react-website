@@ -136,6 +136,19 @@ export class SelectionWorkflowService {
     return { ok: true, moved }
   }
 
+  /** The X on a folder card: the folder and every photo in it are deleted (not moved to General). */
+  async deleteFolderWithPhotos(studioId: string, id: string, folderId: string) {
+    await this.selections.find(studioId, id)
+    const f = await this.prisma.selectionFolder.findFirst({ where: { id: folderId, selectionId: id } })
+    if (!f) throw notFound('Folder')
+    const photos = await this.prisma.photo.findMany({ where: { folderId, selectionId: id, deletedAt: null }, select: { id: true } })
+    const n = photos.length
+    if (n) await this.selections.deletePhotos(id, photos.map((p) => p.id), `Studio removed ${n} ${n === 1 ? 'photo' : 'photos'} (${f.name})`)
+    else await writeLog(this.prisma, id, 'STUDIO', 'Folder removed', `Studio removed the empty folder ${f.name}`)
+    await this.prisma.selectionFolder.delete({ where: { id: folderId } })
+    return { ok: true, deleted: n }
+  }
+
   async movePhotos(studioId: string, id: string, photoIds: string[], folderId: string) {
     await this.selections.find(studioId, id)
     const f = await this.prisma.selectionFolder.findFirst({ where: { id: folderId, selectionId: id } })

@@ -7,6 +7,7 @@ import { useConfirm } from '../components/Modal'
 import { CreateFolderModal } from '../components/selection/CreateFolderModal'
 import { DownloadSelectedModal } from '../components/selection/DownloadSelectedModal'
 import { FolderView } from '../components/selection/FolderView'
+import { CardRemoveX, onDeleteKey, useRemoveUploaded } from '../components/selection/removeUploaded'
 import { SelectedPhotosView } from '../components/selection/SelectedPhotosView'
 import { count, hasSubmitted, LIVE_POLL_MS, refreshSelection } from '../components/selection/selectionUi'
 import { SelectionStatusPill } from '../components/selection/SelectionStatusPill'
@@ -48,28 +49,32 @@ const isSelectedFolder = (f: SelectionFolderDto) => f.name.startsWith('Selected 
  * A folder card. With `onDelete` (an empty "Selected - …" folder, nothing to open) a click offers to
  * delete it instead, like the clickable status pill: the option only shows once it is clicked.
  */
-function FolderCard({ folder, onOpen, onDelete }: { folder: SelectionFolderDto; onOpen: () => void; onDelete?: () => void }) {
+function FolderCard({ folder, onOpen, onDelete, onRemove }: { folder: SelectionFolderDto; onOpen: () => void; onDelete?: () => void; onRemove: () => void }) {
   const video = folder.type === 'video'
   const n = video ? (folder.videoCount ?? 0) : folder.photoCount
   const unit = video ? 'Videos' : 'Images'
   return (
-    <button
-      type="button"
-      className="ef-card"
-      onClick={onDelete ?? onOpen}
-      title={onDelete ? 'Empty folder: click to delete it' : undefined}
-      aria-label={onDelete ? `Empty folder ${folder.name}: delete` : `Open ${video ? 'video' : 'photo'} folder ${folder.name}, ${n} ${unit.toLowerCase()}`}
-    >
-      <FolderArt video={video} />
-      <span className="ef-name">
-        <i className={`bi bi-${video ? 'camera-video' : 'image'}`} aria-hidden="true" /> <span title={folder.name} aria-label={folder.name}>
-          {folder.name}
+    <div className="ef-card-wrap">
+      <button
+        type="button"
+        className="ef-card"
+        onClick={onDelete ?? onOpen}
+        onKeyDown={onDeleteKey(onRemove)}
+        title={onDelete ? 'Empty folder: click to delete it' : undefined}
+        aria-label={onDelete ? `Empty folder ${folder.name}: delete` : `Open ${video ? 'video' : 'photo'} folder ${folder.name}, ${n} ${unit.toLowerCase()}`}
+      >
+        <FolderArt video={video} />
+        <span className="ef-name">
+          <i className={`bi bi-${video ? 'camera-video' : 'image'}`} aria-hidden="true" /> <span title={folder.name} aria-label={folder.name}>
+            {folder.name}
+          </span>
         </span>
-      </span>
-      <span className="ef-count">
-        {count(n)} {unit}
-      </span>
-    </button>
+        <span className="ef-count">
+          {count(n)} {unit}
+        </span>
+      </button>
+      <CardRemoveX name={folder.name} onRemove={onRemove} />
+    </div>
   )
 }
 
@@ -89,6 +94,7 @@ export default function SelectionEvent() {
   const uploader = useRef<UploadFoldersHandle>(null)
   const qc = useQueryClient()
   const confirm = useConfirm()
+  const { removeFolder } = useRemoveUploaded(selectionId)
 
   const q = useQuery({
     queryKey: ['selection-overview', selectionId],
@@ -255,7 +261,13 @@ export default function SelectionEvent() {
       ) : (
         <div className="ef-grid" data-testid="folder-grid">
           {folders.map((f) => (
-            <FolderCard key={f.id} folder={f} onOpen={() => setUrl({ folder: f.id })} onDelete={canDeleteFromCard(f) ? () => void deleteFolder(f) : undefined} />
+            <FolderCard
+              key={f.id}
+              folder={f}
+              onOpen={() => setUrl({ folder: f.id })}
+              onDelete={canDeleteFromCard(f) ? () => void deleteFolder(f) : undefined}
+              onRemove={() => void removeFolder(f)}
+            />
           ))}
         </div>
       )}

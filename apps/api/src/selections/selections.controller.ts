@@ -173,6 +173,11 @@ export class SelectionsController {
     return this.workflow.renameFolder(studioId, id, folderId, body.name)
   }
 
+  @Delete(':id/folders/:folderId/with-photos')
+  deleteFolderWithPhotos(@StudioId() studioId: string, @Param('id', ParseUUIDPipe) id: string, @Param('folderId', ParseUUIDPipe) folderId: string) {
+    return this.workflow.deleteFolderWithPhotos(studioId, id, folderId)
+  }
+
   @Delete(':id/folders/:folderId')
   deleteFolder(@StudioId() studioId: string, @Param('id', ParseUUIDPipe) id: string, @Param('folderId', ParseUUIDPipe) folderId: string) {
     return this.workflow.deleteFolder(studioId, id, folderId)

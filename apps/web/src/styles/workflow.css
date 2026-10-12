@@ -2511,6 +2511,35 @@ a.ps-upload {
     opacity: 1;
   }
 }
+/* The same X on uploaded folder cards and photo tiles (event page). */
+.ef-card-wrap {
+  position: relative;
+}
+.ef-card-wrap > .ef-x {
+  top: 8px;
+  right: 8px;
+}
+.fv .photo-tile .photo-badge:not(.photo-badge-left) {
+  right: 38px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .ef-card-wrap > .ef-x,
+  .photo-tile > .ef-x {
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .ef-card-wrap:hover > .ef-x,
+  .ef-card-wrap:focus-within > .ef-x,
+  .photo-tile:hover > .ef-x,
+  .photo-tile:focus-within > .ef-x {
+    opacity: 1;
+  }
+}
+.ef-x-warn {
+  margin: 10px 0 0;
+  color: #b91c1c;
+  font-weight: 600;
+}
 .uf-strip {
   display: flex;
   gap: 6px;

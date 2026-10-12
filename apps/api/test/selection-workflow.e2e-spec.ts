@@ -104,6 +104,35 @@ describe('Studio workflow: Photo Selection', () => {
       expect((await A.agent.get(`/api/v1/selections/${s.id}/photos`).expect(200)).body[0].folderId).toBe(haldi.body.id)
     })
 
+    it('the X deletes a photo, or a folder with all its photos, files included, and logs it', async () => {
+      const s = await newSelection()
+      await upload(s.id, { folder: 'One Piece' }).expect(201)
+      await upload(s.id, { folder: 'One Piece' }).expect(201)
+      const single = (await upload(s.id, { folder: 'Haldi' }).expect(201)).body
+      const folders = (await A.agent.get(`/api/v1/selections/${s.id}/folders`).expect(200)).body
+      const onePiece = folders.find((f: { name: string }) => f.name === 'One Piece')
+
+      await B.agent.delete(`/api/v1/selections/${s.id}/folders/${onePiece.id}/with-photos`).expect(404)
+      await B.agent.delete(`/api/v1/selections/${s.id}/photos/${single.id}`).expect(404)
+
+      await A.agent.delete(`/api/v1/selections/${s.id}/photos/${single.id}`).expect(200)
+      const del = await A.agent.delete(`/api/v1/selections/${s.id}/folders/${onePiece.id}/with-photos`).expect(200)
+      expect(del.body.deleted).toBe(2)
+
+      const after = (await A.agent.get(`/api/v1/selections/${s.id}/folders`).expect(200)).body
+      expect(after.map((f: { name: string; photoCount: number }) => [f.name, f.photoCount])).toEqual([['Haldi', 0]])
+      expect((await A.agent.get(`/api/v1/selections/${s.id}/photos`).expect(200)).body).toEqual([])
+      const rows = await prisma.photo.findMany({ where: { selectionId: s.id }, select: { deletedAt: true, file: { select: { deletedAt: true } }, thumb: { select: { deletedAt: true } } } })
+      expect(rows).toHaveLength(3)
+      for (const r of rows) {
+        expect(r.deletedAt).not.toBeNull()
+        expect(r.file.deletedAt).not.toBeNull()
+        if (r.thumb) expect(r.thumb.deletedAt).not.toBeNull()
+      }
+      const log = await prisma.selectionLog.findMany({ where: { selectionId: s.id, action: 'Photos removed' }, select: { detail: true } })
+      expect(log.map((l) => l.detail)).toEqual(expect.arrayContaining(['Studio removed 2 photos (One Piece)']))
+    })
+
     it('overview has the selection, folders, notes count, log and event date', async () => {
       const s = await newSelection()
       await upload(s.id, { folder: 'Wedding' }).expect(201)

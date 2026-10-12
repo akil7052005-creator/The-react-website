@@ -9,6 +9,7 @@ import { formatBytes } from '../../utils/format'
 import { Modal, useConfirm } from '../Modal'
 import { RowMenu } from '../RowMenu'
 import { EmptyState, ErrorState, Skeleton, Spinner } from '../ui'
+import { CardRemoveX, onDeleteKey, useRemoveUploaded } from './removeUploaded'
 import { count, refreshSelection } from './selectionUi'
 
 export function FolderModal({
@@ -266,6 +267,7 @@ export function FolderView({ s, folder, folders, onBack }: { s: SelectionDto; fo
   const [shown, setShown] = useState(PAGE)
   const [open, setOpen] = useState<number | null>(null)
   const [renaming, setRenaming] = useState(false)
+  const { removePhoto } = useRemoveUploaded(s.id)
   const setFilter = (f: Filter) => {
     setFilterRaw(f)
     setShown(PAGE)
@@ -353,7 +355,7 @@ export function FolderView({ s, folder, folders, onBack }: { s: SelectionDto; fo
           <div className="photo-grid sw-grid" data-testid="folder-photos">
             {list.slice(0, shown).map((p, i) => (
               <figure key={p.id} className={`photo-tile${p.pickedBy.length ? ' is-picked' : ''}`}>
-                <button className="photo-open" onClick={() => setOpen(i)} aria-label={`Open ${p.originalName}`}>
+                <button className="photo-open" onClick={() => setOpen(i)} onKeyDown={onDeleteKey(() => void removePhoto(p))} aria-label={`Open ${p.originalName}`}>
                   {p.media === 'video' ? (
                     <span className="fv-video">
                       <i className="bi bi-play-circle-fill" aria-hidden="true" />
@@ -375,6 +377,7 @@ export function FolderView({ s, folder, folders, onBack }: { s: SelectionDto; fo
                 <figcaption>
                   <span title={p.originalName}>{p.originalName}</span>
                 </figcaption>
+                <CardRemoveX name={p.originalName} onRemove={() => void removePhoto(p)} />
               </figure>
             ))}
           </div>

@@ -46,6 +46,9 @@ async function putBlob(url: string, blob: Blob, headers: Record<string, string>)
 
 const waitOnline = () => new Promise<void>((resolve) => window.addEventListener('online', () => resolve(), { once: true }))
 
+/** Event folders an upload is writing into right now (the folder/photo X waits for it to finish). */
+export const uploadingFolderIds = new Set<string>()
+
 export interface UploadFoldersHandle {
   /** Opens the folder picker. Call it straight from the click that opens the dialog. */
   pick: () => void
@@ -219,6 +222,7 @@ export function UploadFoldersModal({
     } catch (e) {
       toast.error('Upload failed', { description: isApiError(e) ? e.message : (e as Error).message || 'Something went wrong. Please try again.' })
     } finally {
+      uploadingFolderIds.clear()
       setBusy(false)
       queue.current = null
       refreshSelection(qc, selectionId)
@@ -228,6 +232,7 @@ export function UploadFoldersModal({
 
   const run = async () => {
     const ids = await folderIds(rows)
+    for (const fid of Object.values(ids)) uploadingFolderIds.add(fid)
     const resume = resuming
     const doneKeys = new Set(resume?.done ?? [])
     const rowOf = new Map<string, string>()

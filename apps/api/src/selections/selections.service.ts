@@ -564,17 +564,37 @@ export class SelectionsService {
   }
 
   async removePhoto(studioId: string, id: string, photoId: string) {
-    const s = await this.find(studioId, id)
-    if (isSelectionLocked(s.status)) throw readOnly('This selection was submitted — photos can no longer be removed.')
-    const photo = await this.prisma.photo.findFirst({ where: { id: photoId, selectionId: id, deletedAt: null } })
+    await this.find(studioId, id)
+    const photo = await this.prisma.photo.findFirst({ where: { id: photoId, selectionId: id, deletedAt: null }, select: { id: true, originalName: true } })
     if (!photo) throw notFound('Photo')
-    await this.prisma.$transaction([
-      this.prisma.photoPick.deleteMany({ where: { photoId } }),
-      this.prisma.photo.update({ where: { id: photoId }, data: { deletedAt: new Date() } }),
-      this.prisma.storedFile.update({ where: { id: photo.fileId }, data: { deletedAt: new Date() } }),
-      // Its thumbnail (and any original kept by an older version) go with it.
-      ...[photo.thumbFileId, photo.originalFileId].filter((f): f is string => !!f).map((fid) => this.prisma.storedFile.update({ where: { id: fid }, data: { deletedAt: new Date() } })),
-    ])
+    await this.deletePhotos(id, [photo.id], `Studio removed ${photo.originalName ?? '1 photo'}`)
+  }
+
+  /**
+   * Deletes uploaded photos for good: their picks and notes, the rows, and the stored copies
+   * (preview, thumbnail, client preview, any original) in storage. Logged in Client Activity.
+   */
+  async deletePhotos(selectionId: string, photoIds: string[], detail: string) {
+    if (!photoIds.length) return 0
+    const photos = await this.prisma.photo.findMany({
+      where: { id: { in: photoIds }, selectionId, deletedAt: null },
+      select: { id: true, fileId: true, thumbFileId: true, previewFileId: true, originalFileId: true },
+    })
+    if (!photos.length) return 0
+    const ids = photos.map((p) => p.id)
+    const fileIds = photos.flatMap((p) => [p.fileId, p.thumbFileId, p.previewFileId, p.originalFileId]).filter((f): f is string => !!f)
+    const files = await this.prisma.storedFile.findMany({ where: { id: { in: fileIds }, deletedAt: null }, select: { storageKey: true } })
+    const now = new Date()
+    await this.prisma.$transaction(async (tx) => {
+      await tx.photoPick.deleteMany({ where: { photoId: { in: ids } } })
+      await tx.photoComment.deleteMany({ where: { photoId: { in: ids } } })
+      await tx.photo.updateMany({ where: { id: { in: ids } }, data: { deletedAt: now, clientFavorite: false } })
+      await tx.storedFile.updateMany({ where: { id: { in: fileIds } }, data: { deletedAt: now } })
+      await writeLog(tx, selectionId, 'STUDIO', 'Photos removed', detail)
+    })
+    // Rows are gone already; a storage hiccup only leaves an unreachable object behind.
+    await Promise.all(files.map((f) => this.storage.remove(f.storageKey).catch(() => undefined)))
+    return ids.length
   }
 
   private messageVars(s: SelectionWithRelations, picked: number) {
