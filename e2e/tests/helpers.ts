@@ -33,7 +33,8 @@ export async function signupStudio(page: Page, email = `studio.${Date.now()}@exa
   await page.getByRole('textbox', { name: 'Email' }).fill(email)
   await page.getByLabel('Mobile number').fill('98400 33445')
   await page.getByRole('textbox', { name: 'Password', exact: true }).fill(password)
-  await page.getByRole('button', { name: 'Start free trial' }).click()
+  // /signup opens the Start free trial panel (the header has its own Start free trial button too).
+  await page.getByRole('dialog', { name: 'Start free trial' }).getByRole('button', { name: 'Start free trial' }).click()
   await expect(page).toHaveURL(/\/$/)
   return { email, password }
 }

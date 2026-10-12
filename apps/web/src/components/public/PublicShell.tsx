@@ -1,12 +1,8 @@
-import { useEffect, useState, type ReactNode } from 'react'
-import { Link, NavLink } from 'react-router-dom'
+import { useEffect, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { APP_NAME } from '../../lib/brand'
-
-const NAV = [
-  { to: '/', label: 'Home', end: true },
-  { to: '/about', label: 'About Us' },
-  { to: '/pricing', label: 'Plans & Pricing' },
-]
+import type { PanelId } from './headerPanels'
+import { PublicMenu, scrollToSection, usePublicMenu } from './SiteHeader'
 
 function setMeta(attr: 'name' | 'property', key: string, content: string) {
   let el = document.head.querySelector<HTMLMetaElement>(`meta[${attr}="${key}"]`)
@@ -50,97 +46,96 @@ export function Logo({ light }: { light?: boolean }) {
   )
 }
 
-/** The public website's frame: sticky top menu (☰ on phones) and footer. */
-export function PublicShell({ children }: { children: ReactNode }) {
-  const [open, setOpen] = useState(false)
-  const close = () => setOpen(false)
+/** The public website's frame: sticky top menu with its panels (drawer on phones) and footer. */
+export function PublicShell({ children, panel }: { children: ReactNode; panel?: PanelId }) {
   return (
-    <div className="pub">
-      <header className="pub-header">
-        <div className="pub-wrap pub-header-row">
-          <Logo />
-          <button type="button" className="pub-burger" aria-expanded={open} aria-controls="pub-nav" aria-label={open ? 'Close menu' : 'Open menu'} onClick={() => setOpen((o) => !o)}>
-            <i className={`bi bi-${open ? 'x-lg' : 'list'}`} aria-hidden="true" />
-          </button>
-          <nav id="pub-nav" className={`pub-nav${open ? ' open' : ''}`} aria-label="Main">
-            {NAV.map((n) => (
-              <NavLink key={n.to} to={n.to} end={n.end} onClick={close}>
-                {n.label}
-              </NavLink>
-            ))}
-            <NavLink to="/login" onClick={close}>
-              Login
-            </NavLink>
-            <Link to="/signup" className="pub-btn sm" onClick={close}>
-              Start free trial <Arrow />
-            </Link>
-          </nav>
+    <PublicMenu initial={panel}>
+      {(menu) => (
+        <div className="pub">
+          {menu}
+          <main>{children}</main>
+          <Footer />
         </div>
-      </header>
-      <main>{children}</main>
-      <footer className="pub-footer">
-        <div className="pub-wrap pub-footer-grid">
-          <div>
-            <Logo light />
-            <p className="pub-footer-tag">Photo selection for wedding studios: upload, share on WhatsApp, get the couple's picks.</p>
-          </div>
-          <div>
-            <h2>Quick links</h2>
-            <ul>
-              <li>
-                <Link to="/">Home</Link>
-              </li>
-              <li>
-                <Link to="/about">About Us</Link>
-              </li>
-              <li>
-                <Link to="/pricing">Plans &amp; Pricing</Link>
-              </li>
-              <li>
-                <Link to="/login">Login</Link>
-              </li>
-              <li>
-                <Link to="/signup">Start free trial</Link>
-              </li>
-            </ul>
-          </div>
-          <div>
-            <h2>Contact</h2>
-            <ul>
-              <li>
-                <i className="bi bi-telephone" aria-hidden="true" /> Phone: [Owner to add]
-              </li>
-              <li>
-                <i className="bi bi-whatsapp" aria-hidden="true" /> WhatsApp: [Owner to add]
-              </li>
-              <li>
-                <i className="bi bi-envelope" aria-hidden="true" /> Email: [Owner to add]
-              </li>
-              <li>
-                <i className="bi bi-geo-alt" aria-hidden="true" /> Address: [Owner to add]
-              </li>
-            </ul>
-          </div>
-          <div>
-            <h2>Follow us</h2>
-            <div className="pub-social">
-              <a href="#" aria-label="Instagram (link to be added)">
-                <i className="bi bi-instagram" aria-hidden="true" />
-              </a>
-              <a href="#" aria-label="Facebook (link to be added)">
-                <i className="bi bi-facebook" aria-hidden="true" />
-              </a>
-              <a href="#" aria-label="YouTube (link to be added)">
-                <i className="bi bi-youtube" aria-hidden="true" />
-              </a>
-            </div>
+      )}
+    </PublicMenu>
+  )
+}
+
+function Footer() {
+  const { openPanel } = usePublicMenu()
+  return (
+    <footer className="pub-footer">
+      <div className="pub-wrap pub-footer-grid">
+        <div>
+          <Logo light />
+          <p className="pub-footer-tag">Photo selection for wedding studios: upload, share on WhatsApp, get the couple's picks.</p>
+        </div>
+        <div>
+          <h2>Quick links</h2>
+          <ul>
+            <li>
+              <Link to="/" onClick={() => window.scrollTo({ top: 0 })}>
+                Home
+              </Link>
+            </li>
+            <li>
+              <button type="button" onClick={() => scrollToSection('about')}>
+                About Us
+              </button>
+            </li>
+            <li>
+              <button type="button" onClick={() => scrollToSection('pricing')}>
+                Plans &amp; Pricing
+              </button>
+            </li>
+            <li>
+              <button type="button" onClick={() => openPanel('login')}>
+                Login
+              </button>
+            </li>
+            <li>
+              <button type="button" onClick={() => openPanel('trial', null)}>
+                Start free trial
+              </button>
+            </li>
+          </ul>
+        </div>
+        <div>
+          <h2>Contact</h2>
+          <ul>
+            <li>
+              <i className="bi bi-telephone" aria-hidden="true" /> Phone: [Owner to add]
+            </li>
+            <li>
+              <i className="bi bi-whatsapp" aria-hidden="true" /> WhatsApp: [Owner to add]
+            </li>
+            <li>
+              <i className="bi bi-envelope" aria-hidden="true" /> Email: [Owner to add]
+            </li>
+            <li>
+              <i className="bi bi-geo-alt" aria-hidden="true" /> Address: [Owner to add]
+            </li>
+          </ul>
+        </div>
+        <div>
+          <h2>Follow us</h2>
+          <div className="pub-social">
+            <a href="#" aria-label="Instagram (link to be added)">
+              <i className="bi bi-instagram" aria-hidden="true" />
+            </a>
+            <a href="#" aria-label="Facebook (link to be added)">
+              <i className="bi bi-facebook" aria-hidden="true" />
+            </a>
+            <a href="#" aria-label="YouTube (link to be added)">
+              <i className="bi bi-youtube" aria-hidden="true" />
+            </a>
           </div>
         </div>
-        <p className="pub-wrap pub-copy">
-          © {new Date().getFullYear()} {APP_NAME}. All rights reserved.
-        </p>
-      </footer>
-    </div>
+      </div>
+      <p className="pub-wrap pub-copy">
+        © {new Date().getFullYear()} {APP_NAME}. All rights reserved.
+      </p>
+    </footer>
   )
 }
 

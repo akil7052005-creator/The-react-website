@@ -1,6 +1,9 @@
-import { Link } from 'react-router-dom'
+import aboutJpg from '../../../assets/Wedding_image.jpg'
 import heroJpg from '../../../assets/home-hero-mandap.jpg'
+import type { PanelId } from '../../../components/public/headerPanels'
+import { PricingSection } from '../../../components/public/PricingSection'
 import { Arrow, PublicShell, SectionTitle, usePageMeta } from '../../../components/public/PublicShell'
+import { scrollToSection, usePublicMenu } from '../../../components/public/SiteHeader'
 import { APP_NAME } from '../../../lib/brand'
 
 const STUDIO_STEPS = [
@@ -14,24 +17,28 @@ const COUPLE_STEPS = [
   { icon: 'heart', text: 'Pick your favourite photos, then submit your selection.' },
 ]
 
-/** Public home page (logged-in studios get their dashboard at / instead). */
-export default function Home() {
-  usePageMeta('Photo selection for wedding studios', `${APP_NAME}: upload a wedding, share it on WhatsApp and get the couple's photo picks back. Free 14-day trial.`)
+const META: Record<PanelId | 'home', [string, string]> = {
+  home: ['Photo selection for wedding studios', `${APP_NAME}: upload a wedding, share it on WhatsApp and get the couple's photo picks back. Free 14-day trial.`],
+  about: ['About Us', `The story behind ${APP_NAME}, photo selection made for Indian wedding studios.`],
+  pricing: ['Plans & Pricing', 'Trial, Pro and VIP plans for wedding studios, for 1, 3, 6 or 12 months. Start with a free 14-day trial.'],
+  login: ['Log in', `Log in to your ${APP_NAME} studio.`],
+  trial: ['Start free trial', `Create your ${APP_NAME} studio: free for 14 days, no card needed.`],
+}
+
+/**
+ * Public home page (logged-in studios get their dashboard at / instead). /about, /pricing, /login
+ * and /signup show it too, with that menu panel open (About and Pricing scroll to their section on phones).
+ */
+export default function Home({ panel }: { panel?: PanelId }) {
+  usePageMeta(...META[panel ?? 'home'])
   return (
-    <PublicShell>
+    <PublicShell panel={panel}>
       <section className="pub-hero pub-hero-fixed">
         <img className="pub-hero-img" src={heroJpg} alt="Floral wedding mandap with a decorated stage sofa" fetchPriority="high" />
         <div className="pub-wrap pub-hero-copy">
           <p className="pub-tagline">For wedding photographers</p>
           <h1>Let the couple pick their favorites effortlessly</h1>
-          <div className="pub-actions">
-            <Link to="/signup" className="pub-btn">
-              Start free trial <Arrow />
-            </Link>
-            <Link to="/pricing" className="pub-btn ghost">
-              See pricing <Arrow />
-            </Link>
-          </div>
+          <HeroActions />
         </div>
       </section>
 
@@ -69,17 +76,55 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="pub-section alt" aria-labelledby="plans">
-        <div className="pub-wrap pub-teaser">
+      <section className="pub-section alt" id="about" aria-labelledby="about-title">
+        <div className="pub-wrap pub-about">
           <div>
-            <SectionTitle id="plans">Trial · Pro · VIP</SectionTitle>
-            <p>Start free for 14 days. Then pay for 1, 3, 6 or 12 months, and upgrade any time with credit for the days you have left.</p>
+            <SectionTitle id="about-title">About {APP_NAME}</SectionTitle>
+            <p className="pub-lead">We build simple tools for wedding studios, so choosing photos becomes the easy part of the job.</p>
+            <p className="pub-placeholder">[Owner to write] Our story: who we are, why we started, and the studios we work with.</p>
+            <p className="pub-placeholder">[Owner to write] What we believe: originals stay with the photographer, couples pick on their phone, no app to install.</p>
           </div>
-          <Link to="/pricing" className="pub-btn">
-            See all plans <Arrow />
-          </Link>
+          <img className="pub-about-img" src={aboutJpg} alt="A couple's hands with wedding rings" loading="lazy" />
+        </div>
+        <div className="pub-wrap">
+          <div className="pub-cards three pub-values">
+            <article className="pub-card">
+              <h3>
+                <i className="bi bi-shield-lock" aria-hidden="true" /> Your originals stay yours
+              </h3>
+              <p>Only light previews go online. The full-size photos never leave your computer.</p>
+            </article>
+            <article className="pub-card">
+              <h3>
+                <i className="bi bi-phone" aria-hidden="true" /> Made for phones
+              </h3>
+              <p>Couples open the link on WhatsApp and pick on any phone, with no app or account.</p>
+            </article>
+            <article className="pub-card">
+              <h3>
+                <i className="bi bi-lightning-charge" aria-hidden="true" /> Fast delivery
+              </h3>
+              <p>Copy exactly the selected originals into a folder in one click, ready for editing.</p>
+            </article>
+          </div>
         </div>
       </section>
+
+      <PricingSection />
     </PublicShell>
+  )
+}
+
+function HeroActions() {
+  const { openPanel } = usePublicMenu()
+  return (
+    <div className="pub-actions">
+      <button type="button" className="pub-btn" onClick={() => openPanel('trial', null)}>
+        Start free trial <Arrow />
+      </button>
+      <button type="button" className="pub-btn ghost" onClick={() => scrollToSection('pricing')}>
+        See pricing <Arrow />
+      </button>
+    </div>
   )
 }

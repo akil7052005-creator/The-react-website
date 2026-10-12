@@ -2,7 +2,9 @@ import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { renderPage } from '../../test/render'
-import Login from './Login'
+import { LoginForm } from './Login'
+
+const Login = () => <LoginForm onForgot={() => {}} onSignup={() => {}} />
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -70,7 +72,7 @@ describe('Login form', () => {
   })
 })
 
-describe('Login page when already logged in', () => {
+describe('Login panel when already logged in', () => {
   it('says who is logged in instead of redirecting, with a link to the dashboard', async () => {
     fakeAuthApi({ loggedIn: true })
     renderPage(<Login />, '/login')
@@ -92,11 +94,11 @@ describe('Login page when already logged in', () => {
     expect(await screen.findByRole('link', { name: /Go to dashboard/ })).toHaveAttribute('href', '/')
   })
 
-  it('"Log in with a different account" logs out and shows the login form', async () => {
+  it('"Log out" ends the session and shows the login form', async () => {
     const api = fakeAuthApi({ loggedIn: true })
     renderPage(<Login />, '/login')
 
-    await userEvent.click(await screen.findByRole('button', { name: /Log in with a different account/ }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Log out' }))
 
     expect(await screen.findByRole('textbox', { name: 'Email or mobile number' })).toHaveValue('')
     expect(screen.queryByTestId('signed-in-notice')).not.toBeInTheDocument()

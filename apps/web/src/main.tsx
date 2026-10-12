@@ -28,8 +28,6 @@ import RouteError from './pages/RouteError'
 // Each page is its own chunk, downloaded the first time it is opened. The layouts show a
 // skeleton (<Suspense> in Root and AppLayout) while a page's code loads.
 const page = <T extends { default: ComponentType }>(load: () => Promise<T>) => lazy(load)
-const Login = page(() => import('./pages/auth/Login'))
-const Signup = page(() => import('./pages/auth/Signup'))
 const ForgotPassword = page(() => import('./pages/auth/Passwords').then((m) => ({ default: m.ForgotPassword })))
 const ResetPassword = page(() => import('./pages/auth/Passwords').then((m) => ({ default: m.ResetPassword })))
 const Dashboard = page(() => import('./pages/Dashboard'))
@@ -59,9 +57,8 @@ const ClientSelected = page(() => import('./pages/public/client/ClientSelected')
 const SelectVerify = page(() => import('./pages/public/client/SelectVerify'))
 const InvoicePrint = page(() => import('./pages/InvoicePrint'))
 const PublicSite = page(() => import('./pages/public/PublicSite'))
-const Home = page(() => import('./pages/public/site/Home'))
-const About = page(() => import('./pages/public/site/About'))
-const Pricing = page(() => import('./pages/public/site/Pricing'))
+// Takes a panel prop (/login, /about… open Home with that menu panel), so plain lazy().
+const Home = lazy(() => import('./pages/public/site/Home'))
 const AdminTickets = page(() => import('./pages/admin/AdminTickets'))
 const AdminFaqs = page(() => import('./pages/admin/AdminFaqs'))
 const AdminPlans = page(() => import('./pages/admin/AdminPlans'))
@@ -130,12 +127,12 @@ const router = createBrowserRouter([
     // Friendly crash screen; React Router's default one shows the stack trace even in production.
     errorElement: <RouteError />,
     children: [
-      // Login handles an existing session itself (shows who is logged in, offers to switch account).
-      { path: '/login', element: <Login /> },
-      // Public website.
-      { path: '/about', element: <About /> },
-      { path: '/pricing', element: <Pricing /> },
-      { path: '/signup', element: <RedirectIfAuthed><Signup /></RedirectIfAuthed> },
+      // Public website: these open Home with that menu panel. The Login panel handles an existing
+      // session itself (shows who is logged in, with Go to dashboard and Log out).
+      { path: '/login', element: <Home panel="login" /> },
+      { path: '/about', element: <Home panel="about" /> },
+      { path: '/pricing', element: <Home panel="pricing" /> },
+      { path: '/signup', element: <RedirectIfAuthed><Home panel="trial" /></RedirectIfAuthed> },
       { path: '/forgot-password', element: <ForgotPassword /> },
       { path: '/reset-password', element: <ResetPassword /> },
       // Client-facing pages: no login, access by unguessable token.

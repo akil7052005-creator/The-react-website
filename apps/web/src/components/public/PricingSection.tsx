@@ -1,33 +1,33 @@
 import { CYCLE_LABELS, PRICING_CYCLES, type BillingCycle } from '@weddyzone/shared'
-import { Link } from 'react-router-dom'
-import { Arrow, PublicShell, SectionTitle, usePageMeta } from '../../../components/public/PublicShell'
-import { ErrorState, Skeleton } from '../../../components/ui'
-import { useUrlState } from '../../../hooks/useUrlState'
-import { perMonth, priceFor, usePlans } from '../../../lib/billing'
-import { isTrialPlan, planLimitLines } from '../../../lib/planCopy'
-import { formatMoney } from '../../../utils/format'
+import { useUrlState } from '../../hooks/useUrlState'
+import { perMonth, priceFor, usePlans } from '../../lib/billing'
+import { isTrialPlan, planLimitLines } from '../../lib/planCopy'
+import { formatMoney } from '../../utils/format'
+import { ErrorState, Skeleton } from '../ui'
+import { CYCLE_SHORT } from './headerPanels'
+import { Arrow, SectionTitle } from './PublicShell'
+import { usePublicMenu } from './SiteHeader'
 
 const CYCLE_PARAM: Record<BillingCycle, string> = { MONTHLY: '1', QUARTERLY: '3', HALF_YEARLY: '6', YEARLY: '12' }
 const cycleOf = (v: string): BillingCycle => (Object.entries(CYCLE_PARAM).find(([, p]) => p === v)?.[0] as BillingCycle | undefined) ?? 'MONTHLY'
-const SHORT: Record<BillingCycle, string> = { MONTHLY: '1 month', QUARTERLY: '3 months', HALF_YEARLY: '6 months', YEARLY: '1 year' }
 
-/** Public Plans & Pricing: Trial / Pro / VIP for 1, 3, 6 or 12 months; each button signs up with that plan. */
-export default function Pricing() {
-  usePageMeta('Plans & Pricing', 'Trial, Pro and VIP plans for wedding studios, for 1, 3, 6 or 12 months. Start with a free 14-day trial.')
+/** Home's full Plans & Pricing (Compare all plans): Trial / Pro / VIP for 1, 3, 6 or 12 months; Choose opens sign-up with that plan. */
+export function PricingSection() {
   const [url, setUrl] = useUrlState({ months: '1' })
   const cycle = cycleOf(url.months)
   const plans = usePlans()
+  const { openPanel } = usePublicMenu()
 
   return (
-    <PublicShell>
-      <section className="pub-section first">
+    <>
+      <section className="pub-section" id="pricing" aria-labelledby="pricing-title">
         <div className="pub-wrap">
-          <h1 className="pub-h1">Plans &amp; Pricing</h1>
+          <SectionTitle id="pricing-title">Plans &amp; Pricing</SectionTitle>
           <p className="pub-lead">Start free for 14 days. Pay for 1, 3, 6 or 12 months; upgrade any time with credit for unused days.</p>
           <div className="pub-switch" role="tablist" aria-label="Billing period">
             {PRICING_CYCLES.map((c) => (
               <button key={c} type="button" role="tab" aria-selected={c === cycle} className={c === cycle ? 'on' : ''} onClick={() => setUrl({ months: CYCLE_PARAM[c] })}>
-                {SHORT[c]}
+                {CYCLE_SHORT[c]}
               </button>
             ))}
           </div>
@@ -42,7 +42,6 @@ export default function Pricing() {
                     const trial = isTrialPlan(p)
                     const price = priceFor(p, cycle)
                     const popular = p.code === 'PRO'
-                    const signup = trial ? '/signup' : `/signup?plan=${p.code}&months=${CYCLE_PARAM[cycle]}`
                     return (
                       <article key={p.code} className={`pub-card pub-plan${popular ? ' popular' : ''}`} data-testid={`public-plan-${p.code}`}>
                         {popular && <span className="pub-flag">Most popular</span>}
@@ -60,9 +59,13 @@ export default function Pricing() {
                             </li>
                           ))}
                         </ul>
-                        <Link to={signup} className={`pub-btn block${popular ? '' : ' ghost'}`}>
+                        <button
+                          type="button"
+                          className={`pub-btn block${popular ? '' : ' ghost'}`}
+                          onClick={() => openPanel('trial', trial ? null : { code: p.code, name: p.name, cycle, cycleLabel: CYCLE_SHORT[cycle] })}
+                        >
                           {trial ? 'Start free trial' : `Choose ${p.name}`} <Arrow />
-                        </Link>
+                        </button>
                       </article>
                     )
                   })}
@@ -86,6 +89,6 @@ export default function Pricing() {
           </div>
         </div>
       </section>
-    </PublicShell>
+    </>
   )
 }

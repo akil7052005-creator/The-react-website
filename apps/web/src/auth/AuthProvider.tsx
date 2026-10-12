@@ -10,12 +10,17 @@ export const ME_KEY = ['me'] as const
 
 const AuthContext = createContext<MeDto | null>(null)
 
-export function useMeQuery() {
+/**
+ * The session. `cached`: use what is already known and don't check again on mount (the public
+ * site's Login panel: a re-check while logged out would briefly swap Home for a skeleton at /).
+ */
+export function useMeQuery({ cached = false }: { cached?: boolean } = {}) {
   return useQuery({
     queryKey: ME_KEY,
     queryFn: () => api.get<MeDto>('/auth/me'),
     staleTime: 60_000,
     retry: false,
+    ...(cached && { refetchOnMount: false, retryOnMount: false }),
   })
 }
 

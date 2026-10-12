@@ -7,7 +7,8 @@ import { applyApiErrors, SubmitButton, TextField, useZodForm } from '../../compo
 import { api, isApiError } from '../../lib/api'
 import { AuthLayout, PasswordField } from './AuthLayout'
 
-export function ForgotPassword() {
+/** Enter an email, get a reset link. Used on /forgot-password and in the public site's Login panel. */
+export function ForgotForm() {
   const [sentTo, setSentTo] = useState<string | null>(null)
   // Shown on the page (not just a toast) so a failed send is impossible to miss.
   const [failure, setFailure] = useState<string | null>(null)
@@ -22,6 +23,30 @@ export function ForgotPassword() {
     },
   })
 
+  return sentTo ? (
+    <div className="notice success" role="status">
+      <i className="bi bi-envelope-check" />
+      <span>
+        If an account exists for <strong>{sentTo}</strong>, a reset link is on its way. The link is valid for 1 hour.
+      </span>
+    </div>
+  ) : (
+    <form method="post" onSubmit={form.handleSubmit((v) => send.mutate(v))} noValidate>
+      {failure && (
+        <div className="notice danger" role="alert" style={{ marginBottom: 16 }}>
+          <i className="bi bi-exclamation-triangle" />
+          <span>{failure}</span>
+        </div>
+      )}
+      <TextField form={form} name="email" label="Email" type="email" required autoComplete="email" />
+      <SubmitButton busy={send.isPending} className="btn btn-primary btn-block btn-lg" icon="send">
+        Send reset link
+      </SubmitButton>
+    </form>
+  )
+}
+
+export function ForgotPassword() {
   return (
     <AuthLayout
       title="Forgot your password?"
@@ -32,27 +57,7 @@ export function ForgotPassword() {
         </Link>
       }
     >
-      {sentTo ? (
-        <div className="notice success" role="status">
-          <i className="bi bi-envelope-check" />
-          <span>
-            If an account exists for <strong>{sentTo}</strong>, a reset link is on its way. The link is valid for 1 hour.
-          </span>
-        </div>
-      ) : (
-        <form method="post" onSubmit={form.handleSubmit((v) => send.mutate(v))} noValidate>
-          {failure && (
-            <div className="notice danger" role="alert" style={{ marginBottom: 16 }}>
-              <i className="bi bi-exclamation-triangle" />
-              <span>{failure}</span>
-            </div>
-          )}
-          <TextField form={form} name="email" label="Email" type="email" required autoComplete="email" />
-          <SubmitButton busy={send.isPending} className="btn btn-primary btn-block btn-lg" icon="send">
-            Send reset link
-          </SubmitButton>
-        </form>
-      )}
+      <ForgotForm />
     </AuthLayout>
   )
 }
