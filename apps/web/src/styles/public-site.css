@@ -1167,3 +1167,29 @@
     scroll-margin-top: 72px;
   }
 }
+/* Desktop: the text stays where the 1140px page column puts it, the card sits on the right edge,
+   and the sofa is clear in the middle. */
+@media (min-width: 900px) {
+  .pub-hero-grid {
+    max-width: none;
+    grid-template-columns: minmax(0, 668px) 340px;
+    justify-content: space-between;
+    padding-left: max(16px, calc((100% - 1140px) / 2 + 16px));
+    padding-right: clamp(12px, 2vw, 24px);
+  }
+  .pub-hero-fixed .pub-hero-img {
+    object-position: 50% 80%;
+    transform: scale(1.06) translateX(3%);
+    transform-origin: right bottom;
+  }
+  .pub-hero::after {
+    background: linear-gradient(
+      90deg,
+      rgba(10, 10, 10, 0.75) 0%,
+      rgba(10, 10, 10, 0.5) 30%,
+      rgba(10, 10, 10, 0.05) 48%,
+      rgba(10, 10, 10, 0.05) 64%,
+      rgba(10, 10, 10, 0.3) 100%
+    );
+  }
+}
