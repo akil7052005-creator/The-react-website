@@ -42,7 +42,7 @@ export default function Home({ panel }: { panel?: Arrival }) {
         <div className={`pub-wrap pub-hero-grid${signedIn ? ' solo' : ''}`}>
           <div className="pub-hero-copy">
             <p className="pub-tagline">For wedding photographers</p>
-            <h1>Photo selection made simple for wedding studios</h1>
+            <h1>Let the couple pick their favorites effortlessly</h1>
             <p className="pub-hero-line">Upload a wedding, share it on WhatsApp and get the couple's picks back, with your originals safe on your computer.</p>
             <HeroActions signedIn={signedIn} />
           </div>

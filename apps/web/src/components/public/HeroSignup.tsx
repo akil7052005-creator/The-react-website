@@ -1,7 +1,7 @@
-import { useState } from 'react'
-import { DEMO_VIDEO_URL } from '../../lib/env'
+import * as Dialog from '@radix-ui/react-dialog'
+import { useRef, useState, type RefObject } from 'react'
+import { DEMO_VIDEO_ID } from '../../lib/env'
 import { SignupForm } from '../../pages/auth/Signup'
-import { Modal } from '../Modal'
 import { Arrow } from './PublicShell'
 import { SIGNUP_CARD_ID, usePublicMenu } from './SiteHeader'
 
@@ -9,15 +9,22 @@ import { SIGNUP_CARD_ID, usePublicMenu } from './SiteHeader'
 export function HeroActions({ signedIn }: { signedIn: boolean }) {
   const { startTrial, openPanel } = usePublicMenu()
   const [demo, setDemo] = useState(false)
+  const demoButton = useRef<HTMLButtonElement>(null)
   return (
     <>
       <div className="pub-actions">
         <button type="button" className="pub-btn" onClick={() => startTrial()}>
           {signedIn ? 'Go to dashboard' : 'Start Free Trial'} <Arrow />
         </button>
-        {DEMO_VIDEO_URL && (
-          <button type="button" className="pub-btn ghost pub-demo-btn" onClick={() => setDemo(true)} aria-haspopup="dialog">
-            <i className="bi bi-play-circle-fill" aria-hidden="true" /> Watch demo <small>2 min · how it works</small>
+        {DEMO_VIDEO_ID && (
+          <button ref={demoButton} type="button" className="pub-demo-btn" onClick={() => setDemo(true)} aria-haspopup="dialog" aria-label="Watch demo video">
+            <span className="pub-demo-play" aria-hidden="true">
+              <i className="bi bi-play-fill" />
+            </span>
+            <span className="pub-demo-text">
+              <strong>Watch demo</strong>
+              <small>2 min · how it works</small>
+            </span>
           </button>
         )}
       </div>
@@ -29,35 +36,40 @@ export function HeroActions({ signedIn }: { signedIn: boolean }) {
           </button>
         </p>
       )}
-      {DEMO_VIDEO_URL && <DemoVideo open={demo} onClose={() => setDemo(false)} url={DEMO_VIDEO_URL} />}
+      {DEMO_VIDEO_ID && <DemoVideo open={demo} onClose={() => setDemo(false)} id={DEMO_VIDEO_ID} returnFocus={demoButton} />}
     </>
   )
 }
 
-/** YouTube / Vimeo links play in their embed; anything else as a video file. */
-function embedUrl(url: string) {
-  const yt = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{6,})/)
-  if (yt) return `https://www.youtube-nocookie.com/embed/${yt[1]}?autoplay=1&rel=0`
-  const vimeo = url.match(/vimeo\.com\/(?:video\/)?(\d+)/)
-  if (vimeo) return `https://player.vimeo.com/video/${vimeo[1]}?autoplay=1`
-  return null
-}
-
-/** The demo in a dialog: Esc or a click outside closes it, and closing stops it (the player is removed). */
-function DemoVideo({ open, onClose, url }: { open: boolean; onClose: () => void; url: string }) {
-  const embed = embedUrl(url)
+/**
+ * The demo on YouTube (privacy mode), in a dark popup. The player is only added while the popup is
+ * open, so closing it (✕, Esc or a click outside) stops the video; focus goes back to the button.
+ */
+function DemoVideo({ open, onClose, id, returnFocus }: { open: boolean; onClose: () => void; id: string; returnFocus: RefObject<HTMLButtonElement | null> }) {
+  const src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?autoplay=1&rel=0&modestbranding=1&playsinline=1`
   return (
-    <Modal open={open} onClose={onClose} title="How Wedmanage works" icon="play-circle" size="lg">
-      {open && (
-        <div className="pub-demo-frame">
-          {embed ? (
-            <iframe src={embed} title="Demo video" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen />
-          ) : (
-            <video src={url} controls autoPlay playsInline aria-label="Demo video" />
-          )}
-        </div>
-      )}
-    </Modal>
+    <Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="pub-video-overlay">
+          <Dialog.Content
+            className="pub-video"
+            aria-describedby={undefined}
+            onCloseAutoFocus={(e) => {
+              e.preventDefault()
+              returnFocus.current?.focus()
+            }}
+          >
+            <Dialog.Title className="sr-only">Wedmanage demo</Dialog.Title>
+            <Dialog.Close className="pub-video-x" aria-label="Close video">
+              <i className="bi bi-x-lg" aria-hidden="true" />
+            </Dialog.Close>
+            <div className="pub-video-frame">
+              <iframe src={src} title="Wedmanage demo" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen />
+            </div>
+          </Dialog.Content>
+        </Dialog.Overlay>
+      </Dialog.Portal>
+    </Dialog.Root>
   )
 }
 

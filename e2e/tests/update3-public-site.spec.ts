@@ -14,14 +14,12 @@ const card = (page: Page) => page.getByRole('region', { name: 'Create your studi
 test('home: one h1, the hero with its card, sections, footer; alt text; no sideways scroll', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1)
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Photo selection made simple for wedding studios')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Let the couple pick their favorites effortlessly')
   await expect(page).toHaveTitle(/Photo selection for wedding studios/)
   await expect(page.locator('meta[property="og:title"]')).toHaveAttribute('content', /Photo selection/)
   await expect(card(page)).toBeVisible()
   await expect(card(page).getByRole('radio', { name: 'Trial' })).toHaveAttribute('aria-checked', 'true')
   await expect(card(page).getByText('14-day free trial · no card needed')).toBeVisible()
-  // No demo video configured here: no Watch demo button.
-  await expect(page.getByRole('button', { name: /Watch demo/ })).toHaveCount(0)
   await expect(page.getByRole('heading', { name: 'How it works' })).toBeVisible()
   await expect(page.locator('#about')).toBeAttached()
   await expect(page.getByText('[Owner to add]').first()).toBeAttached()
@@ -33,6 +31,61 @@ test('home: one h1, the hero with its card, sections, footer; alt text; no sidew
   await expect(card(page).getByLabel('Your name')).toBeFocused()
   await page.getByRole('button', { name: 'Login →' }).click()
   await expect(page.getByRole('dialog', { name: 'Log in' })).toBeVisible()
+})
+
+test('Watch demo: beside Start Free Trial (same height); plays YouTube in a popup that closes and stops it', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  page.on('console', (m) => m.type() === 'error' && !/status of 401/.test(m.text()) && errors.push(m.text()))
+  // No network to YouTube in tests: a stand-in page.
+  await page.route('https://www.youtube-nocookie.com/**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<p>player</p>' }))
+  await page.goto('/')
+  const demo = page.getByRole('button', { name: 'Watch demo video' })
+  await expect(demo).toContainText('Watch demo')
+  await expect(demo).toContainText('2 min · how it works')
+  // Read every position in one go, once the hero has settled.
+  await page.evaluate(() => document.fonts.ready)
+  const [a, b, login] = await page.evaluate(() =>
+    ['.pub-actions .pub-btn', '.pub-demo-btn', '.pub-hero-login'].map((s) => document.querySelector(s)!.getBoundingClientRect().toJSON() as { x: number; y: number; width: number; height: number }),
+  )
+  if (page.viewportSize()!.width > 640) {
+    expect(Math.abs(a.y - b.y)).toBeLessThanOrEqual(1) // same row
+    expect(Math.abs(a.height - b.height)).toBeLessThanOrEqual(1) // same height
+    expect(b.x).toBeGreaterThan(a.x + a.width)
+  } else {
+    expect(b.y).toBeGreaterThan(a.y + a.height - 1) // stacked, Start Free Trial first
+    expect(Math.round(b.width)).toBe(Math.round(a.width)) // both full width
+  }
+  // The Login link stays on the line below the buttons.
+  expect(login.y).toBeGreaterThanOrEqual(Math.max(a.y + a.height, b.y + b.height) - 1)
+  // No player until it's opened.
+  await expect(page.locator('iframe[title="Wedmanage demo"]')).toHaveCount(0)
+
+  await demo.click()
+  const popup = page.getByRole('dialog', { name: 'Wedmanage demo' })
+  const frame = popup.locator('iframe[title="Wedmanage demo"]')
+  await expect(frame).toHaveAttribute('src', 'https://www.youtube-nocookie.com/embed/TD5uY9BHh8U?autoplay=1&rel=0&modestbranding=1&playsinline=1')
+  await expect(frame).toHaveAttribute('allow', 'autoplay; encrypted-media; picture-in-picture; fullscreen')
+  const box = await frame.boundingBox()
+  expect(Math.abs(box!.width / box!.height - 16 / 9)).toBeLessThan(0.02)
+  expect(box!.width).toBeLessThanOrEqual(900)
+  // The page doesn't scroll behind it.
+  expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).toBe('hidden')
+  // Esc closes it, removes the player and gives focus back to the button.
+  await page.keyboard.press('Escape')
+  await expect(popup).toHaveCount(0)
+  await expect(page.locator('iframe[title="Wedmanage demo"]')).toHaveCount(0)
+  await expect(demo).toBeFocused()
+  // ✕ and a click outside close it too.
+  await demo.click()
+  await popup.getByRole('button', { name: 'Close video' }).click()
+  await expect(popup).toHaveCount(0)
+  await demo.click()
+  await expect(frame).toBeVisible()
+  await page.mouse.click(5, page.viewportSize()!.height - 5)
+  await expect(popup).toHaveCount(0)
+  await noSidewaysScroll(page, 'demo')
+  expect(errors).toEqual([])
 })
 
 test('pricing: 1, 6 or 12 months with the new prices and savings', async ({ page }) => {
@@ -159,7 +212,7 @@ test.describe('desktop menu', () => {
     await expect(card(page).getByLabel('Your name')).toBeFocused()
     for (const path of ['/about', '/pricing', '/login', '/signup']) {
       await page.goto(path)
-      await expect(page.getByRole('heading', { level: 1 })).toContainText('Photo selection made simple')
+      await expect(page.getByRole('heading', { level: 1 })).toContainText('Let the couple pick their favorites')
       await noSidewaysScroll(page, path)
     }
   })

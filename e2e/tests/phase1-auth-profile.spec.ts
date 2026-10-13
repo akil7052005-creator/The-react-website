@@ -55,7 +55,7 @@ test('log in, edit profile, reset, save, and log out', async ({ page }) => {
   await expect(page).toHaveURL(/\/login$/)
   // Logged out, / is the public home page.
   await page.goto('/')
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('Photo selection made simple')
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Let the couple pick their favorites')
 })
 
 test('sign up a new studio', async ({ page }) => {
@@ -150,5 +150,5 @@ test('visiting /login while logged in offers the dashboard or log out', async ({
   // The old session is really gone.
   // Logged out, / is the public home page.
   await page.goto('/')
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('Photo selection made simple')
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Let the couple pick their favorites')
 })

@@ -9,7 +9,7 @@ const VITE_IOS_APP_URL: string | undefined = import.meta.env.VITE_IOS_APP_URL
 const VITE_PUBLIC_APP_URL: string | undefined = import.meta.env.VITE_PUBLIC_APP_URL
 const VITE_APP_NAME: string | undefined = import.meta.env.VITE_APP_NAME
 const VITE_ALLOW_LAN_LINKS: string | undefined = import.meta.env.VITE_ALLOW_LAN_LINKS
-const VITE_DEMO_VIDEO_URL: string | undefined = import.meta.env.VITE_DEMO_VIDEO_URL
+const VITE_DEMO_VIDEO_ID: string | undefined = import.meta.env.VITE_DEMO_VIDEO_ID
 
 /** Empty in the usual setup: /api is proxied by Vite (dev) and rewritten by Vercel (prod). */
 export const API_BASE = (VITE_API_URL ?? '').replace(/\/$/, '')
@@ -71,5 +71,5 @@ export const appLinks = {
   origin: publicBase,
 }
 
-/** The home page's "Watch demo" video (an .mp4 or a YouTube/Vimeo link); the button is hidden without it. */
-export const DEMO_VIDEO_URL = VITE_DEMO_VIDEO_URL?.trim() || null
+/** The home page's "Watch demo" video: a YouTube video id. The button is hidden without it. */
+export const DEMO_VIDEO_ID = VITE_DEMO_VIDEO_ID?.trim() || null

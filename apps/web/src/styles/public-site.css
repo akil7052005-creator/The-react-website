@@ -1020,12 +1020,125 @@
   font-size: 17px;
   line-height: 1.5;
 }
-.pub-demo-btn small {
-  font-size: 11px;
+/* Watch demo: a light pill with a round ▶ and two lines, beside Start Free Trial (same height). */
+.pub-demo-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 50px; /* Start Free Trial's height */
+  padding: 6px 20px 6px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 30px;
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--pub-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 8px 20px -10px rgba(0, 0, 0, 0.45);
+  transition:
+    transform 0.15s,
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.pub-demo-btn:hover {
+  transform: translateY(-2px);
+  border-color: var(--pub-accent);
+  box-shadow: 0 12px 24px -10px rgba(0, 0, 0, 0.5);
+}
+.pub-demo-btn:focus-visible {
+  outline: 3px solid rgba(224, 20, 74, 0.45);
+  outline-offset: 2px;
+}
+.pub-demo-play {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #e0144a;
+  color: #fff;
+  font-size: 20px;
+}
+.pub-demo-play .bi {
+  margin-left: 2px; /* optical centre of the ▶ */
+}
+.pub-demo-text {
+  display: grid;
+  line-height: 1.2;
+}
+.pub-demo-text strong {
+  color: var(--pub-ink);
+  font-size: 14px;
+  font-weight: 800;
+}
+.pub-demo-text small {
+  color: #6b6b6b;
+  font-size: 11.5px;
   font-weight: 600;
-  text-transform: none;
-  letter-spacing: 0;
-  opacity: 0.8;
+}
+/* The demo popup: dark overlay, a centred 16:9 player, ✕ top-right. */
+.pub-video-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 56px 16px 16px;
+  background: rgba(10, 6, 8, 0.85);
+}
+.pub-video {
+  position: relative;
+  width: 100%;
+  max-width: 900px;
+}
+.pub-video:focus {
+  outline: none;
+}
+.pub-video-frame {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 14px;
+  background: #000;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+.pub-video-frame iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+.pub-video-x {
+  position: absolute;
+  top: -46px;
+  right: 0;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  font-size: 18px;
+  cursor: pointer;
+}
+.pub-video-x:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+.pub-video-x:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+@media (max-width: 640px) {
+  /* Phones: both hero buttons full width, stacked (Start Free Trial first). */
+  .pub-hero .pub-actions .pub-btn,
+  .pub-hero .pub-actions .pub-demo-btn {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
 }
 .pub-hero-login {
   margin: 14px 0 0;
@@ -1152,21 +1265,6 @@
   text-align: center;
   font-size: 13px;
   color: #6b6b6b;
-}
-.pub-demo-frame {
-  position: relative;
-  aspect-ratio: 16 / 9;
-  background: #000;
-  border-radius: 10px;
-  overflow: hidden;
-}
-.pub-demo-frame iframe,
-.pub-demo-frame video {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  border: 0;
 }
 @media (max-width: 899.98px) {
   .pub-hero-grid {

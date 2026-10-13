@@ -27,6 +27,8 @@ dist-ssr
 .env.*
 # Monorepo
 !.env.example
+# Public, non-secret build settings for the website (never keys or passwords).
+!apps/web/.env.production
 coverage
 uploads
 apps/api/uploads

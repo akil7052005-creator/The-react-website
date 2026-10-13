@@ -54,7 +54,13 @@ export default defineConfig({
       reuseExistingServer: false,
       timeout: 120_000,
       // Share links use the public address only (never localhost): a reserved example domain here.
-      env: { VITE_DEV_API_PROXY: 'http://localhost:4100', VITE_PUBLIC_APP_URL: 'https://studio.weddyzone.example', VITE_ALLOW_LAN_LINKS: 'false' },
+      env: {
+        VITE_DEV_API_PROXY: 'http://localhost:4100',
+        VITE_PUBLIC_APP_URL: 'https://studio.weddyzone.example',
+        VITE_ALLOW_LAN_LINKS: 'false',
+        // The home page's Watch demo video (YouTube id); the tests stub YouTube itself.
+        VITE_DEMO_VIDEO_ID: 'TD5uY9BHh8U',
+      },
     },
   ],
 })
