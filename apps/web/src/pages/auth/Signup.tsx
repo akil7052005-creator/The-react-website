@@ -14,6 +14,9 @@ import { PasswordField } from './AuthLayout'
 export type SignupPlan = { code: 'PRO' | 'ALL_ACCESS'; cycle: BillingCycle } | null
 
 const PAID = ['PRO', 'ALL_ACCESS'] as const
+/** The card's typed-in fields. */
+const FIELDS = ['ownerName', 'studioName', 'phone', 'email', 'password'] as const
+type Field = (typeof FIELDS)[number]
 const isPaid = (code: string | null): code is (typeof PAID)[number] => (PAID as readonly string[]).includes(code ?? '')
 
 /** A /signup?plan=PRO&months=6 link's plan (only periods on sale; anything else is Trial / 1 month). */
@@ -67,6 +70,12 @@ export function SignupForm({ plan, onPlanChange }: { plan: SignupPlan; onPlanCha
   const save = planRow && plan ? cycleSavingPct(planRow.prices, plan.cycle) : null
   const nameOf = (code: string, fallback: string) => plans.data?.find((p) => p.code === code)?.name ?? fallback
 
+  /** The form field an input/blur event came from (the plan picker and buttons aren't fields). */
+  const fieldOf = (target: EventTarget): Field | null => {
+    const name = target instanceof HTMLInputElement ? target.name : ''
+    return (FIELDS as readonly string[]).includes(name) ? (name as Field) : null
+  }
+
   return (
     <form
       method="post"
@@ -74,13 +83,13 @@ export function SignupForm({ plan, onPlanChange }: { plan: SignupPlan; onPlanCha
       noValidate
       className="pub-signup-form"
       onChange={(e) => {
-        const name = (e.target as HTMLInputElement).name as keyof typeof form.formState.errors
+        const name = fieldOf(e.target)
         if (!name) return
         typed.current.add(name)
         if (form.getFieldState(name).error) void form.trigger(name)
       }}
       onBlur={(e) => {
-        const name = (e.target as HTMLInputElement).name as keyof typeof form.formState.errors
+        const name = fieldOf(e.target)
         if (name && typed.current.has(name)) void form.trigger(name)
       }}
     >
