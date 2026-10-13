@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { gradientPng } from '../../apps/api/src/common/png'
-import { login, uniqueTag } from './helpers'
+import { isPhoneList, login, selectionRow, uniqueTag } from './helpers'
 
 // Manage → Settings, Send options, the two Reset Selection choices, upload errors, and the client's
 // Photo Notes and selection limit.
@@ -33,7 +33,13 @@ test('setup: an event with 3 photos, notes on, limit 2', async ({ page }) => {
 test('Manage opens the event’s Settings page with Edit Event Details at the top', async ({ page }) => {
   await login(page)
   await page.goto('/photo-selection')
-  await page.getByTestId('selections-table').getByRole('link', { name: `Manage ${eventTitle}` }).click()
+  if (isPhoneList(page)) {
+    // Phones: Manage is Edit in the card's ⋮ sheet.
+    await selectionRow(page, customer).getByRole('button', { name: `More actions for ${eventTitle}` }).click()
+    await page.getByRole('dialog', { name: new RegExp(customer) }).getByRole('button', { name: 'Edit' }).click()
+  } else {
+    await page.getByTestId('selections-table').getByRole('link', { name: `Manage ${eventTitle}` }).click()
+  }
   await expect(page).toHaveURL(new RegExp(`/photo-selection/${sel.id}/settings$`))
   await expect(page.getByRole('heading', { name: 'Photo Selection Settings' })).toBeVisible()
   await expect(page.locator('.ss-head').getByRole('button', { name: /Edit Event Details/ })).toBeVisible()
@@ -46,7 +52,7 @@ test('Send options: web sign-in and personal links, the full message, never loca
   }
   await login(page)
   await page.goto('/photo-selection')
-  await page.getByTestId('selections-table').getByRole('button', { name: `Send code ${sel.code} to ${customer}` }).click()
+  await selectionRow(page, customer).getByRole('button', { name: `Send code ${sel.code} to ${customer}` }).click()
   const dialog = page.getByRole('dialog', { name: 'Send/Share' })
   const options = dialog.getByTestId('send-options')
   await expect(options.locator('.sh-option strong')).toHaveText(['Web link', 'Personal link', 'Full message']) // app links aren't set: hidden

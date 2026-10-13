@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { CYCLE_LABELS, cycleSavingPct, PRICING_CYCLES, signupSchema, type BillingCycle, type MeDto } from '@weddyzone/shared'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { ME_KEY } from '../../auth/AuthProvider'
@@ -33,7 +33,11 @@ export function SignupForm({ plan, onPlanChange }: { plan: SignupPlan; onPlanCha
   const qc = useQueryClient()
   const plans = usePlans()
   const [failure, setFailure] = useState<string | null>(null)
+  // "… is required" shows only after Create studio, or on leaving a field the user typed in
+  // (not on page load or from just clicking through the fields).
+  const typed = useRef(new Set<string>())
   const form = useZodForm(signupSchema, {
+    mode: 'onSubmit',
     defaultValues: {
       studioName: '',
       ownerName: '',
@@ -64,7 +68,22 @@ export function SignupForm({ plan, onPlanChange }: { plan: SignupPlan; onPlanCha
   const nameOf = (code: string, fallback: string) => plans.data?.find((p) => p.code === code)?.name ?? fallback
 
   return (
-    <form method="post" onSubmit={form.handleSubmit((v) => signup.mutate(v))} noValidate className="pub-signup-form">
+    <form
+      method="post"
+      onSubmit={form.handleSubmit((v) => signup.mutate(v))}
+      noValidate
+      className="pub-signup-form"
+      onChange={(e) => {
+        const name = (e.target as HTMLInputElement).name as keyof typeof form.formState.errors
+        if (!name) return
+        typed.current.add(name)
+        if (form.getFieldState(name).error) void form.trigger(name)
+      }}
+      onBlur={(e) => {
+        const name = (e.target as HTMLInputElement).name as keyof typeof form.formState.errors
+        if (name && typed.current.has(name)) void form.trigger(name)
+      }}
+    >
       <div className="pub-plan-switch" role="radiogroup" aria-label="Plan" data-testid="signup-plan">
         {(
           [
@@ -111,11 +130,12 @@ export function SignupForm({ plan, onPlanChange }: { plan: SignupPlan; onPlanCha
           <span>{failure}</span>
         </div>
       )}
-      <TextField form={form} idPrefix="su" name="ownerName" label="Your name" required autoComplete="name" placeholder="Arjun Mehta" maxLength={80} />
-      <TextField form={form} idPrefix="su" name="studioName" label="Studio name" required autoComplete="organization" placeholder="Golden Hour Studios" maxLength={80} />
-      <TextField form={form} idPrefix="su" name="phone" label="Phone (+91)" type="tel" required autoComplete="tel" placeholder="98765 43210" />
-      <TextField form={form} idPrefix="su" name="email" label="Email" type="email" required autoComplete="email" placeholder="you@studio.com" />
-      <PasswordField form={form} idPrefix="su" name="password" label="Password" autoComplete="new-password" />
+      {/* The labels stay for screen readers; the card shows the same words as placeholders. */}
+      <TextField form={form} idPrefix="su" name="ownerName" label="Your name" required autoComplete="name" placeholder="Your name" maxLength={80} />
+      <TextField form={form} idPrefix="su" name="studioName" label="Studio name" required autoComplete="organization" placeholder="Studio name" maxLength={80} />
+      <TextField form={form} idPrefix="su" name="phone" label="Phone number (+91)" type="tel" required autoComplete="tel" placeholder="Phone number (+91)" />
+      <TextField form={form} idPrefix="su" name="email" label="Email" type="email" required autoComplete="email" placeholder="Email" />
+      <PasswordField form={form} idPrefix="su" name="password" label="Password" autoComplete="new-password" placeholder="Password (min 8 characters)" />
       <SubmitButton busy={signup.isPending} className="pub-btn block">
         Create studio →
       </SubmitButton>

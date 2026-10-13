@@ -701,8 +701,10 @@
 .pub-x:hover {
   background: #f3f3f3;
 }
+/* Centred, with the same 40px kept on both sides for the ✕ in the top-right corner. */
 .pub-panel-title {
-  margin: 0 40px 4px 0;
+  margin: 0 40px 4px;
+  text-align: center;
   font-family: var(--font-display);
   font-size: 24px;
   color: var(--pub-ink);
@@ -1047,18 +1049,28 @@
 }
 .pub-signup-card h2 {
   margin: 0 0 10px;
+  text-align: center;
   font-family: var(--font-display);
   font-size: 22px;
   color: var(--pub-ink);
 }
-/* Compact fields with room kept for one error line, so an error never moves the button. */
+/* Compact fields 12px apart; the gap holds the error line, so an error never moves the button. */
 .pub-signup-form .field {
   position: relative;
   margin: 0;
-  padding-bottom: 16px;
+  padding-bottom: 12px;
 }
-.pub-signup-form .field label {
-  font-size: 13px;
+/* The labels are read by screen readers only; the placeholders show the same words. */
+.pub-signup-form .field-label-row {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 .pub-signup-form .field input {
   padding-top: 8px;
@@ -1071,8 +1083,8 @@
   bottom: 0;
   margin: 0;
   overflow: hidden;
-  font-size: 12px;
-  line-height: 16px;
+  font-size: 11.5px;
+  line-height: 12px;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
@@ -1167,15 +1179,19 @@
     scroll-margin-top: 72px;
   }
 }
-/* Desktop: the text stays where the 1140px page column puts it, the card sits on the right edge,
+/* Desktop: the text and the card sit in the 1140px page column (the card under About Us … Login),
    and the sofa is clear in the middle. */
 @media (min-width: 900px) {
   .pub-hero-grid {
-    max-width: none;
-    grid-template-columns: minmax(0, 668px) 340px;
+    max-width: 1140px;
+    margin: 0 auto;
+    padding-right: 16px;
+    padding-left: 16px;
+    grid-template-columns: minmax(0, 1fr) 330px;
     justify-content: space-between;
-    padding-left: max(16px, calc((100% - 1140px) / 2 + 16px));
-    padding-right: clamp(12px, 2vw, 24px);
+  }
+  .pub-signup-card {
+    width: 330px;
   }
   .pub-hero-fixed .pub-hero-img {
     object-position: 50% 80%;

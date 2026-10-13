@@ -546,3 +546,424 @@ th[aria-sort='descending'] .pl-sort .bi {
     max-width: 164px;
   }
 }
+
+/* ---------------------------------------------------------------- phones (≤ 640px): cards instead of the table */
+.pl-phone {
+  /* Room for the fixed Add Photo Selection bar, so the last card isn't hidden. */
+  padding-bottom: calc(84px + env(safe-area-inset-bottom));
+}
+.pl-phone .pl-table-card {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.pl-phone .pl-toolbar {
+  margin-bottom: 10px;
+}
+.pl-phone .pl-search {
+  flex: 1 1 100%;
+}
+.pl-phone .pl-search input {
+  padding-top: 11px;
+  padding-bottom: 11px;
+  background: #fff;
+}
+.pl-phone .pl-foot {
+  justify-content: center;
+}
+
+/* Stats: three gradient tiles in one row */
+.plm-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.plm-tile {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  padding: 10px 10px 9px;
+  border-radius: 14px;
+  color: #fff;
+  box-shadow: 0 8px 18px -12px rgba(46, 10, 25, 0.45);
+}
+.plm-tile .bi {
+  font-size: 15px;
+  opacity: 0.9;
+}
+.plm-tile strong {
+  font-size: 19px;
+  font-weight: 800;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+.plm-tile span {
+  overflow: hidden;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.92;
+}
+.plm-tile.events {
+  background: linear-gradient(135deg, #e8174a, #b80f3a);
+}
+.plm-tile.picks {
+  background: linear-gradient(135deg, #16a34a, #0f7a5c);
+}
+.plm-tile.videos {
+  background: linear-gradient(135deg, #7c3aed, #4f46e5);
+}
+
+/* Filter chips: one row that scrolls sideways */
+.plm-chips {
+  display: flex;
+  gap: 8px;
+  margin: 0 -16px 12px;
+  padding: 0 16px 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.plm-chips::-webkit-scrollbar {
+  display: none;
+}
+.plm-chips button {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 99px;
+  background: #fff;
+  color: #374151;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.plm-chips button span {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 99px;
+  background: #f3f4f6;
+  color: #4b5563;
+  font-size: 12px;
+  text-align: center;
+}
+.plm-chips button.on {
+  border-color: var(--pl-red);
+  background: var(--pl-red);
+  color: #fff;
+}
+.plm-chips button.on span {
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
+}
+.plm-none {
+  margin: 8px 0;
+  padding: 20px 12px;
+  border-radius: 16px;
+  background: #fff;
+  color: #6b7280;
+  text-align: center;
+}
+
+/* One card per row, with a status stripe on the left */
+.plc-list {
+  display: grid;
+  gap: 10px;
+}
+.plc {
+  --plc-tone: #ffa000;
+  position: relative;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px 12px 12px 17px;
+  overflow: hidden;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(46, 10, 25, 0.05), 0 10px 24px -16px rgba(46, 10, 25, 0.28);
+}
+.plc::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 5px;
+  background: var(--plc-tone);
+}
+/* The same colours as the status pills */
+.plc.tone-shared {
+  --plc-tone: #2563eb;
+}
+.plc.tone-progress {
+  --plc-tone: #7c3aed;
+}
+.plc.tone-submitted {
+  --plc-tone: #16a34a;
+}
+.plc.tone-downloaded {
+  --plc-tone: #6b7280;
+}
+.plc-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.plc-avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--pl-pink);
+  color: var(--pl-red);
+  font-size: 16px;
+  font-weight: 800;
+}
+.plc-who {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+.plc-name,
+.plc-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plc-name {
+  color: #1f2937;
+  font-size: 15px;
+  font-weight: 800;
+}
+.plc-sub {
+  color: #6b7280;
+  font-size: 12.5px;
+}
+.plc-badge {
+  flex: none;
+}
+/* "In Progress" carries the class .progress, which is also the dashboard's 8px progress bar. */
+.plc-badge.progress {
+  height: auto;
+  overflow: visible;
+}
+.plc-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+  color: #4b5563;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.plc-count .bi {
+  color: #9ca3af;
+}
+.plc-progress {
+  display: grid;
+  gap: 4px;
+}
+.plc-bar {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: #f1f1f4;
+}
+.plc-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--plc-tone);
+  transition: width 0.3s var(--ease);
+}
+.plc-caption {
+  color: #6b7280;
+  font-size: 12px;
+}
+.plc-caption strong {
+  color: #374151;
+}
+.plc-actions {
+  display: flex;
+  gap: 8px;
+}
+.plc-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f9fafb;
+  color: #1f2937;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.plc-btn.send {
+  border-color: #bfe8cf;
+  background: #e9f9ef;
+  color: #128c4b;
+}
+.plc-btn.accent {
+  border-color: transparent;
+  background: linear-gradient(135deg, #e8174a, #c30f3d);
+  color: #fff;
+}
+.plc-btn.wide {
+  flex: 1 1 auto;
+}
+.plc-btn.more {
+  flex: none;
+  width: 44px;
+  padding: 0;
+  font-size: 18px;
+}
+.plc-btn:focus-visible,
+.plc-who:focus-visible,
+.plm-chips button:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+/* The fixed Add Photo Selection pill */
+.plm-add-bar {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 25;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  background: linear-gradient(to top, rgba(250, 246, 240, 0.98) 60%, rgba(250, 246, 240, 0));
+  pointer-events: none;
+}
+.plm-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 50px;
+  border: 0;
+  border-radius: 99px;
+  background: linear-gradient(135deg, #f0285a, #c30f3d);
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 800;
+  box-shadow: 0 12px 24px -12px rgba(232, 23, 74, 0.8);
+  cursor: pointer;
+  pointer-events: auto;
+}
+.plm-add:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+/* ⋮ More actions: a bottom sheet */
+.plc-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  background: rgba(20, 10, 15, 0.45);
+}
+.plc-sheet {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 9001;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 8px 16px calc(16px + env(safe-area-inset-bottom));
+  border-radius: 20px 20px 0 0;
+  background: #fff;
+  box-shadow: 0 -12px 32px -12px rgba(46, 10, 25, 0.35);
+  transition: transform 0.18s ease-out;
+}
+.plc-sheet:focus {
+  outline: none;
+}
+.plc-sheet-handle {
+  display: block;
+  width: 40px;
+  height: 5px;
+  margin: 2px auto 10px;
+  border-radius: 99px;
+  background: #d9d9de;
+}
+.plc-sheet-title {
+  display: grid;
+  margin: 0 0 8px;
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 800;
+}
+.plc-sheet-title span {
+  overflow: hidden;
+  color: #6b7280;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plc-sheet-list {
+  display: grid;
+}
+.plc-sheet-list button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 0 4px;
+  border: 0;
+  border-top: 1px solid #f0f0f2;
+  background: none;
+  color: #1f2937;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.plc-sheet-list button .bi {
+  width: 20px;
+  color: #6b7280;
+  font-size: 17px;
+}
+.plc-sheet-list button small {
+  margin-left: auto;
+  color: #9ca3af;
+  font-size: 12px;
+  font-weight: 600;
+}
+.plc-sheet-list button:disabled {
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+.plc-sheet-list button.danger,
+.plc-sheet-list button.danger .bi {
+  color: #c81e3a;
+}
+.plc-sheet-list button:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: -2px;
+}

@@ -1,9 +1,11 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import type { Paginated, SelectionDto } from '@weddyzone/shared'
+import type { Paginated, SelectionDto, SelectionOverviewDto } from '@weddyzone/shared'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useConfirm } from '../components/Modal'
+import { phoneGroup, RowActionsSheet, SelectionRowCard, useIsPhoneList, useRowSheet, type PhoneGroup } from '../components/photoSelectionList/SelectionRowCard'
+import { DownloadSelectedModal } from '../components/selection/DownloadSelectedModal'
 import { EventDetailsModal } from '../components/selection/EventDetailsModal'
 import { ResetSelectionModal } from '../components/selection/ResetSelectionModal'
 import { LIVE_POLL_MS, refreshSelection, selectionPath } from '../components/selection/selectionUi'
@@ -65,6 +67,24 @@ function OverviewTile({ icon, label, value }: { icon: string; label: string; val
   )
 }
 
+/** Phones: three small tiles in one row. */
+function PhoneTile({ tone, icon, label, value }: { tone: string; icon: string; label: string; value: number | undefined }) {
+  return (
+    <div className={`plm-tile ${tone}`}>
+      <i className={`bi bi-${icon}`} aria-hidden="true" />
+      <strong>{value === undefined ? <Skeleton width={28} height={18} /> : formatNumber(value)}</strong>
+      <span>{label}</span>
+    </div>
+  )
+}
+
+const PHONE_CHIPS: [PhoneGroup | 'all', string][] = [
+  ['all', 'All'],
+  ['pending', 'Pending'],
+  ['selected', 'Selected'],
+  ['downloaded', 'Downloaded'],
+]
+
 /** One small count in CONTENT, e.g. "7 🖼", with its name as a tooltip. */
 function CountChip({ kind, icon, value, label }: { kind: string; icon: string; value: number; label: string }) {
   return (
@@ -97,6 +117,11 @@ function PhotoSelection() {
   const [search, setSearch] = useDebouncedUrlSearch(url.search, (v) => setUrl({ search: v, page: '1' }))
   const [sharing, setSharing] = useState<SelectionDto | null>(null)
   const [reopening, setReopening] = useState<SelectionDto | null>(null)
+  // Phones (≤ 640px) show cards, filter chips and a ⋮ sheet instead of the table.
+  const phone = useIsPhoneList()
+  const [chip, setChip] = useState<PhoneGroup | 'all'>('all')
+  const sheet = useRowSheet()
+  const [downloading, setDownloading] = useState<SelectionOverviewDto | null>(null)
   const page = Math.max(1, Number(url.page) || 1)
   const limit = PAGE_SIZES.includes(url.limit) ? Number(url.limit) : 10
 
@@ -153,16 +178,51 @@ function PhotoSelection() {
     else toast.error('Could not copy — your browser blocked the clipboard')
   }
   const sortBy = (s: string) => setUrl({ sort: s })
+  // Download Selected from a phone card: the event page's own dialog, with that page's folder list.
+  const openDownload = async (s: SelectionDto) => {
+    try {
+      setDownloading(await qc.fetchQuery({ queryKey: ['selection-overview', s.id], queryFn: () => api.get<SelectionOverviewDto>(`/selections/${s.id}/overview`) }))
+    } catch (e) {
+      toastError(e)
+    }
+  }
+  const chipCount = (c: PhoneGroup | 'all') => (c === 'all' ? rows.length : rows.filter((s) => phoneGroup(s) === c).length)
+  const cards = chip === 'all' ? rows : rows.filter((s) => phoneGroup(s) === chip)
+  const pageSize = (
+    <label className="pl-size">
+      <select aria-label="Entries per page" value={String(limit)} onChange={(e) => setUrl({ limit: e.target.value, page: '1' })}>
+        {PAGE_SIZES.map((n) => (
+          <option key={n} value={n}>
+            {n}
+          </option>
+        ))}
+      </select>
+      <span>entries per page</span>
+    </label>
+  )
 
   return (
-    <div className="stack ps-page pl-page">
+    <div className={`stack ps-page pl-page${phone ? ' pl-phone' : ''}`}>
       <div className="pl-head">
         <h1>Photo Selection</h1>
-        <button type="button" className="pl-add" onClick={() => setUrl({ new: '1' })}>
-          <i className="bi bi-plus-lg" /> Add Photo Selection
-        </button>
+        {!phone && (
+          <button type="button" className="pl-add" onClick={() => setUrl({ new: '1' })}>
+            <i className="bi bi-plus-lg" /> Add Photo Selection
+          </button>
+        )}
       </div>
 
+      {phone ? (
+        summary.isError ? (
+          <ErrorState error={summary.error} onRetry={() => summary.refetch()} />
+        ) : (
+          <section className="plm-tiles" aria-label="Studio snapshot" data-testid="overview">
+            <PhoneTile tone="events" icon="calendar-event" label="Events" value={sum?.selections} />
+            <PhoneTile tone="picks" icon="check-circle" label="Selections" value={sum?.picked} />
+            <PhoneTile tone="videos" icon="camera-video" label="Videos" value={sum ? (sum.videos ?? 0) : undefined} />
+          </section>
+        )
+      ) : (
       <section className="pl-card" aria-labelledby="pl-overview">
         <h2 id="pl-overview" className="pl-title">
           Studio snapshot
@@ -178,24 +238,31 @@ function PhotoSelection() {
           </div>
         )}
       </section>
+      )}
 
       <section className="pl-card pl-table-card" aria-label="All photo selections">
         <div className="pl-toolbar">
-          <label className="pl-size">
-            <select aria-label="Entries per page" value={String(limit)} onChange={(e) => setUrl({ limit: e.target.value, page: '1' })}>
-              {PAGE_SIZES.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-            <span>entries per page</span>
-          </label>
+          {!phone && pageSize}
           <label className="pl-search">
             <i className="bi bi-search" aria-hidden="true" />
-            <input type="search" placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search by project, customer or code" />
+            <input
+              type="search"
+              placeholder={phone ? 'Search customer or event' : 'Search...'}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              aria-label="Search by project, customer or code"
+            />
           </label>
         </div>
+        {phone && rows.length > 0 && (
+          <div className="plm-chips" role="group" aria-label="Filter by status" data-testid="status-chips">
+            {PHONE_CHIPS.map(([c, label]) => (
+              <button key={c} type="button" className={chip === c ? 'on' : ''} aria-pressed={chip === c} onClick={() => setChip(c)}>
+                {label} <span>{chipCount(c)}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
         {url.status && (
           <p className="pl-filter">
@@ -229,6 +296,16 @@ function PhotoSelection() {
               <button type="button" className="pl-add" onClick={() => setUrl({ new: '1' })}>
                 <i className="bi bi-plus-lg" /> Add Photo Selection
               </button>
+            </div>
+          )
+        ) : phone ? (
+          cards.length === 0 ? (
+            <p className="plm-none">No events here on this page.</p>
+          ) : (
+            <div className="plc-list" data-testid="selection-cards">
+              {cards.map((s) => (
+                <SelectionRowCard key={s.id} s={s} onSend={setSharing} onReopen={setReopening} onDownload={(r) => void openDownload(r)} onMore={sheet.open} />
+              ))}
             </div>
           )
         ) : (
@@ -301,6 +378,7 @@ function PhotoSelection() {
 
         {list.data && total > 0 && (
           <div className="pl-foot">
+            {phone && pageSize}
             <span>
               Showing {from} to {to} of {total} {total === 1 ? 'entry' : 'entries'}
             </span>
@@ -327,6 +405,33 @@ function PhotoSelection() {
       </section>
 
       <StudioDefaultsCard />
+
+      {phone && (
+        <div className="plm-add-bar">
+          <button type="button" className="plm-add" onClick={() => setUrl({ new: '1' })}>
+            <i className="bi bi-plus-lg" aria-hidden="true" /> Add Photo Selection
+          </button>
+        </div>
+      )}
+      {sheet.row && (
+        <RowActionsSheet
+          s={sheet.row}
+          onClose={sheet.close}
+          onLeave={sheet.leave}
+          onSend={setSharing}
+          onReopen={setReopening}
+          onDelete={(s) => void remove(s)}
+          onCopyCode={(code) => void copyCode(code)}
+        />
+      )}
+      {downloading && (
+        <DownloadSelectedModal
+          selection={downloading.selection}
+          folders={downloading.folders}
+          onClose={() => setDownloading(null)}
+          onDone={() => navigate(`${selectionPath(downloading.selection.id)}?view=selected`)}
+        />
+      )}
 
       <EventDetailsModal
         key={addOpen ? 'add-open' : 'add-closed'}

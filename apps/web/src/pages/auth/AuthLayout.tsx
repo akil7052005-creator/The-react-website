@@ -72,6 +72,7 @@ export function PasswordField<T extends FieldValues>({
   autoComplete,
   hint,
   idPrefix = 'f',
+  placeholder,
 }: {
   form: AnyForm<T>
   name: FieldPath<T>
@@ -80,6 +81,7 @@ export function PasswordField<T extends FieldValues>({
   hint?: ReactNode
   /** Keeps ids unique when two forms with a password field are on one page. */
   idPrefix?: string
+  placeholder?: string
 }) {
   const [show, setShow] = useState(false)
   const id = `${idPrefix}-${name}`
@@ -91,6 +93,8 @@ export function PasswordField<T extends FieldValues>({
           id={id}
           type={show ? 'text' : 'password'}
           autoComplete={autoComplete}
+          placeholder={placeholder}
+          aria-required
           aria-invalid={Boolean(error) || undefined}
           aria-describedby={error ? `${id}-error` : undefined}
           {...form.register(name)}

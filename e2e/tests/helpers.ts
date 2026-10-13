@@ -2,6 +2,16 @@ import { expect, type Page } from '@playwright/test'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
+/** Phones (≤ 640px) show the Photo Selection list as cards; wider screens show the table. */
+export const isPhoneList = (page: Page) => (page.viewportSize()?.width ?? 1366) <= 640
+
+/** A Photo Selection list row: the table row, or the card on phones. */
+export function selectionRow(page: Page, text: string | RegExp) {
+  return isPhoneList(page)
+    ? page.getByTestId('selection-cards').locator('article', { hasText: text })
+    : page.getByTestId('selections-table').locator('tbody tr', { hasText: text })
+}
+
 /** Where the e2e API server saves console-mode emails (MAIL_OUTBOX_DIR in playwright.config.ts). */
 const OUTBOX = resolve(__dirname, '../../apps/api/e2e-mail')
 
@@ -33,7 +43,7 @@ export async function signupStudio(page: Page, email = `studio.${Date.now()}@exa
   await card.getByLabel('Studio name').fill('Fresh Frames')
   await card.getByLabel('Your name').fill('Asha Menon')
   await card.getByRole('textbox', { name: 'Email' }).fill(email)
-  await card.getByLabel('Phone (+91)').fill('98400 33445')
+  await card.getByLabel('Phone number (+91)').fill('98400 33445')
   await card.getByRole('textbox', { name: 'Password', exact: true }).fill(password)
   await card.getByRole('button', { name: 'Create studio' }).click()
   await expect(page).toHaveURL(/\/$/)

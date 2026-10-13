@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { gradientPng } from '../../apps/api/src/common/png'
-import { login, uniqueTag } from './helpers'
+import { isPhoneList, login, selectionRow, uniqueTag } from './helpers'
 
 // One couple flows through the whole studio → client → studio loop. Desktop and mobile runs share
 // the database, so names carry a per-run tag.
@@ -33,7 +33,8 @@ let galleryLink = ''
 test('Add Photo Selection: Event Details validates, then adds the event at the top', async ({ page }) => {
   await login(page)
   await page.goto('/photo-selection')
-  const totalEvents = page.locator('.pl-tile', { hasText: 'Total Events' }).locator('strong')
+  const phone = isPhoneList(page)
+  const totalEvents = (phone ? page.locator('.plm-tile', { hasText: 'Events' }) : page.locator('.pl-tile', { hasText: 'Total Events' })).locator('strong')
   await expect(totalEvents).not.toHaveText('')
   const before = Number((await totalEvents.innerText()).replace(/,/g, ''))
   await page.getByRole('button', { name: 'Add Photo Selection' }).first().click()
@@ -55,14 +56,25 @@ test('Add Photo Selection: Event Details validates, then adds the event at the t
   await expect(dialog).toHaveCount(0)
   await expect(page.getByText(/Event added · code \d{6}/)).toBeVisible()
 
-  const top = page.getByTestId('selections-table').locator('tbody tr').first()
+  const top = phone ? page.getByTestId('selection-cards').locator('article').first() : page.getByTestId('selections-table').locator('tbody tr').first()
   await expect(top).toContainText(couple)
   await expect(top).toContainText(eventTitle)
   await expect(top.locator('.pl-status')).toHaveText('Pending')
-  await expect(top.locator('.pl-chip')).toHaveText(['0 Folders', '0 Images', '0 Selected', '0 Videos'])
-  await expect(top.locator('.pl-code-num')).toHaveText(/^\d{6}$/)
-  // Clicking the code copies it.
-  await top.locator('.pl-code-num').click()
+  if (phone) {
+    // Phones: a card with the counts, a progress bar, Upload / Send / ⋮, and the code in the ⋮ sheet.
+    await expect(top.locator('.plc-count')).toHaveText(['0 folders', '0 photos', '0 / 2 picked'])
+    await expect(top.locator('.plc-caption')).toHaveText('Waiting for customer · 0%')
+    await top.getByRole('button', { name: `More actions for ${eventTitle}` }).click()
+    const sheet = page.getByRole('dialog', { name: new RegExp(couple) })
+    await expect(sheet.getByRole('button', { name: /^Copy code \d{6}$/ })).toBeVisible()
+    await sheet.getByRole('button', { name: /^Copy code/ }).click()
+    await expect(sheet).toHaveCount(0)
+  } else {
+    await expect(top.locator('.pl-chip')).toHaveText(['0 Folders', '0 Images', '0 Selected', '0 Videos'])
+    await expect(top.locator('.pl-code-num')).toHaveText(/^\d{6}$/)
+    // Clicking the code copies it.
+    await top.locator('.pl-code-num').click()
+  }
   await expect(page.getByText('Code copied')).toBeVisible()
   const [doc, win] = await page.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth])
   expect(doc).toBeLessThanOrEqual(win)
@@ -85,7 +97,7 @@ test('studio: upload folders, block a duplicate, set a PIN, share', async ({ pag
   writeFileSync(join(wedding, 'notes.txt'), 'hello')
   await login(page)
   await page.goto('/photo-selection')
-  const row = page.getByTestId('selections-table').locator('tbody tr', { hasText: couple })
+  const row = selectionRow(page, couple)
   await row.getByRole('link', { name: `Upload & Download: ${eventTitle}` }).click()
   await expect(page).toHaveURL(/\/photo-selection\/[0-9a-f-]{36}$/)
   selectionUrl = page.url()
@@ -153,7 +165,7 @@ test('studio: upload folders, block a duplicate, set a PIN, share', async ({ pag
 test('studio: Send/Share sends the code and the /select link on WhatsApp, then shows Shared', async ({ page, context }) => {
   await login(page)
   await page.goto('/photo-selection')
-  const row = page.getByRole('row', { name: new RegExp(couple) })
+  const row = selectionRow(page, couple)
   // Copying the gallery link in the previous test already counted as sharing.
   await expect(row.locator('.pl-status')).toHaveText('Shared')
   await row.getByRole('button', { name: /^Send code/ }).click()
