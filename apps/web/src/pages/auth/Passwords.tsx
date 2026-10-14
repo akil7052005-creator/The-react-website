@@ -5,6 +5,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { applyApiErrors, SubmitButton, TextField, useZodForm } from '../../components/form/form'
 import { api, isApiError } from '../../lib/api'
+import { toastError } from '../../lib/query'
 import { AuthLayout, PasswordField } from './AuthLayout'
 
 /** Enter an email, get a reset link. Used on /forgot-password and in the public site's Login panel. */
@@ -75,8 +76,14 @@ export function ResetPassword() {
       toast.success('Password updated. Please log in with your new password.')
       navigate('/login', { replace: true })
     },
-    onError: (e) => applyApiErrors(form, e),
+    // Field errors show where they belong (an expired link in the box above), so no "fix the
+    // highlighted fields" toast; anything else (network, server) still gets one.
+    onError: (e) => {
+      if (!applyApiErrors(form, e, { toast: false })) toastError(e)
+    },
   })
+  // "This reset link is invalid or has expired" (from the server) reads as a sentence before the next one.
+  const linkProblem = (tokenError ?? 'This reset link is missing its token').replace(/[.!]?$/, '.')
 
   return (
     <AuthLayout
@@ -91,7 +98,7 @@ export function ResetPassword() {
       {!token || tokenError ? (
         <div className="notice danger" role="alert" style={{ marginBottom: 14 }}>
           <i className="bi bi-exclamation-triangle" />
-          <span>{tokenError ?? 'This reset link is missing its token.'} Request a new link to continue.</span>
+          <span>{linkProblem} Request a new link to continue.</span>
         </div>
       ) : null}
       <form method="post" onSubmit={form.handleSubmit((v) => reset.mutate(v))} noValidate>

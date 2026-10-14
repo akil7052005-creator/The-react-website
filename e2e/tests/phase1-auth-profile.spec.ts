@@ -134,6 +134,18 @@ test('reset a forgotten password with the emailed link', async ({ page, context 
   await expect(page).toHaveURL(/\/$/)
 })
 
+test('an expired or broken reset link says so in one clear sentence, without a "fix the fields" toast', async ({ page }) => {
+  // Long enough to reach the server, which knows no such link (a used or expired one reads the same).
+  await page.goto('/reset-password?token=expired-or-never-issued-token-0000')
+  await page.getByRole('textbox', { name: 'New password', exact: true }).fill('NewPass123')
+  await page.getByRole('textbox', { name: 'Confirm new password', exact: true }).fill('NewPass123')
+  await page.getByRole('button', { name: 'Update password' }).click()
+  await expect(page.getByRole('alert').filter({ hasText: 'invalid' })).toHaveText('This reset link is invalid or has expired. Request a new link to continue.')
+  await expect(page.getByText('Please fix the highlighted fields')).toHaveCount(0)
+  await page.goto('/reset-password')
+  await expect(page.getByRole('alert')).toHaveText('This reset link is missing its token. Request a new link to continue.')
+})
+
 test('visiting /login while logged in offers the dashboard or log out', async ({ page }) => {
   await login(page)
   await page.goto('/login')
