@@ -2,6 +2,7 @@ import { CYCLE_LABELS, cycleSavingPct, PRICING_CYCLES, type BillingCycle } from 
 import { useState, type KeyboardEvent } from 'react'
 import { perMonth, priceFor, usePlans } from '../../lib/billing'
 import { APP_NAME } from '../../lib/brand'
+import { CONTACT, contactLinkProps } from '../../lib/contact'
 import { isTrialPlan, planLimitLines } from '../../lib/planCopy'
 import { formatMoney } from '../../utils/format'
 import { LoginForm } from '../../pages/auth/Login'
@@ -25,13 +26,6 @@ export function arrowNav(selector: string, axis: 'vertical' | 'horizontal' = 've
     items[(at + (e.key === keys[1] ? 1 : -1) + items.length) % items.length].focus()
   }
 }
-
-const CONTACT = [
-  { icon: 'telephone', label: 'Phone' },
-  { icon: 'whatsapp', label: 'WhatsApp' },
-  { icon: 'envelope', label: 'Email' },
-  { icon: 'geo-alt', label: 'Address' },
-]
 
 const ABOUT_ITEMS = [
   {
@@ -96,7 +90,14 @@ export function AboutPanel({ stacked }: { stacked?: boolean }) {
           <ul className="pub-mm-contact">
             {CONTACT.map((c) => (
               <li key={c.label}>
-                <i className={`bi bi-${c.icon}`} aria-hidden="true" /> {c.label}: [Owner to add]
+                <i className={`bi bi-${c.icon}`} aria-hidden="true" /> {c.label}:{' '}
+                {c.href ? (
+                  <a href={c.href} {...contactLinkProps(c)}>
+                    {c.value}
+                  </a>
+                ) : (
+                  c.value
+                )}
               </li>
             ))}
           </ul>

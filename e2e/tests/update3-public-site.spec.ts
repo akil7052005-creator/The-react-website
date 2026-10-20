@@ -22,7 +22,7 @@ test('home: one h1, the hero with its card, sections, footer; alt text; no sidew
   await expect(card(page).getByText('14-day free trial · no card needed')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'How it works' })).toBeVisible()
   await expect(page.locator('#about')).toBeAttached()
-  await expect(page.getByText('[Owner to add]').first()).toBeAttached()
+  await expect(page.getByText('brandlift123@gmail.com').first()).toBeAttached()
   for (const img of await page.locator('img').all()) expect(await img.getAttribute('alt')).not.toBeNull()
   await noSidewaysScroll(page, '/')
 
@@ -128,7 +128,7 @@ test.describe('desktop menu', () => {
     await expect(about).toHaveAttribute('aria-expanded', 'true')
     await expect(page.getByTestId('about-detail')).toContainText('Our story')
     await aboutPanel.getByRole('menuitem', { name: /Contact/ }).hover()
-    await expect(page.getByTestId('about-detail')).toContainText('WhatsApp: [Owner to add]')
+    await expect(page.getByTestId('about-detail')).toContainText('WhatsApp: 97867 55777')
     // Moving away closes it (after the grace period).
     await page.mouse.move(600, 700)
     await expect(aboutPanel).toBeHidden()

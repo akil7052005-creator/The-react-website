@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { APP_NAME } from '../../lib/brand'
+import { CONTACT, contactLinkProps } from '../../lib/contact'
 import { PublicMenu, scrollToSection, usePublicMenu, type Arrival } from './SiteHeader'
 
 function setMeta(attr: 'name' | 'property', key: string, content: string) {
@@ -102,18 +103,18 @@ function Footer() {
         <div>
           <h2>Contact</h2>
           <ul>
-            <li>
-              <i className="bi bi-telephone" aria-hidden="true" /> Phone: [Owner to add]
-            </li>
-            <li>
-              <i className="bi bi-whatsapp" aria-hidden="true" /> WhatsApp: [Owner to add]
-            </li>
-            <li>
-              <i className="bi bi-envelope" aria-hidden="true" /> Email: [Owner to add]
-            </li>
-            <li>
-              <i className="bi bi-geo-alt" aria-hidden="true" /> Address: [Owner to add]
-            </li>
+            {CONTACT.map((c) => (
+              <li key={c.label}>
+                <i className={`bi bi-${c.icon}`} aria-hidden="true" /> {c.label}:{' '}
+                {c.href ? (
+                  <a href={c.href} {...contactLinkProps(c)}>
+                    {c.value}
+                  </a>
+                ) : (
+                  c.value
+                )}
+              </li>
+            ))}
           </ul>
         </div>
         <div>
