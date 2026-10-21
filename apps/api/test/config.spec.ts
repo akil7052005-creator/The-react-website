@@ -32,6 +32,17 @@ describe('production config guard', () => {
     expect(load({})()).toMatchObject({ NODE_ENV: 'production', TRUST_PROXY_HOPS: 1, FEATURE_FACE_RECOGNITION: false })
   })
 
+  it('builds links on https://www.wedmanage.com in production when APP_URL is unset, or still the old address', () => {
+    for (const APP_URL of ['', 'https://weddyzone.vercel.app', 'https://weddyzone.vercel.app/']) {
+      expect(load({ APP_URL })().APP_URL).toBe('https://www.wedmanage.com')
+    }
+    expect(load({ APP_URL: 'https://studio.weddyzone.app/' })().APP_URL).toBe('https://studio.weddyzone.app')
+  })
+
+  it('allows www.wedmanage.com and wedmanage.com by default in production', () => {
+    expect(load({ CORS_ORIGINS: '' })().CORS_ORIGINS).toBe('https://www.wedmanage.com,https://wedmanage.com')
+  })
+
   it.each([
     ['CORS_ORIGINS', 'http://localhost:5173'],
     ['CORS_ORIGINS', 'https://studio.weddyzone.app,http://localhost:5173'],

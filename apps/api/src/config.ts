@@ -6,11 +6,24 @@ const bool = z
   .optional()
   .transform((v) => v === 'true' || v === '1')
 
+/** The live site. Production uses it when APP_URL / CORS_ORIGINS are not set; development stays on localhost. */
+export const LIVE_SITE = 'https://www.wedmanage.com'
+const isProd = () => process.env.NODE_ENV === 'production'
+/** The old address (links sent to customers used it): treated as unset so links never point there again. */
+const RETIRED_HOST = /weddyzone\.vercel\.app/i
+
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().default(4000),
-  APP_URL: z.string().default('http://localhost:5173'),
-  CORS_ORIGINS: z.string().default('http://localhost:5173'),
+  // Public address of the web app: every link we send (selection, album, website, reset password) is built on it.
+  APP_URL: z
+    .string()
+    .optional()
+    .transform((v) => (v?.trim() && !RETIRED_HOST.test(v) ? v.trim().replace(/\/+$/, '') : isProd() ? LIVE_SITE : 'http://localhost:5173')),
+  CORS_ORIGINS: z
+    .string()
+    .optional()
+    .transform((v) => v?.trim() || (isProd() ? `${LIVE_SITE},https://wedmanage.com` : 'http://localhost:5173')),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET must be at least 32 characters'),
   JWT_REFRESH_SECRET: z.string().min(32, 'JWT_REFRESH_SECRET must be at least 32 characters'),

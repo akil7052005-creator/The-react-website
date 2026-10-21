@@ -3,12 +3,14 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import cookieParser from 'cookie-parser'
 import helmet from 'helmet'
 import type { NextFunction, Request, Response } from 'express'
-import { config } from './config'
+import { config, LIVE_SITE } from './config'
 
 /** Shared by main.ts and the integration tests so both run the exact same pipeline. */
 export function configureApp(app: INestApplication) {
   const c = config()
-  const allowed = c.CORS_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean)
+  // In production the live site (with and without www) is always allowed, whatever CORS_ORIGINS lists.
+  const live = c.NODE_ENV === 'production' ? [LIVE_SITE, LIVE_SITE.replace('://www.', '://')] : []
+  const allowed = [...new Set([...c.CORS_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean), ...live])]
 
   app.setGlobalPrefix('api/v1', { exclude: ['api/docs'] })
   app.use(

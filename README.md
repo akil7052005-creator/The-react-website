@@ -108,7 +108,7 @@ Everything that would need a third party sits behind an interface with a simple 
    - Start: `pnpm --filter @weddyzone/api start:prod` (runs `prisma migrate deploy`, the reference-data seed below, then the API)
 3. Environment: everything in `apps/api/.env.example`, with
    - `NODE_ENV=production`, strong random `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` (`openssl rand -hex 32`)
-   - `APP_URL=https://weddyzone.vercel.app`, `CORS_ORIGINS=https://weddyzone.vercel.app`
+   - `APP_URL=https://www.wedmanage.com`, `CORS_ORIGINS=https://www.wedmanage.com,https://wedmanage.com`
    - `COOKIE_SECURE=true`
    - `RESEND_API_KEY` and `MAIL_FROM` (a sender on your Resend-verified domain) so password-reset emails are delivered
    - `TRUST_PROXY_HOPS=2` when Vercel forwards `/api` to the API host (rate limits then see each user's real IP)

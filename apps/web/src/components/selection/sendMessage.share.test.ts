@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isLocalUrl, resolvePublicBase } from '../../lib/env'
+import { choosePublicBase, isLocalUrl, resolvePublicBase } from '../../lib/env'
 import { buildCustomerMessage, buildOptionMessage, shareLink, smsUrl, whatsappMeUrl, whatsappSendUrl, type ShareLinks } from './sendMessage'
 
 describe('Send/Share messages', () => {
@@ -114,5 +114,20 @@ describe('Send/Share messages', () => {
     )
     expect(whatsappMeUrl(null, 'Hi')).toBe('https://wa.me/?text=Hi')
     expect(smsUrl('+91 98400 12345', 'Hi there')).toBe('sms:+919840012345?body=Hi%20there')
+  })
+})
+
+describe('Public address for customer links', () => {
+  it('uses www.wedmanage.com in production when unset or still the old vercel address', () => {
+    for (const v of [undefined, '', 'https://weddyzone.vercel.app', 'https://weddyzone.vercel.app/']) {
+      expect(choosePublicBase(v, false, true)).toBe('https://www.wedmanage.com')
+    }
+    expect(shareLink('tok123', choosePublicBase(undefined, false, true))).toBe('https://www.wedmanage.com/select/tok123')
+  })
+
+  it('keeps a configured address, and in development stays empty rather than guessing', () => {
+    expect(choosePublicBase('https://studio.example.com/', false, true)).toBe('https://studio.example.com')
+    expect(choosePublicBase(undefined, false, false)).toBeNull()
+    expect(choosePublicBase('http://localhost:5173', false, true)).toBeNull() // this computer is never in a customer link
   })
 })

@@ -59,8 +59,19 @@ export function resolvePublicBase(value: string | undefined, allowLan: boolean):
  */
 export const lanLinksAllowed = import.meta.env.DEV && VITE_ALLOW_LAN_LINKS === 'true'
 
-/** The public address customers open (VITE_PUBLIC_APP_URL). Never this computer: null until it is set. */
-const publicBase = resolvePublicBase(VITE_PUBLIC_APP_URL, lanLinksAllowed)
+/** The live site: customer links use it in a production build when VITE_PUBLIC_APP_URL is not set. */
+const LIVE_SITE = 'https://www.wedmanage.com'
+/** The old address: if a host still has it configured it is ignored, so links never point there again. */
+const RETIRED_HOST = /weddyzone\.vercel\.app/i
+
+/** The configured address, or the live site in production when it is unset or still the old one. */
+export function choosePublicBase(value: string | undefined, allowLan: boolean, production: boolean): string | null {
+  const v = clean(value)
+  return resolvePublicBase(v && !RETIRED_HOST.test(v) ? v : production ? LIVE_SITE : undefined, allowLan)
+}
+
+/** The public address customers open (VITE_PUBLIC_APP_URL; the live site in production). Never this computer. */
+const publicBase = choosePublicBase(VITE_PUBLIC_APP_URL, lanLinksAllowed, import.meta.env.PROD)
 
 export const appLinks = {
   android: clean(VITE_ANDROID_APP_URL),
