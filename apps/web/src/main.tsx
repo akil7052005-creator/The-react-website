@@ -16,10 +16,12 @@ import './styles/selection-flow.css'
 import './styles/selection-list.css'
 import './styles/dashboard-layout.css'
 import './styles/public-site.css'
+import './styles/floating-contact.css'
 import { queryClient } from './lib/query'
 import { features } from './lib/env'
 import { RedirectIfAuthed, RequireAdmin, RequireAuth, useMeQuery } from './auth/AuthProvider'
 import { ConfirmProvider } from './components/Modal'
+import { FloatingContactButtons } from './components/FloatingContactButtons'
 import { PageSkeleton } from './components/ui'
 import AppLayout from './layout/AppLayout'
 import AdminLayout from './layout/AdminLayout'
@@ -78,6 +80,7 @@ function Root() {
       <Suspense fallback={<PageSkeleton />}>
         <Outlet />
       </Suspense>
+      <FloatingContactButtons />
     </ConfirmProvider>
   )
 }

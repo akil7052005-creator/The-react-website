@@ -1,0 +1,37 @@
+/* Floating WhatsApp button (bottom-right). New, scoped classes only. */
+.fcb {
+  position: fixed;
+  right: 26px;
+  bottom: 24px;
+  z-index: 900; /* above page content, below modals (10000+) */
+}
+.fcb-btn {
+  display: grid;
+  place-items: center;
+  width: 60px;
+  height: 60px;
+  border: 0;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 30px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  transition: transform 0.15s ease;
+}
+.fcb-btn:hover {
+  transform: scale(1.06);
+}
+.fcb-wa {
+  background: #25d366;
+}
+@media (max-width: 720px) {
+  .fcb {
+    right: 16px;
+    bottom: 16px;
+  }
+  .fcb-btn {
+    width: 52px;
+    height: 52px;
+  }
+}
