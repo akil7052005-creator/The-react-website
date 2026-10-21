@@ -1,17 +1,35 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { CYCLE_LABELS, CYCLE_MONTHS, gstOn, type BillingCycle, type MySubscriptionBannerDto, type PaymentDto, type PlanDto, type SubscriptionDto, type UsageItem, type UsageMeterDto } from '@weddyzone/shared'
+import {
+  CYCLE_LABELS,
+  CYCLE_MONTHS,
+  gstOn,
+  type BillingCycle,
+  type GatewayCheckoutDto,
+  type MySubscriptionBannerDto,
+  type PaymentDto,
+  type PaymentMode,
+  type PlanDto,
+  type SubscriptionDto,
+  type UsageItem,
+  type UsageMeterDto,
+} from '@weddyzone/shared'
 import { toast } from 'sonner'
 import { ME_KEY } from '../auth/AuthProvider'
 import { useConfirm } from '../components/Modal'
 import { formatMoney } from '../utils/format'
 import { api } from './api'
 import { toastError } from './query'
+import { payWithRazorpay } from './razorpay'
 
 export interface SubscriptionOverview {
   subscription: SubscriptionDto
   usage: UsageItem[]
   recentPayments: PaymentDto[]
   testMode: boolean
+  /** mock = simulated, test = Razorpay test keys, live = real money. */
+  paymentMode: PaymentMode
+  /** Auto-renew needs a gateway that charges by itself (not Razorpay yet). */
+  autoRenewAvailable: boolean
 }
 
 export const usePlans = () => useQuery({ queryKey: ['plans'], queryFn: () => api.get<PlanDto[]>('/plans'), staleTime: 5 * 60_000 })
@@ -75,7 +93,16 @@ export function priceFor(plan: PlanDto, cycle: BillingCycle): number | null {
 /** Per-month equivalent of a longer period, for "₹1,800 / month" under a 6-month price. */
 export const perMonth = (price: number, cycle: BillingCycle) => Math.round(price / CYCLE_MONTHS[cycle])
 
-export function TestModeNote() {
+/** A note under a price: simulated payments, or Razorpay's test mode. Nothing when payments are live. */
+export function TestModeNote({ mode }: { mode: PaymentMode | undefined }) {
+  if (mode === 'test') {
+    return (
+      <p className="test-mode-note">
+        <i className="bi bi-cone-striped" /> Razorpay test mode: no real money moves. Pay with a Razorpay test card or the UPI ID success@razorpay.
+      </p>
+    )
+  }
+  if (mode !== 'mock') return null
   return (
     <p className="test-mode-note">
       <i className="bi bi-cone-striped" /> Test mode, no real charge. Payments are simulated until online payments are switched on.
@@ -83,10 +110,33 @@ export function TestModeNote() {
   )
 }
 
-/** Confirm → mock payment → plan applied immediately → toasts and cache refresh. */
+/** "Test mode, no real charge" under a success toast, only while payments are simulated. */
+const simulatedNote = (mode: PaymentMode | undefined) => (mode === 'mock' ? 'Test mode, no real charge' : undefined)
+
+/**
+ * Pays a pending payment in Razorpay Checkout (opened after the confirm dialog has closed, so the
+ * dialog doesn't block it). True once the server has confirmed it with Razorpay and applied it.
+ */
+export async function completeCheckout(checkout: GatewayCheckoutDto, success: string): Promise<boolean> {
+  try {
+    const outcome = await payWithRazorpay(checkout, (reason) => toast.error('Payment failed', { description: `${reason}. You can try again in the payment window.` }))
+    if (outcome.status === 'closed') {
+      toast.info('Payment not completed', { description: 'Nothing was bought. You can pay any time.' })
+      return false
+    }
+    toast.success(success, { description: `Payment received · ${formatMoney(outcome.payment.amountPaise)}` })
+    return true
+  } catch (e) {
+    toastError(e)
+    return false
+  }
+}
+
+/** Confirm → payment (Razorpay Checkout, or simulated) → plan applied → toasts and cache refresh. */
 export function usePlanActions() {
   const qc = useQueryClient()
   const confirm = useConfirm()
+  const mode = useSubscription().data?.paymentMode
 
   const refresh = () => {
     // Also refreshes the plan banner (['subscription', 'banner']).
@@ -106,6 +156,8 @@ export function usePlanActions() {
     const renewal = isRenewal(current, plan, cycle)
     const verb = renewal ? 'Renew' : !current || current.isTrial || current.readOnly ? 'Subscribe to' : price >= currentPrice ? 'Upgrade to' : 'Switch to'
     const gst = gstOn(price)
+    const done = renewal ? `${plan.name} renewed` : `You're now on the ${plan.name} plan`
+    let pending: GatewayCheckoutDto | null = null
     return confirm({
       title: `${verb} ${plan.name}?`,
       icon: 'patch-check',
@@ -119,21 +171,26 @@ export function usePlanActions() {
               ? `The ${plan.name} plan starts straight away; the unused days of your current plan are taken off the price`
               : `The ${plan.name} plan starts as soon as the payment is confirmed`}
           {plan.limits.includedCredits ? ` and includes ${plan.limits.includedCredits.toLocaleString('en-IN')} WhatsApp credits` : ''}.
-          <TestModeNote />
+          <TestModeNote mode={mode} />
         </>
       ),
       confirmLabel: `${verb} ${plan.name}`,
       onConfirm: async () => {
         try {
-          const res = await api.post<{ checkout: unknown }>('/subscription/change', { planCode: plan.code, cycle, couponCode })
-          if (res.checkout) toast.info('Complete the payment to activate your plan')
-          else toast.success(renewal ? `${plan.name} renewed` : `You're now on the ${plan.name} plan`, { description: 'Test mode, no real charge' })
+          const res = await api.post<{ checkout: GatewayCheckoutDto | null }>('/subscription/change', { planCode: plan.code, cycle, couponCode })
+          pending = res.checkout
+          if (!pending) toast.success(done, { description: simulatedNote(mode) })
           refresh()
         } catch (e) {
           toastError(e)
           throw e
         }
       },
+    }).then(async (ok) => {
+      if (!ok || !pending) return ok
+      const paid = await completeCheckout(pending, done)
+      refresh()
+      return paid
     })
   }
 
@@ -162,6 +219,8 @@ export function usePlanActions() {
   /** "Buy +5 events" for this month. */
   const buyAddon = (addon: { events: number; pricePaise: number }) => {
     const gst = gstOn(addon.pricePaise)
+    const done = `+${addon.events} events added for this month`
+    let pending: GatewayCheckoutDto | null = null
     return confirm({
       title: `Buy +${addon.events} events?`,
       icon: 'plus-circle',
@@ -169,20 +228,26 @@ export function usePlanActions() {
         <>
           You'll pay <strong>{formatMoney(addon.pricePaise + gst)}</strong> ({formatMoney(addon.pricePaise)} + {formatMoney(gst)} GST). The extra events are for this month only: unused ones
           don't carry over.
-          <TestModeNote />
+          <TestModeNote mode={mode} />
         </>
       ),
       confirmLabel: `Buy +${addon.events} events`,
       onConfirm: async () => {
         try {
-          await api.post('/subscription/addon-events')
-          toast.success(`+${addon.events} events added for this month`, { description: 'Test mode, no real charge' })
+          const res = await api.post<{ checkout: GatewayCheckoutDto | null }>('/subscription/addon-events')
+          pending = res.checkout
+          if (!pending) toast.success(done, { description: simulatedNote(mode) })
           refresh()
         } catch (e) {
           toastError(e)
           throw e
         }
       },
+    }).then(async (ok) => {
+      if (!ok || !pending) return ok
+      const paid = await completeCheckout(pending, done)
+      refresh()
+      return paid
     })
   }
 

@@ -98,6 +98,14 @@ export const buyCreditsSchema = z.object({
 })
 export type BuyCreditsInput = z.input<typeof buyCreditsSchema>
 
+/** Razorpay Checkout's success response, sent back so the server can confirm the payment. */
+export const verifyPaymentSchema = z.object({
+  razorpayPaymentId: z.string().trim().min(1).max(64),
+  razorpayOrderId: z.string().trim().min(1).max(64),
+  razorpaySignature: z.string().trim().regex(/^[a-f0-9]{64}$/i, 'Invalid signature'),
+})
+export type VerifyPaymentInput = z.input<typeof verifyPaymentSchema>
+
 // SUPER_ADMIN plan editing
 export const planLimitsSchema = z.object({
   eventsPerMonth: z.number().int().min(0).nullable(),

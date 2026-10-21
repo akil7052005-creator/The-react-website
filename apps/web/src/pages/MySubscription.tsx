@@ -104,7 +104,8 @@ function MySubscription() {
           </div>
           {!sub.isTrial && !ended && (
             <div style={{ marginTop: 14, display: 'grid', gap: 10 }}>
-              {!sub.cancelAtPeriodEnd && sub.status !== 'GRACE' && (
+              {/* Razorpay is paid each period (no auto-renew mandates yet): we remind before the plan ends. */}
+              {q.data.autoRenewAvailable && !sub.cancelAtPeriodEnd && sub.status !== 'GRACE' && (
                 <div className="auto-renew-light">
                   <Toggle checked={sub.autoRenew} onChange={() => setAutoRenew(!sub.autoRenew)} label="Auto-renew at the end of each period" />
                 </div>

@@ -416,9 +416,29 @@ export interface PlatformInvoiceDto {
   paymentRef: string | null
 }
 
+/** How payments are taken: mock = simulated (no gateway), test = Razorpay test keys (no real money), live = real money. */
+export type PaymentMode = 'mock' | 'test' | 'live'
+
+/** What the browser needs to open Razorpay Checkout for a pending payment. */
+export interface GatewayCheckoutDto {
+  provider: 'razorpay'
+  keyId: string
+  orderId: string
+  /** Our payment id: POST /subscription/payments/:id/verify after Checkout succeeds. */
+  paymentId: string
+  amountPaise: number
+  currency: 'INR'
+  name: string
+  description: string
+  prefill: { name: string; email: string; contact: string }
+}
+
 export interface CheckoutResultDto {
   payment: PaymentDto
   testMode: boolean
+  paymentMode: PaymentMode
+  /** Set when the payment still has to be completed in the gateway's Checkout. */
+  checkout: GatewayCheckoutDto | null
 }
 
 export interface WhatsAppMessageDto {

@@ -14,3 +14,7 @@ process.env.JWT_REFRESH_SECRET ??= 'test-refresh-secret-test-refresh-secret-12'
 // Payment webhooks are signed with this in the tests; the hourly job is run by hand, never on a timer.
 process.env.PAYMENT_WEBHOOK_SECRET ??= 'test-webhook-secret'
 process.env.JOBS_ENABLED = 'false'
+// Simulated payments unless a test swaps in a fake Razorpay (keys in a local .env must not reach the tests).
+process.env.RAZORPAY_KEY_ID = ''
+process.env.RAZORPAY_KEY_SECRET = ''
+process.env.RAZORPAY_WEBHOOK_SECRET = ''

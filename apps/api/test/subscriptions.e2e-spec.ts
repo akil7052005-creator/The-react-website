@@ -209,14 +209,15 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
       expect(await prisma.webhookEvent.count({ where: { type: 'payment.captured' } })).toBeGreaterThanOrEqual(1)
     })
 
-    it('marks a failed payment, alerts the studio with a retry link and the admin', async () => {
-      const order = await pendingOrder(A.studioId, 'ALL_ACCESS', 'YEARLY')
+    it('marks a failed renewal payment, alerts the studio with a retry link and the admin', async () => {
+      // Paying for the current plan again (a renewal): a failure puts the plan at risk.
+      const order = await pendingOrder(A.studioId, 'PRO', 'YEARLY')
       await hook({ event: 'payment.failed', payload: { payment: { entity: { id: 'pay_fail_1', order_id: order.gatewayOrderId, amount: order.amount, error_description: 'Card declined' } } } }, { eventId: 'evt_fail_1' }).expect(200)
       expect((await prisma.payment.findUniqueOrThrow({ where: { id: order.id } })).status).toBe('FAILED')
       const sub = await prisma.subscription.findUniqueOrThrow({ where: { studioId: A.studioId } })
       expect(sub.status).toBe('PAYMENT_FAILED')
       const studioAlert = await prisma.notification.findFirstOrThrow({ where: { studioId: A.studioId, type: 'PAYMENT_FAILED', channel: 'IN_APP' } })
-      expect(studioAlert.link).toBe('/subscriptions?renew=ALL_ACCESS&cycle=YEARLY')
+      expect(studioAlert.link).toBe('/subscriptions?renew=PRO&cycle=YEARLY')
       expect(await prisma.notification.count({ where: { recipientType: 'ADMIN', type: 'PAYMENT_FAILED' } })).toBe(2)
       const failedTab = await admin.get('/api/v1/admin/subscriptions').query({ tab: 'failed' }).expect(200)
       expect(failedTab.body.data.map((r: { studio: { name: string } }) => r.studio.name)).toContain('StudioRed')

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common'
 import type { Payment, PaymentPurpose, Prisma } from '@prisma/client'
-import type { PaymentDto } from '@weddyzone/shared'
+import type { PaymentDto, PaymentMode } from '@weddyzone/shared'
 import { randomToken } from '../common/util'
 import type { Tx } from '../prisma/prisma.service'
 
@@ -27,13 +27,25 @@ export interface GatewayWebhook {
  * browser: the API opens an order (`createOrder`) and the plan is applied only when the
  * gateway's signed webhook confirms the payment (POST /webhooks/payments).
  *
- * v1 runs MockPaymentService ("Test mode, no real charge"): it confirms every order at once by
- * handing a gateway-format webhook to the same handler. A Razorpay implementation returns a real
- * order id here instead and Razorpay calls the webhook.
+ * Without Razorpay keys MockPaymentService runs ("Test mode, no real charge"): it confirms every
+ * order at once by handing a gateway-format webhook to the same handler. RazorpayPaymentService
+ * returns a real order id instead: the studio pays in Razorpay Checkout, and Razorpay's webhook (or
+ * the browser's signed Checkout response, checked with Razorpay) confirms it.
  */
 export abstract class PaymentService {
+  /** No real money moves (simulated payments, or the gateway's test keys). */
   abstract readonly testMode: boolean
   abstract readonly provider: string
+  abstract readonly mode: PaymentMode
+  /** The gateway can charge each period by itself (auto-renew mandates). */
+  abstract readonly supportsAutoRenew: boolean
+  /** The public key the browser opens Checkout with; null when payments are simulated. */
+  abstract readonly checkoutKeyId: string | null
+  /** Simulated payments complete at once; a real gateway needs its Checkout first. */
+  get instant(): boolean {
+    return this.mode === 'mock'
+  }
+  /** Simulated only: takes the money at once (credit packs, add-ons). */
   abstract charge(tx: Tx, studioId: string, req: ChargeRequest): Promise<Payment>
   /** Gateway order id for a pending plan payment. */
   abstract createOrder(payment: { id: string; amount: number }): Promise<string>
@@ -44,12 +56,20 @@ export abstract class PaymentService {
   abstract simulatedCapture(payment: Payment): GatewayWebhook | null
   /** Test mode: the webhook for an automatic renewal charge. Null with a real gateway. */
   abstract simulatedRenewal(gatewaySubscriptionId: string, amountPaise: number): GatewayWebhook | null
+  /**
+   * A real gateway: the payment the browser's Checkout reported, once its signature checks out and
+   * the gateway confirms it was captured, as the webhook the gateway sends for it. Null otherwise.
+   */
+  abstract confirmCheckout(orderId: string, gatewayPaymentId: string, signature: string): Promise<GatewayWebhook | null>
 }
 
 @Injectable()
 export class MockPaymentService extends PaymentService {
   readonly testMode = true
   readonly provider = 'mock'
+  readonly mode = 'mock' as const
+  readonly supportsAutoRenew = true
+  readonly checkoutKeyId = null
 
   async charge(tx: Tx, studioId: string, req: ChargeRequest): Promise<Payment> {
     return tx.payment.create({
@@ -83,6 +103,10 @@ export class MockPaymentService extends PaymentService {
       payload: { payment: { entity: { id: `pay_mock_${randomToken(12)}`, order_id: payment.gatewayOrderId, amount: payment.amount, status: 'captured' } } },
       created_at: Math.floor(Date.now() / 1000),
     }
+  }
+
+  async confirmCheckout(): Promise<null> {
+    return null
   }
 
   simulatedRenewal(gatewaySubscriptionId: string, amountPaise: number): GatewayWebhook {

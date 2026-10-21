@@ -6,8 +6,9 @@ import { FilesService } from './files.service'
 import { LedgerService } from './ledger.service'
 import { MessagingService, WaMeMessagingService } from './messaging.service'
 import { NotificationsService } from './notifications.service'
-import { MockPaymentService, PaymentService } from './payment.service'
+import { PaymentService } from './payment.service'
 import { PlansService } from './plans.service'
+import { createPaymentService } from './razorpay-payment.service'
 import { SettingsService } from './settings.service'
 import { StudioMapper } from './studio.mapper'
 import { UsageService } from './usage.service'
@@ -26,7 +27,7 @@ import { UsageService } from './usage.service'
     StudioMapper,
     LedgerService,
     { provide: MessagingService, useClass: WaMeMessagingService },
-    { provide: PaymentService, useClass: MockPaymentService },
+    { provide: PaymentService, useFactory: createPaymentService },
   ],
   exports: [AuditService, MailService, StorageService, FilesService, NotificationsService, SettingsService, PlansService, UsageService, StudioMapper, LedgerService, MessagingService, PaymentService],
 })

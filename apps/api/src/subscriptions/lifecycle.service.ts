@@ -1,10 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common'
+import { Injectable, Logger, type OnApplicationBootstrap } from '@nestjs/common'
 import { Prisma, type BillingCycle, type Payment, type Plan, type Subscription, type SubscriptionEventType } from '@prisma/client'
 import {
   addCycle,
   addDays,
   amountInWords,
   computeStatus,
+  CREDIT_PACKS,
   financialYearStart,
   gstOn,
   istDate,
@@ -13,12 +14,14 @@ import {
   REFERRAL_REWARD_PAISE,
   type PlanCode,
   type ReminderChannel,
+  type VerifyPaymentInput,
 } from '@weddyzone/shared'
 import { CYCLE_LABELS, CYCLE_MONTHS, proratedCredit } from '@weddyzone/shared'
 import { badRequest, conflict, notFound } from '../common/errors'
 import { randomToken } from '../common/util'
 import { config } from '../config'
 import { LedgerService } from '../core/ledger.service'
+import { NotificationsService } from '../core/notifications.service'
 import { type GatewayWebhook, PaymentService } from '../core/payment.service'
 import { PlansService, priceFor, stateOf } from '../core/plans.service'
 import { SettingsService } from '../core/settings.service'
@@ -47,7 +50,7 @@ const listPrice = (plan: Plan, cycle: BillingCycle): number | null => priceFor(p
  * and queues its alerts in the same transaction; alerts are dispatched after commit.
  */
 @Injectable()
-export class SubscriptionLifecycleService {
+export class SubscriptionLifecycleService implements OnApplicationBootstrap {
   private readonly logger = new Logger('Subscriptions')
 
   constructor(
@@ -57,7 +60,24 @@ export class SubscriptionLifecycleService {
     private readonly payments: PaymentService,
     private readonly ledger: LedgerService,
     private readonly alerts: AlertsService,
+    private readonly notifications: NotificationsService,
   ) {}
+
+  /**
+   * With a real gateway, auto-renew switched on while payments were simulated can't charge anyone:
+   * turn it off (the studio then gets the usual reminders and pays each period).
+   */
+  async onApplicationBootstrap() {
+    if (this.payments.supportsAutoRenew) return
+    const simulated = await this.prisma.subscription.findMany({ where: { gatewaySubscriptionId: { startsWith: 'sub_mock_' } }, select: { id: true } })
+    for (const { id } of simulated) {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.subscription.update({ where: { id }, data: { autoRenew: false, gatewaySubscriptionId: null } })
+        await this.event(tx, id, 'AUTO_RENEW_CHANGED', { note: 'Auto-renew turned off: online payments are on, and each period is paid in Razorpay Checkout' })
+      })
+    }
+    if (simulated.length) this.logger.log(`Turned off simulated auto-renew for ${simulated.length} subscription(s)`)
+  }
 
   // ------------------------------------------------------------------ checkout
 
@@ -94,6 +114,8 @@ export class SubscriptionLifecycleService {
     const taxable = Math.max(100, base - discount - prorationPaise)
     const gst = gstOn(taxable)
 
+    // An earlier plan checkout left unpaid is closed (if it's paid after all, the webhook still applies it).
+    await this.prisma.payment.updateMany({ where: { studioId, purpose: 'SUBSCRIPTION', status: 'PENDING' }, data: { status: 'FAILED', failureReason: 'Not completed' } })
     let payment = await this.prisma.payment.create({
       data: {
         studioId,
@@ -109,7 +131,10 @@ export class SubscriptionLifecycleService {
         meta: { planCode, cycle, previousPlan: eff.plan.code, basePaise: base, discountPaise: discount, prorationPaise, couponId: coupon?.id ?? null },
       },
     })
-    const orderId = await this.payments.createOrder(payment)
+    const orderId = await this.payments.createOrder(payment).catch(async (e: unknown) => {
+      await this.prisma.payment.update({ where: { id: payment.id }, data: { status: 'FAILED', failureReason: 'Payment gateway unavailable' } })
+      throw e
+    })
     payment = await this.prisma.payment.update({ where: { id: payment.id }, data: { gatewayOrderId: orderId, providerRef: orderId } })
 
     const simulated = this.payments.simulatedCapture(payment)
@@ -118,6 +143,21 @@ export class SubscriptionLifecycleService {
       payment = await this.prisma.payment.findUniqueOrThrow({ where: { id: payment.id } })
     }
     return payment
+  }
+
+  /**
+   * The browser's Checkout says it's paid: check the signature and the payment with the gateway,
+   * then apply it through the same handler as the webhook (whichever comes first wins; the other is a no-op).
+   */
+  async confirmCheckout(studioId: string, paymentId: string, input: VerifyPaymentInput): Promise<Payment> {
+    const payment = await this.prisma.payment.findFirst({ where: { id: paymentId, studioId } })
+    if (!payment) throw notFound('Payment')
+    if (payment.status === 'SUCCESS') return payment
+    if (!payment.gatewayOrderId || payment.gatewayOrderId !== input.razorpayOrderId) throw badRequest('This payment does not match the order')
+    const body = await this.payments.confirmCheckout(payment.gatewayOrderId, input.razorpayPaymentId, input.razorpaySignature)
+    if (!body) throw badRequest("We couldn't confirm this payment yet. If money was taken, it will be confirmed automatically in a few minutes.")
+    await this.processWebhook(`checkout_${input.razorpayPaymentId}`.slice(0, 200), body)
+    return this.prisma.payment.findUniqueOrThrow({ where: { id: payment.id } })
   }
 
   // ------------------------------------------------------------------ webhooks
@@ -203,9 +243,13 @@ export class SubscriptionLifecycleService {
 
   /** A paid order: create or renew the subscription, issue the GST invoice, alert studio and admin. */
   private async applyCapture(tx: Tx, orderId: string, gatewayPaymentId: string, amount: number, queued: QueuedAlert[]): Promise<string> {
+    // The Checkout confirmation and the webhook can arrive together: one applies it, the other waits and sees it paid.
+    await tx.$queryRaw`SELECT id FROM payments WHERE gateway_order_id = ${orderId} FOR UPDATE`
     const payment = await tx.payment.findUnique({ where: { gatewayOrderId: orderId }, include: { plan: true } })
-    if (!payment || payment.purpose !== 'SUBSCRIPTION' || !payment.plan || !payment.cycle) return 'unknown_order'
+    if (!payment) return 'unknown_order'
     if (payment.status === 'SUCCESS') return 'already_paid'
+    if (payment.purpose !== 'SUBSCRIPTION' && amount === payment.amount) return this.applyPurchase(tx, payment, gatewayPaymentId)
+    if (payment.purpose === 'SUBSCRIPTION' && (!payment.plan || !payment.cycle)) return 'unknown_order'
     if (amount !== payment.amount) {
       await tx.payment.update({ where: { id: payment.id }, data: { status: 'FAILED', failureReason: `Amount mismatch: gateway ${amount}, expected ${payment.amount}` } })
       queued.push(
@@ -226,6 +270,7 @@ export class SubscriptionLifecycleService {
       return 'amount_mismatch'
     }
 
+    if (payment.purpose !== 'SUBSCRIPTION' || !payment.plan || !payment.cycle) return 'unknown_order'
     const now = new Date()
     const plan = payment.plan
     const cycle = payment.cycle
@@ -280,7 +325,7 @@ export class SubscriptionLifecycleService {
     const invoiceNumber = await this.nextInvoiceNumber(tx, now)
     const paid = await tx.payment.update({
       where: { id: payment.id },
-      data: { status: 'SUCCESS', gatewayPaymentId, paidAt: now, periodStart: start, periodEnd: end, invoiceNumber, subscriptionId: sub.id },
+      data: { status: 'SUCCESS', gatewayPaymentId, paidAt: now, periodStart: start, periodEnd: end, invoiceNumber, subscriptionId: sub.id, failureReason: null },
     })
     const couponId = (payment.meta as { couponId?: string | null } | null)?.couponId
     if (couponId) await tx.coupon.update({ where: { id: couponId }, data: { redeemedAt: now, paymentId: payment.id } })
@@ -329,6 +374,26 @@ export class SubscriptionLifecycleService {
       )),
     )
     return 'activated'
+  }
+
+  /** A paid credit pack or "+N events" add-on: mark it paid and add what was bought. */
+  private async applyPurchase(tx: Tx, payment: Payment, gatewayPaymentId: string): Promise<string> {
+    await tx.payment.update({ where: { id: payment.id }, data: { status: 'SUCCESS', gatewayPaymentId, paidAt: new Date(), failureReason: null } })
+    const meta = (payment.meta ?? {}) as { packCode?: string; credits?: number; events?: number; windowStart?: string }
+    if (payment.purpose === 'CREDIT_PACK') {
+      const credits = meta.credits ?? CREDIT_PACKS.find((p) => p.code === meta.packCode)?.credits ?? 0
+      await this.ledger.applyCredits(tx, payment.studioId, credits, 'PURCHASE', { type: 'payment', id: payment.id })
+      await this.notifications.notify(
+        payment.studioId,
+        { type: 'CREDITS_ADDED', title: `${credits.toLocaleString('en-IN')} credits`, body: 'added to your WhatsApp balance', link: '/whatsapp-credit', icon: 'whatsapp' },
+        tx,
+      )
+      return 'credits_added'
+    }
+    const events = meta.events ?? 0
+    await tx.usageAddon.create({ data: { studioId: payment.studioId, windowStart: new Date(meta.windowStart ?? payment.createdAt), events, paymentId: payment.id } })
+    await this.notifications.notify(payment.studioId, { type: 'PLAN_CHANGED', title: `+${events} events`, body: 'added for this month', link: '/my-subscription', icon: 'plus-circle' }, tx)
+    return 'addon_added'
   }
 
   private invoiceEmail(studioName: string, p: Payment, label: string, start: Date, end: Date): string {
@@ -436,6 +501,11 @@ export class SubscriptionLifecycleService {
   ): Promise<string> {
     const payment = orderId ? await tx.payment.findUnique({ where: { gatewayOrderId: orderId }, include: { plan: true } }) : null
     if (payment?.status === 'SUCCESS') return 'already_paid'
+    // A credit pack or add-on: the studio saw it fail in Checkout and can try again.
+    if (payment && payment.purpose !== 'SUBSCRIPTION') {
+      await tx.payment.update({ where: { id: payment.id }, data: { status: 'FAILED', failureReason: reason.slice(0, 300) } })
+      return 'payment_failed'
+    }
     const sub = payment?.subscriptionId
       ? await tx.subscription.findUnique({ where: { id: payment.subscriptionId }, include: { plan: true } })
       : gatewaySubscriptionId
@@ -444,21 +514,29 @@ export class SubscriptionLifecycleService {
     if (!sub) return 'unknown_payment'
     const now = new Date()
     if (payment) await tx.payment.update({ where: { id: payment.id }, data: { status: 'FAILED', failureReason: reason.slice(0, 300) } })
-    const settings = await this.settings.alerts()
-    const status = computeStatus({ ...stateOf(sub), lastPaymentFailedAt: now }, now, settings)
-    await tx.subscription.update({ where: { id: sub.id }, data: { lastPaymentFailedAt: now, status } })
+    // Only a failed renewal (auto-renew charge, or paying for the current plan again) puts the plan at
+    // risk. A failed upgrade or first purchase leaves the studio's plan as it is.
+    const renewing = !payment || (!sub.isTrial && payment.planId === sub.planId && payment.cycle === sub.cycle)
+    if (renewing) {
+      const settings = await this.settings.alerts()
+      const status = computeStatus({ ...stateOf(sub), lastPaymentFailedAt: now }, now, settings)
+      await tx.subscription.update({ where: { id: sub.id }, data: { lastPaymentFailedAt: now, status } })
+    }
 
     const plan = payment?.plan ?? sub.plan
     const cycle = payment?.cycle ?? sub.cycle
     await this.event(tx, sub.id, 'PAYMENT_FAILED', { toPlan: plan.name, amount: payment?.amount ?? null, note: reason.slice(0, 300) })
     const studio = await tx.studio.findUniqueOrThrow({ where: { id: sub.studioId } })
     const retry = renewPath(plan.code, cycle)
+    // One alert per order: Checkout lets the studio retry, and each failed attempt sends a webhook.
+    const dedupe = `payfail:${orderId ?? gatewayPaymentId}`
     queued.push(
       ...(await this.alerts.queue(
         {
           to: { type: 'STUDIO', studioId: sub.studioId },
-          channels: ['IN_APP', 'EMAIL', 'WHATSAPP'],
-          dedupe: `payfail:${gatewayPaymentId}`,
+          // A failed upgrade was just seen in Checkout: a note in the app is enough.
+          channels: renewing ? ['IN_APP', 'EMAIL', 'WHATSAPP'] : ['IN_APP'],
+          dedupe,
           type: 'PAYMENT_FAILED',
           title: 'Payment failed',
           message: `Your payment for the ${plan.name} plan didn't go through (${reason}). Please try again.`,
@@ -473,7 +551,7 @@ export class SubscriptionLifecycleService {
         {
           to: { type: 'ADMIN' },
           channels: ['IN_APP', 'EMAIL'],
-          dedupe: `payfail:${gatewayPaymentId}`,
+          dedupe,
           type: 'PAYMENT_FAILED',
           title: `Payment failed: ${studio.name}`,
           message: `${plan.name} (${cycleLabel(cycle)})${payment ? ` · ${inr(payment.amount - payment.gst)} + GST` : ''} · ${reason}`,
@@ -578,6 +656,7 @@ export class SubscriptionLifecycleService {
     const s = eff.subscription
     if (autoRenew && (s.isTrial || eff.readOnly)) throw conflict('Choose a paid plan first, then turn on auto-renew.')
     if (autoRenew && s.cancelAtPeriodEnd) throw conflict('Resume your plan first, then turn on auto-renew.')
+    if (autoRenew && !this.payments.supportsAutoRenew) throw conflict("Automatic renewal isn't available yet. We'll remind you before your plan ends.")
     if (s.autoRenew === autoRenew) return
     let gatewaySubscriptionId = s.gatewaySubscriptionId
     if (autoRenew && !gatewaySubscriptionId) gatewaySubscriptionId = await this.payments.createGatewaySubscription({ id: s.id, planCode: eff.plan.code, cycle: s.cycle })

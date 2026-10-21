@@ -50,7 +50,7 @@ export class WebhooksController {
     @Headers('x-razorpay-signature') signature: string | undefined,
     @Headers('x-razorpay-event-id') eventId: string | undefined,
   ) {
-    const secret = config().PAYMENT_WEBHOOK_SECRET
+    const secret = config().RAZORPAY_WEBHOOK_SECRET || config().PAYMENT_WEBHOOK_SECRET
     if (!secret) throw new AppError(HttpStatus.SERVICE_UNAVAILABLE, 'WEBHOOKS_DISABLED', 'Payment webhooks are not configured')
     const raw = req.rawBody
     if (!raw?.length) throw badRequest('Empty webhook body')

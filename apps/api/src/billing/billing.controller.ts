@@ -14,6 +14,7 @@ import {
   recordPaymentSchema,
   type ListQuery,
   type PlatformInvoiceDto,
+  verifyPaymentSchema,
 } from '@weddyzone/shared'
 import { z } from 'zod'
 import { Public, StudioId } from '../auth/auth.decorators'
@@ -21,6 +22,7 @@ import { notFound } from '../common/errors'
 import { paginate, skipTake, startOfMonthUtc } from '../common/util'
 import { ApiListQuery, ApiZodBody, zod } from '../common/zod'
 import { messageDto } from '../core/messaging.service'
+import { PaymentService } from '../core/payment.service'
 import { PlansService } from '../core/plans.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { InvoicesService } from './invoices.service'
@@ -81,6 +83,14 @@ export class PlansController {
     return this.subs.banner(studioId)
   }
 
+  /** Razorpay Checkout finished: the server checks it with Razorpay and applies the payment. */
+  @Post('subscription/payments/:id/verify')
+  @HttpCode(200)
+  @ApiZodBody(verifyPaymentSchema)
+  verify(@StudioId() studioId: string, @Param('id', ParseUUIDPipe) id: string, @Body(zod(verifyPaymentSchema)) body: z.output<typeof verifyPaymentSchema>) {
+    return this.subs.verifyPayment(studioId, id, body)
+  }
+
   /** Wedmanage's GST tax invoice for one of the studio's plan payments. */
   @Get('subscription/payments/:id/invoice')
   async invoice(@StudioId() studioId: string, @Param('id', ParseUUIDPipe) id: string): Promise<PlatformInvoiceDto> {
@@ -119,6 +129,7 @@ export class CreditsController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly subs: SubscriptionsService,
+    private readonly payments: PaymentService,
   ) {}
 
   @Get()
@@ -130,7 +141,7 @@ export class CreditsController {
         _sum: { delta: true },
       }),
     ])
-    return { balance: studio.creditBalance, spentThisMonth: Math.abs(spent._sum.delta ?? 0), packs: CREDIT_PACKS, testMode: true }
+    return { balance: studio.creditBalance, spentThisMonth: Math.abs(spent._sum.delta ?? 0), packs: CREDIT_PACKS, testMode: this.payments.testMode, paymentMode: this.payments.mode }
   }
 
   @Post('purchase')

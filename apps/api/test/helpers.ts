@@ -7,6 +7,7 @@ import { seedReference } from '../prisma/seed/reference'
 import { AppModule } from '../src/app.module'
 import { configureApp } from '../src/app.setup'
 import { gradientPng } from '../src/common/png'
+import { PaymentService } from '../src/core/payment.service'
 import { MailService } from '../src/infra/mail.service'
 import { PrismaService } from '../src/prisma/prisma.service'
 
@@ -14,8 +15,11 @@ export type Agent = TestAgent
 
 let counter = 0
 
-export async function createTestApp() {
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile()
+/** `payments`: a payment gateway to use instead of the simulated one (e.g. Razorpay with a fake API). */
+export async function createTestApp(opts: { payments?: PaymentService } = {}) {
+  const builder = Test.createTestingModule({ imports: [AppModule] })
+  if (opts.payments) builder.overrideProvider(PaymentService).useValue(opts.payments)
+  const moduleRef = await builder.compile()
   const app = moduleRef.createNestApplication({ logger: ['error'], rawBody: true })
   configureApp(app)
   await app.init()

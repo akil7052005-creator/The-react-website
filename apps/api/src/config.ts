@@ -67,6 +67,13 @@ const schema = z.object({
   // Payment gateway webhooks (Razorpay format): HMAC-SHA256 secret set in the gateway dashboard.
   // Without it POST /webhooks/payments refuses every call (test-mode purchases don't need it).
   PAYMENT_WEBHOOK_SECRET: z.string().optional(),
+  // Same secret under its Razorpay name; this one wins when both are set.
+  RAZORPAY_WEBHOOK_SECRET: z.string().trim().optional(),
+  // Razorpay API keys (Dashboard → Account & Settings → API keys). With both set, plans, credit packs
+  // and add-ons are paid in Razorpay Checkout (rzp_test_… = test mode, no real money); without them
+  // payments are simulated. Never commit the secret.
+  RAZORPAY_KEY_ID: z.string().trim().optional(),
+  RAZORPAY_KEY_SECRET: z.string().trim().optional(),
   // Extra addresses for admin alert emails and the daily digest (comma-separated). Every platform
   // admin's own email gets them too.
   ADMIN_ALERT_EMAILS: z.string().default(''),

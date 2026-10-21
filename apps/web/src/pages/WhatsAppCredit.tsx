@@ -4,7 +4,9 @@ import {
   LOW_CREDIT_THRESHOLD,
   MESSAGE_TEMPLATE_KEYS,
   MESSAGE_TYPE_LABELS,
+  type GatewayCheckoutDto,
   type Paginated,
+  type PaymentMode,
   type WhatsAppMessageDto,
 } from '@weddyzone/shared'
 import { useState } from 'react'
@@ -28,7 +30,7 @@ import { formatDateTime, formatMoney, formatNumber } from '../utils/format'
 import { featureInfo } from '../data/featureInfo'
 import { useDebouncedUrlSearch, useUrlState } from '../hooks/useUrlState'
 import { api } from '../lib/api'
-import { TestModeNote } from '../lib/billing'
+import { completeCheckout, TestModeNote } from '../lib/billing'
 import { toastError } from '../lib/query'
 import { syncCredits } from '../lib/whatsapp'
 
@@ -57,6 +59,7 @@ interface CreditsInfo {
   balance: number
   spentThisMonth: number
   testMode: boolean
+  paymentMode: PaymentMode
 }
 
 function WhatsAppCredit() {
@@ -76,30 +79,44 @@ function WhatsAppCredit() {
   })
   const balance = info.data?.balance
 
-  const buy = () =>
-    confirm({
+  const mode = info.data?.paymentMode
+  const buy = () => {
+    let pending: GatewayCheckoutDto | null = null
+    const refresh = () => {
+      qc.invalidateQueries({ queryKey: ['credits'] })
+      qc.invalidateQueries({ queryKey: ['subscription'] })
+    }
+    return confirm({
       title: `Buy ${formatNumber(pack.credits)} credits?`,
       icon: 'whatsapp',
       message: (
         <>
           You'll pay <strong>{formatMoney(pack.pricePaise)}</strong> (+18% GST) and the credits are added to your balance immediately. Credits never expire.
-          <TestModeNote />
+          <TestModeNote mode={mode} />
         </>
       ),
       confirmLabel: `Buy for ${formatMoney(pack.pricePaise)}`,
       onConfirm: async () => {
         try {
-          const r = await api.post<{ creditBalance: number }>('/credits/purchase', { packCode: pack.code })
-          syncCredits(qc, r.creditBalance)
-          qc.invalidateQueries({ queryKey: ['credits'] })
-          qc.invalidateQueries({ queryKey: ['subscription'] })
-          toast.success(`${formatNumber(pack.credits)} credits added`, { description: `New balance: ${formatNumber(r.creditBalance)} · Test mode, no real charge` })
+          const r = await api.post<{ creditBalance: number; checkout: GatewayCheckoutDto | null }>('/credits/purchase', { packCode: pack.code })
+          pending = r.checkout
+          if (!pending) {
+            syncCredits(qc, r.creditBalance)
+            toast.success(`${formatNumber(pack.credits)} credits added`, { description: `New balance: ${formatNumber(r.creditBalance)}${mode === 'mock' ? ' · Test mode, no real charge' : ''}` })
+          }
+          refresh()
         } catch (e) {
           toastError(e)
           throw e
         }
       },
+    }).then(async (ok) => {
+      if (!ok || !pending) return ok
+      const paid = await completeCheckout(pending, `${formatNumber(pack.credits)} credits added`)
+      refresh()
+      return paid
     })
+  }
 
   const rows = log.data?.data ?? []
 
@@ -186,9 +203,11 @@ function WhatsAppCredit() {
             ))}
           </div>
           <div className="form-foot">
-            <span className="pill pill-warning" title="Payments are simulated">
-              <i className="bi bi-cone-striped" /> Test mode
-            </span>
+            {mode && mode !== 'live' && (
+              <span className="pill pill-warning" title={mode === 'test' ? 'Razorpay test mode: no real money' : 'Payments are simulated'}>
+                <i className="bi bi-cone-striped" /> Test mode
+              </span>
+            )}
             <button className="btn btn-primary btn-lg" onClick={buy}>
               <i className="bi bi-lightning-charge-fill" /> Buy {formatNumber(pack.credits)} Credits for {formatMoney(pack.pricePaise)}
             </button>
