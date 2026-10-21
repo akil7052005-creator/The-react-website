@@ -61,8 +61,8 @@ export const lanLinksAllowed = import.meta.env.DEV && VITE_ALLOW_LAN_LINKS === '
 
 /** The live site: customer links use it in a production build when VITE_PUBLIC_APP_URL is not set. */
 const LIVE_SITE = 'https://www.wedmanage.com'
-/** The old address: if a host still has it configured it is ignored, so links never point there again. */
-const RETIRED_HOST = /weddyzone\.vercel\.app/i
+/** A Vercel preview/default address is never a customer link: if a host still has one configured it is ignored. */
+const RETIRED_HOST = /\.vercel\.app(\/|$)/i
 
 /** The configured address, or the live site in production when it is unset or still the old one. */
 export function choosePublicBase(value: string | undefined, allowLan: boolean, production: boolean): string | null {

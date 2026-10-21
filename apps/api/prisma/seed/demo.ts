@@ -118,7 +118,7 @@ export async function seedDemo(prisma: PrismaClient, uploadDirRaw: string, webAs
       addressLine1: '12, Khader Nawaz Khan Road',
       addressLine2: 'Nungambakkam',
       pincode: '600006',
-      website: 'goldenhour.weddyzone.com',
+      website: 'goldenhourstudio.com',
       bio: 'Candid wedding storytellers capturing South Indian weddings since 2016.',
       referralCode: 'GOLDEN25',
     },
@@ -601,11 +601,11 @@ export async function seedDemo(prisma: PrismaClient, uploadDirRaw: string, webAs
   const posterPath = join(webAssetsDir, 'wedding-photo.jpg')
   const poster = await saveFile(ctx, 'BANNER', readFileSync(posterPath), 'jpg', 'image/jpeg', 'forever-begins-here.jpg')
   await prisma.banner.create({
-    data: { studioId: studio.id, title: 'Forever Begins Here', placement: 'GALLERY_HERO', ctaText: 'Book a call', ctaUrl: 'https://goldenhour.weddyzone.com/contact', imageFileId: poster.id, startDate: dateOnly(-20), endDate: dateOnly(60), active: true, position: 0 },
+    data: { studioId: studio.id, title: 'Forever Begins Here', placement: 'GALLERY_HERO', ctaText: 'Book a call', ctaUrl: 'https://goldenhourstudio.com/contact', imageFileId: poster.id, startDate: dateOnly(-20), endDate: dateOnly(60), active: true, position: 0 },
   })
   const sale = await saveFile(ctx, 'BANNER', gradientPng(1280, 720, 345, 3), 'png', 'image/png', 'season-sale.png')
   await prisma.banner.create({
-    data: { studioId: studio.id, title: 'Season Sale — 20% Off', placement: 'WEBSITE_POPUP', ctaText: 'Claim offer', ctaUrl: 'https://goldenhour.weddyzone.com/offers', imageFileId: sale.id, startDate: dateOnly(10), endDate: dateOnly(40), active: true, position: 1 },
+    data: { studioId: studio.id, title: 'Season Sale — 20% Off', placement: 'WEBSITE_POPUP', ctaText: 'Claim offer', ctaUrl: 'https://goldenhourstudio.com/offers', imageFileId: sale.id, startDate: dateOnly(10), endDate: dateOnly(40), active: true, position: 1 },
   })
   const monsoon = await saveFile(ctx, 'BANNER', gradientPng(1280, 720, 190, 5), 'png', 'image/png', 'monsoon-weddings.png')
   await prisma.banner.create({

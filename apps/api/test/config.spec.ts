@@ -33,7 +33,7 @@ describe('production config guard', () => {
   })
 
   it('builds links on https://www.wedmanage.com in production when APP_URL is unset, or still the old address', () => {
-    for (const APP_URL of ['', 'https://weddyzone.vercel.app', 'https://weddyzone.vercel.app/']) {
+    for (const APP_URL of ['', 'https://my-app.vercel.app', 'https://my-app.vercel.app/']) {
       expect(load({ APP_URL })().APP_URL).toBe('https://www.wedmanage.com')
     }
     expect(load({ APP_URL: 'https://studio.weddyzone.app/' })().APP_URL).toBe('https://studio.weddyzone.app')

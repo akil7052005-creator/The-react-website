@@ -78,7 +78,7 @@ function ProfileForm({ studio }: { studio: StudioDto }) {
         <TextField form={form} name="addressLine1" label="Address line 1" maxLength={120} />
         <TextField form={form} name="addressLine2" label="Address line 2" maxLength={120} />
         <TextField form={form} name="pincode" label="PIN code" inputMode="numeric" placeholder="600006" />
-        <TextField form={form} name="website" label="Website" placeholder="goldenhour.weddyzone.com" maxLength={120} />
+        <TextField form={form} name="website" label="Website" placeholder="www.goldenhourstudio.com" maxLength={120} />
         {/* Social Setup: the handle clients follow when an event turns on the Instagram Follow lock. */}
         <div id="social">
           <TextField form={form} name="instagramHandle" label="Instagram handle" placeholder="goldenhour.studio" maxLength={60} hint="Social Setup — used by the Instagram Follow lock on photo selections" />

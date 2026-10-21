@@ -9,8 +9,8 @@ const bool = z
 /** The live site. Production uses it when APP_URL / CORS_ORIGINS are not set; development stays on localhost. */
 export const LIVE_SITE = 'https://www.wedmanage.com'
 const isProd = () => process.env.NODE_ENV === 'production'
-/** The old address (links sent to customers used it): treated as unset so links never point there again. */
-const RETIRED_HOST = /weddyzone\.vercel\.app/i
+/** A Vercel default address is never a customer link: treated as unset, so links can't point there. */
+const RETIRED_HOST = /\.vercel\.app(\/|$)/i
 
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -51,7 +51,7 @@ const schema = z.object({
   SMTP_PORT: z.coerce.number().default(587),
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
-  SMTP_FROM: z.string().default('Wedmanage Studio <no-reply@weddyzone.app>'),
+  SMTP_FROM: z.string().default('Wedmanage Studio <no-reply@wedmanage.com>'),
   // Resend (https://resend.com): when set, emails go through Resend's API instead of SMTP.
   RESEND_API_KEY: z.string().optional(),
   // Sender for all emails, e.g. "Wedmanage Studio <no-reply@mail.yourdomain.com>". Its domain must be

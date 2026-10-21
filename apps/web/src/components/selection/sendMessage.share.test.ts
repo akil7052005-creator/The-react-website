@@ -118,8 +118,8 @@ describe('Send/Share messages', () => {
 })
 
 describe('Public address for customer links', () => {
-  it('uses www.wedmanage.com in production when unset or still the old vercel address', () => {
-    for (const v of [undefined, '', 'https://weddyzone.vercel.app', 'https://weddyzone.vercel.app/']) {
+  it('uses www.wedmanage.com in production when unset or still a vercel.app address', () => {
+    for (const v of [undefined, '', 'https://my-app.vercel.app', 'https://my-app.vercel.app/']) {
       expect(choosePublicBase(v, false, true)).toBe('https://www.wedmanage.com')
     }
     expect(shareLink('tok123', choosePublicBase(undefined, false, true))).toBe('https://www.wedmanage.com/select/tok123')
