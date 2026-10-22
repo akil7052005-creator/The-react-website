@@ -1,0 +1,13 @@
+/* Home page "About Wedmanage": the two story paragraphs and the space above the value cards. New, scoped classes only. */
+.pub-about-text {
+  margin: 0;
+  line-height: 1.6;
+}
+.pub-about-cards {
+  margin-top: 48px;
+}
+@media (max-width: 720px) {
+  .pub-about-cards {
+    margin-top: 32px;
+  }
+}

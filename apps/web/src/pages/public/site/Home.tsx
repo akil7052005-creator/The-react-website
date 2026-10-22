@@ -6,6 +6,7 @@ import { PricingSection } from '../../../components/public/PricingSection'
 import { PublicShell, SectionTitle, usePageMeta } from '../../../components/public/PublicShell'
 import type { Arrival } from '../../../components/public/SiteHeader'
 import { APP_NAME } from '../../../lib/brand'
+import '../../../styles/about-section.css'
 
 const STUDIO_STEPS = [
   { icon: 'cloud-arrow-up', text: 'Upload the event folders: only light previews go online, your originals stay on your computer.' },
@@ -89,12 +90,11 @@ export default function Home({ panel }: { panel?: Arrival }) {
           <div>
             <SectionTitle id="about-title">About {APP_NAME}</SectionTitle>
             <p className="pub-lead">We build simple tools for wedding studios, so choosing photos becomes the easy part of the job.</p>
-            <p className="pub-placeholder">[Owner to write] Our story: who we are, why we started, and the studios we work with.</p>
-            <p className="pub-placeholder">[Owner to write] What we believe: originals stay with the photographer, couples pick on their phone, no app to install.</p>
+            <p className="pub-about-text">Wedmanage is built by Brandlift Technologies in Coimbatore. We kept seeing the same problem at wedding studios: after every wedding, photo selection meant thousands of images, long WhatsApp threads and endless back-and-forth with the couple. So we built a simple way to do it: upload, share one link, and get the couple's picks back. Today we work with wedding and event studios who want to deliver faster and keep their clients happy.</p>
           </div>
           <img className="pub-about-img" src={aboutJpg} alt="A couple's hands with wedding rings" loading="lazy" />
         </div>
-        <div className="pub-wrap">
+        <div className="pub-wrap pub-about-cards">
           <div className="pub-cards three pub-values">
             <article className="pub-card">
               <h3>
