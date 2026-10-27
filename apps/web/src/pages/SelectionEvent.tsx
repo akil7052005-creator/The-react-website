@@ -6,8 +6,8 @@ import { toast } from 'sonner'
 import { useConfirm } from '../components/Modal'
 import { CreateFolderModal } from '../components/selection/CreateFolderModal'
 import { DownloadSelectedModal } from '../components/selection/DownloadSelectedModal'
-import { FolderView } from '../components/selection/FolderView'
-import { CardRemoveX, onDeleteKey, useRemoveUploaded } from '../components/selection/removeUploaded'
+import { FolderModal, FolderView } from '../components/selection/FolderView'
+import { CardRemoveX, CardRenameButton, onDeleteKey, useRemoveUploaded } from '../components/selection/removeUploaded'
 import { SelectedPhotosView } from '../components/selection/SelectedPhotosView'
 import { count, hasSubmitted, LIVE_POLL_MS, refreshSelection } from '../components/selection/selectionUi'
 import { SelectionStatusPill } from '../components/selection/SelectionStatusPill'
@@ -49,7 +49,19 @@ const isSelectedFolder = (f: SelectionFolderDto) => f.name.startsWith('Selected 
  * A folder card. With `onDelete` (an empty "Selected - …" folder, nothing to open) a click offers to
  * delete it instead, like the clickable status pill: the option only shows once it is clicked.
  */
-function FolderCard({ folder, onOpen, onDelete, onRemove }: { folder: SelectionFolderDto; onOpen: () => void; onDelete?: () => void; onRemove: () => void }) {
+function FolderCard({
+  folder,
+  onOpen,
+  onDelete,
+  onRemove,
+  onRename,
+}: {
+  folder: SelectionFolderDto
+  onOpen: () => void
+  onDelete?: () => void
+  onRemove: () => void
+  onRename: () => void
+}) {
   const video = folder.type === 'video'
   const n = video ? (folder.videoCount ?? 0) : folder.photoCount
   const unit = video ? 'Videos' : 'Images'
@@ -73,6 +85,7 @@ function FolderCard({ folder, onOpen, onDelete, onRemove }: { folder: SelectionF
           {count(n)} {unit}
         </span>
       </button>
+      <CardRenameButton onRename={onRename} />
       <CardRemoveX name={folder.name} onRemove={onRemove} />
     </div>
   )
@@ -90,6 +103,8 @@ export default function SelectionEvent() {
   const [downloading, setDownloading] = useState(false)
   const [sharing, setSharing] = useState(false)
   const [resetting, setResetting] = useState(false)
+  /** The folder whose card pencil was clicked (the same Rename dialog as inside the folder). */
+  const [renaming, setRenaming] = useState<SelectionFolderDto | null>(null)
   const navigate = useNavigate()
   const uploader = useRef<UploadFoldersHandle>(null)
   const qc = useQueryClient()
@@ -148,6 +163,11 @@ export default function SelectionEvent() {
   const startUpload = () => {
     setUploadOpen(true)
     uploader.current?.pick()
+  }
+
+  /** Upload Photos inside a folder: the same upload, into that folder; the dialog shows its progress. */
+  const uploadPhotos = async (f: SelectionFolderDto, files: File[]) => {
+    if (await uploader.current?.uploadInto(f, files)) setUploadOpen(true)
   }
 
   const submitted = hasSubmitted(s.status)
@@ -245,7 +265,7 @@ export default function SelectionEvent() {
       {url.view === 'selected' && submitted ? (
         <SelectedPhotosView s={s} folders={folders} onBack={() => setUrl({ view: '' })} />
       ) : open ? (
-        <FolderView s={s} folder={open} folders={folders} onBack={() => setUrl({ folder: '' })} />
+        <FolderView s={s} folder={open} folders={folders} onBack={() => setUrl({ folder: '' })} onUploadPhotos={(files) => void uploadPhotos(open, files)} />
       ) : folders.length === 0 ? (
         <div className="card ef-empty">
           <EmptyState
@@ -267,12 +287,25 @@ export default function SelectionEvent() {
               onOpen={() => setUrl({ folder: f.id })}
               onDelete={canDeleteFromCard(f) ? () => void deleteFolder(f) : undefined}
               onRemove={() => void removeFolder(f)}
+              onRename={() => setRenaming(f)}
             />
           ))}
         </div>
       )}
 
       <UploadFoldersModal ref={uploader} open={uploadOpen} onClose={() => setUploadOpen(false)} selectionId={s.id} folders={folders} />
+      <FolderModal
+        key={renaming ? renaming.id : 'rename-closed'}
+        open={!!renaming}
+        folder={renaming}
+        onClose={() => setRenaming(null)}
+        selectionId={s.id}
+        existing={folders.map((f) => f.name)}
+        onSaved={(f) => {
+          toast.success(`Folder renamed to ${f.name}`)
+          refreshSelection(qc, s.id)
+        }}
+      />
       <CreateFolderModal key={newFolder ? 'new-open' : 'new-closed'} open={newFolder} onClose={() => setNewFolder(false)} selectionId={s.id} existing={folders.map((f) => f.name)} />
       {downloading && <DownloadSelectedModal selection={s} folders={folders} onClose={() => setDownloading(false)} onDone={() => setUrl({ view: 'selected', folder: '' })} />}
       {sharing && <ShareModal selection={s} onClose={() => setSharing(false)} />}

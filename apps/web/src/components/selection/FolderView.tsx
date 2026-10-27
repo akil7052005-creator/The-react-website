@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { FOLDER_NAME_MAX, isSelectionLocked, SUGGESTED_FOLDERS, type SelectionDto, type SelectionFolderDto, type StudioSelectionPhotoDto } from '@weddyzone/shared'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { api } from '../../lib/api'
 import { fileUrl } from '../../lib/env'
@@ -9,6 +9,7 @@ import { formatBytes } from '../../utils/format'
 import { Modal, useConfirm } from '../Modal'
 import { RowMenu } from '../RowMenu'
 import { EmptyState, ErrorState, Skeleton, Spinner } from '../ui'
+import { PHOTO_ACCEPT } from './folderUpload'
 import { CardRemoveX, onDeleteKey, useRemoveUploaded } from './removeUploaded'
 import { count, refreshSelection } from './selectionUi'
 
@@ -259,8 +260,23 @@ export function PhotoPanel({
 const PAGE = 120
 type Filter = 'all' | 'picked' | 'notes'
 
-/** One folder's photos and videos: picks and notes on each, open one for details, rename/delete, download the originals. */
-export function FolderView({ s, folder, folders, onBack }: { s: SelectionDto; folder: SelectionFolderDto; folders: SelectionFolderDto[]; onBack: () => void }) {
+/**
+ * One folder's photos and videos: picks and notes on each, open one for details, rename/delete, download the originals.
+ * With `onUploadPhotos`, an Upload Photos button adds picked photos to this folder (the event page's upload does the work).
+ */
+export function FolderView({
+  s,
+  folder,
+  folders,
+  onBack,
+  onUploadPhotos,
+}: {
+  s: SelectionDto
+  folder: SelectionFolderDto
+  folders: SelectionFolderDto[]
+  onBack: () => void
+  onUploadPhotos?: (files: File[]) => void
+}) {
   const qc = useQueryClient()
   const confirm = useConfirm()
   const [filter, setFilterRaw] = useState<Filter>('all')
@@ -268,6 +284,7 @@ export function FolderView({ s, folder, folders, onBack }: { s: SelectionDto; fo
   const [open, setOpen] = useState<number | null>(null)
   const [renaming, setRenaming] = useState(false)
   const { removePhoto } = useRemoveUploaded(s.id)
+  const photoInput = useRef<HTMLInputElement>(null)
   const setFilter = (f: Filter) => {
     setFilterRaw(f)
     setShown(PAGE)
@@ -283,6 +300,17 @@ export function FolderView({ s, folder, folders, onBack }: { s: SelectionDto; fo
     [inFolder, filter],
   )
   const photo = open !== null ? list[open] : null
+
+  // Photos only go into photo folders, and not once the selection is submitted (same rule as the upload API).
+  const locked = isSelectionLocked(s.status)
+  const uploadButton =
+    onUploadPhotos && folder.type !== 'video' ? (
+      <span className="ef-tip-wrap" title={locked ? 'The selection is submitted: photos can no longer be added' : undefined}>
+        <button type="button" className="ef-btn solid sm" onClick={() => photoInput.current?.click()} disabled={locked} data-testid="upload-photos">
+          <i className="bi bi-cloud-arrow-up" /> Upload Photos
+        </button>
+      </span>
+    ) : null
 
   const remove = () =>
     confirm({
@@ -326,18 +354,37 @@ export function FolderView({ s, folder, folders, onBack }: { s: SelectionDto; fo
         </div>
       </div>
 
-      <div className="tabs" role="tablist" aria-label="Show">
-        {(
-          [
-            ['all', `All (${count(inFolder.length)})`],
-            ['picked', `Picked (${count(inFolder.filter((p) => p.pickedBy.length).length)})`],
-            ['notes', `With notes (${count(inFolder.filter((p) => p.comments.length).length)})`],
-          ] as [Filter, string][]
-        ).map(([k, label]) => (
-          <button key={k} role="tab" aria-selected={filter === k} className={filter === k ? 'on' : ''} onClick={() => setFilter(k)}>
-            {label}
-          </button>
-        ))}
+      {uploadButton && (
+        <input
+          ref={photoInput}
+          type="file"
+          hidden
+          multiple
+          accept={PHOTO_ACCEPT}
+          aria-label={`Choose photos to upload to ${folder.name}`}
+          data-testid="folder-photo-input"
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? [])
+            e.target.value = ''
+            if (files.length) onUploadPhotos?.(files)
+          }}
+        />
+      )}
+      <div className="fv-tabbar">
+        <div className="tabs" role="tablist" aria-label="Show">
+          {(
+            [
+              ['all', `All (${count(inFolder.length)})`],
+              ['picked', `Picked (${count(inFolder.filter((p) => p.pickedBy.length).length)})`],
+              ['notes', `With notes (${count(inFolder.filter((p) => p.comments.length).length)})`],
+            ] as [Filter, string][]
+          ).map(([k, label]) => (
+            <button key={k} role="tab" aria-selected={filter === k} className={filter === k ? 'on' : ''} onClick={() => setFilter(k)}>
+              {label}
+            </button>
+          ))}
+        </div>
+        {uploadButton}
       </div>
 
       {photosQ.isPending ? (
@@ -349,7 +396,11 @@ export function FolderView({ s, folder, folders, onBack }: { s: SelectionDto; fo
       ) : photosQ.isError ? (
         <ErrorState error={photosQ.error} onRetry={() => photosQ.refetch()} />
       ) : list.length === 0 ? (
-        <EmptyState icon={filter === 'all' ? 'images' : filter === 'picked' ? 'heart' : 'chat'} title={filter === 'all' ? 'This folder is empty' : filter === 'picked' ? 'Nothing picked here yet' : 'No notes here'} />
+        <EmptyState
+          icon={filter === 'all' ? 'images' : filter === 'picked' ? 'heart' : 'chat'}
+          title={filter === 'all' ? 'This folder is empty' : filter === 'picked' ? 'Nothing picked here yet' : 'No notes here'}
+          action={filter === 'all' ? uploadButton : undefined}
+        />
       ) : (
         <>
           <div className="photo-grid sw-grid" data-testid="folder-photos">

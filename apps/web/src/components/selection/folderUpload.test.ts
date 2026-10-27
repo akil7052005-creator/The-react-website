@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { folderPathOf, groupInputFiles, isRaw, mediaOf, rejectReason, scanInputFiles, targetsOf, toRow } from './folderUpload'
+import { folderPathOf, groupInputFiles, isRaw, mediaOf, newPhotosFor, PHOTO_ACCEPT, rejectReason, scanInputFiles, targetsOf, toRow } from './folderUpload'
 
 const file = (name: string, path?: string) => ({ name, size: 10, type: '', webkitRelativePath: path ?? '' }) as unknown as File
 
@@ -112,5 +112,27 @@ describe('groupInputFiles', () => {
     expect(folderPathOf(file('c.jpg', 'Wedding/Haldi/Day 2/c.jpg'))).toBe('Wedding/Haldi/Day 2')
     expect(folderPathOf(file('a.jpg', 'Wedding/a.jpg'))).toBe('Wedding')
     expect(folderPathOf(file('loose.jpg'))).toBeNull()
+  })
+})
+
+describe('Upload Photos into an existing folder', () => {
+  it('skips photos whose name is already in the folder (any case) and repeats within the pick', () => {
+    const r = newPhotosFor([file('a.jpg'), file('B.JPG'), file('c.png'), file('c.PNG')], ['A.jpg', 'x.jpg'])
+    expect(r.fresh.map((f) => f.name)).toEqual(['B.JPG', 'c.png'])
+    expect(r.duplicates).toBe(2)
+    expect(r.notPhotos).toBe(0)
+  })
+
+  it('ignores files that are not photos, and junk files quietly', () => {
+    const r = newPhotosFor([file('a.jpg'), file('clip.mp4'), file('notes.txt'), file('Thumbs.db')], [])
+    expect(r.fresh.map((f) => f.name)).toEqual(['a.jpg'])
+    expect(r).toMatchObject({ duplicates: 0, notPhotos: 2 })
+  })
+
+  it('the file picker accepts the same photo types as Upload Folder', () => {
+    const accepted = PHOTO_ACCEPT.split(',')
+    expect(accepted).toContain('image/*')
+    for (const ext of ['.jpg', '.heic', '.cr2', '.dng']) expect(accepted).toContain(ext)
+    expect(accepted.some((a) => a.startsWith('video'))).toBe(false)
   })
 })

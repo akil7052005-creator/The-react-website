@@ -26,6 +26,24 @@ export function CardRemoveX({ name, onRemove }: { name: string; onRemove: () => 
   )
 }
 
+/** The round pencil left of the X on a folder card: renames it (same look and hover as the X). */
+export function CardRenameButton({ onRename }: { onRename: () => void }) {
+  return (
+    <button
+      type="button"
+      className="uf-x ef-x ef-rename"
+      onClick={(e) => {
+        e.stopPropagation()
+        onRename()
+      }}
+      aria-label="Rename folder"
+      title="Rename folder"
+    >
+      <i className="bi bi-pencil" aria-hidden="true" />
+    </button>
+  )
+}
+
 /** Delete key on a focused card removes it (same confirm as the X). */
 export const onDeleteKey = (remove: () => void) => (e: KeyboardEvent) => {
   if (e.key === 'Delete') {

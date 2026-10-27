@@ -126,3 +126,33 @@ export function scanInputFiles(files: ArrayLike<File>): { folders: PickedFolder[
   }
   return { folders: [...byAlbum].map(([name, list]) => ({ name, files: list })), skipped }
 }
+
+/** `accept` for the "Upload Photos" file picker: the same photo types Upload Folder takes. */
+export const PHOTO_ACCEPT = ['image/*', ...[...IMAGE_EXT, ...RAW_EXT].map((e) => `.${e}`)].join(',')
+
+/**
+ * Photos picked for an existing folder: the ones to upload, and what was left out. A photo whose
+ * name is already in the folder (any case) is skipped, and so is a second one with the same name in
+ * the same pick; files that aren't photos are ignored.
+ */
+export function newPhotosFor(files: ArrayLike<File>, existingNames: string[]): { fresh: File[]; duplicates: number; notPhotos: number } {
+  const taken = new Set(existingNames.map((n) => n.trim().toLowerCase()))
+  const fresh: File[] = []
+  let duplicates = 0
+  let notPhotos = 0
+  for (const f of Array.from(files)) {
+    if (isJunk(f.name)) continue
+    if (!mediaOf(f.name)) {
+      notPhotos++
+      continue
+    }
+    const name = f.name.trim().toLowerCase()
+    if (taken.has(name)) {
+      duplicates++
+      continue
+    }
+    taken.add(name)
+    fresh.push(f)
+  }
+  return { fresh, duplicates, notPhotos }
+}

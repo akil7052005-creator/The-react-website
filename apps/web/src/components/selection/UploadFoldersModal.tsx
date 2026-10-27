@@ -7,7 +7,7 @@ import { api, isApiError } from '../../lib/api'
 import { fileUrl } from '../../lib/env'
 import { Modal } from '../Modal'
 import { Spinner } from '../ui'
-import { rejectReason, relativePathOf, scanInputFiles, targetsOf, toRow, type FolderRow, type PickedFolder, type SkippedFile } from './folderUpload'
+import { newPhotosFor, rejectReason, relativePathOf, scanInputFiles, targetsOf, toRow, type FolderRow, type PickedFolder, type SkippedFile } from './folderUpload'
 import { refreshSelection } from './selectionUi'
 import { copiesOf, stopCopyPool, uploadConcurrency } from './upload/copyPool'
 import { etaLabel, UploadQueue, type ItemResult, type QueueItem, type QueueProgress } from './upload/uploadQueue'
@@ -52,6 +52,12 @@ export const uploadingFolderIds = new Set<string>()
 export interface UploadFoldersHandle {
   /** Opens the folder picker. Call it straight from the click that opens the dialog. */
   pick: () => void
+  /**
+   * Uploads picked photos into a folder that already exists (Upload Photos inside a folder): same
+   * queue, progress and toasts as a folder upload. Resolves true when an upload started (open the
+   * dialog to show it), false when nothing was left to upload.
+   */
+  uploadInto: (folder: SelectionFolderDto, files: File[]) => Promise<boolean>
 }
 
 /**
@@ -157,7 +163,7 @@ export function UploadFoldersModal({
     if (busy) return
     input.current?.click()
   }
-  useImperativeHandle(ref, () => ({ pick }))
+
 
   /** X on a folder: gone from the list at once, with "Undo" for 5 seconds. */
   const removeRow = (key: string) => {
@@ -212,13 +218,13 @@ export function UploadFoldersModal({
   }
 
   /** Start Upload: any unexpected failure ends the upload with an error toast instead of a stuck dialog. */
-  const start = async () => {
-    if (!rows.length || busy) return
+  const start = async (list: FolderRow[] = rows) => {
+    if (!list.length || busy) return
     setBusy(true)
     setFinished(null)
     setStopped(null)
     try {
-      await run()
+      await run(list)
     } catch (e) {
       toast.error('Upload failed', { description: isApiError(e) ? e.message : (e as Error).message || 'Something went wrong. Please try again.' })
     } finally {
@@ -230,15 +236,15 @@ export function UploadFoldersModal({
     }
   }
 
-  const run = async () => {
-    const ids = await folderIds(rows)
+  const run = async (list: FolderRow[]) => {
+    const ids = await folderIds(list)
     for (const fid of Object.values(ids)) uploadingFolderIds.add(fid)
     const resume = resuming
     const doneKeys = new Set(resume?.done ?? [])
     const rowOf = new Map<string, string>()
     const items: QueueItem[] = []
     let alreadyDone = 0
-    for (const r of rows) {
+    for (const r of list) {
       for (const f of r.files) {
         const relativePath = relativePathOf(f)
         const key = fileKey({ relativePath, size: f.size, lastModified: f.lastModified })
@@ -251,10 +257,10 @@ export function UploadFoldersModal({
       }
     }
     const total = items.length + alreadyDone
-    const writer = progressWriter({ selectionId, total, done: [...doneKeys], inflight: { ...(resume?.inflight ?? {}) }, folders: rows.map((r) => r.name) })
+    const writer = progressWriter({ selectionId, total, done: [...doneKeys], inflight: { ...(resume?.inflight ?? {}) }, folders: list.map((r) => r.name) })
     writer.flush()
 
-    const perRow: Record<string, RowProgress> = Object.fromEntries(rows.map((r) => [r.key, emptyRow()]))
+    const perRow: Record<string, RowProgress> = Object.fromEntries(list.map((r) => [r.key, emptyRow()]))
     setRowProgress({ ...perRow })
     const skippedAll: SkippedFile[] = []
     const onItem = (r: ItemResult) => {
@@ -319,6 +325,34 @@ export function UploadFoldersModal({
       toast.error(`${s.failed} photo${s.failed === 1 ? '' : 's'} didn't upload`, { description: 'Start the upload again to retry them; the rest are skipped.' })
     }
   }
+
+  const uploadInto = async (folder: SelectionFolderDto, files: File[]) => {
+    if (busy) {
+      toast.error('Wait for the current upload to finish')
+      return false
+    }
+    // The folder's photos now (not a cached list), to skip the ones already in it.
+    const photos = await qc
+      .fetchQuery({ queryKey: ['selection-photos', selectionId], queryFn: () => api.get<{ folderId: string | null; originalName: string }[]>(`/selections/${selectionId}/photos`), staleTime: 0 })
+      .catch(() => [])
+    const { fresh, duplicates, notPhotos } = newPhotosFor(files, photos.filter((p) => p.folderId === folder.id).map((p) => p.originalName))
+    if (duplicates) toast.info(`${duplicates.toLocaleString('en-IN')} photo${duplicates === 1 ? '' : 's'} skipped: already in ${folder.name}`)
+    if (!fresh.length) {
+      if (!duplicates) toast.error('No photos to upload', { description: notPhotos ? 'Only photos can be uploaded here.' : undefined })
+      return false
+    }
+    const limits = limitsQ.data
+    if (limits && fresh.length > limits.maxFilesPerUpload) {
+      toast.error(`Your ${limits.planName} plan uploads up to ${limits.maxFilesPerUpload.toLocaleString('en-IN')} photos at a time. Pick fewer photos.`)
+      return false
+    }
+    // Same name as the folder: the upload finds the existing folder by name and adds to it.
+    const row = toRow({ name: folder.name, files: fresh }, `f${++keySeq.current}`)
+    setRows([row])
+    void start([row])
+    return true
+  }
+  useImperativeHandle(ref, () => ({ pick, uploadInto }))
 
   const photoCount = rows.reduce((n, r) => n + r.files.length, 0)
   const originalBytes = rows.reduce((n, r) => n + r.files.reduce((m, f) => m + f.size, 0), 0)

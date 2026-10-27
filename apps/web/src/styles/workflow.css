@@ -1570,6 +1570,14 @@ a.ps-upload {
   gap: 8px;
   margin-left: auto;
 }
+/* The All / Picked / With notes tabs on the left, Upload Photos on the right. */
+.fv-tabbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+}
 .fv-video {
   display: grid;
   place-items: center;
@@ -2518,6 +2526,10 @@ a.ps-upload {
 .ef-card-wrap > .ef-x {
   top: 8px;
   right: 8px;
+}
+/* The rename pencil, just left of the X (24 px circle + 6 px gap). */
+.ef-card-wrap > .ef-x.ef-rename {
+  right: 38px;
 }
 .fv .photo-tile .photo-badge:not(.photo-badge-left) {
   right: 38px;
