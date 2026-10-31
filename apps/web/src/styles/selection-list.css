@@ -369,7 +369,10 @@ th[aria-sort='descending'] .pl-sort .bi {
 .pl-status.shared {
   background: #2563eb;
 }
+/* "In Progress" also matches the global .progress (8px progress bar): keep the pill's own height. */
 .pl-status.progress {
+  height: auto;
+  overflow: visible;
   background: #7c3aed;
 }
 .pl-status.submitted {
