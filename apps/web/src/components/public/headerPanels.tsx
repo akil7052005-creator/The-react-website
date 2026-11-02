@@ -1,4 +1,4 @@
-import { CYCLE_LABELS, cycleSavingPct, PRICING_CYCLES, type BillingCycle } from '@weddyzone/shared'
+import { CYCLE_LABELS, cycleSavingPct, PRICING_CYCLES, quotaOf, trialOffer, type BillingCycle } from '@weddyzone/shared'
 import { useState, type KeyboardEvent } from 'react'
 import { perMonth, priceFor, usePlans } from '../../lib/billing'
 import { APP_NAME } from '../../lib/brand'
@@ -142,7 +142,7 @@ export function PricingPanel({ onChoose, onCompare }: { onChoose: (plan: SignupP
                     <h3>{p.name}</h3>
                     <p className="pub-mini-price">
                       {trial ? 'Free' : price === null ? '—' : formatMoney(price)}
-                      <small> {trial ? '· 14 days' : `/ ${CYCLE_LABELS[cycle]}`}</small>
+                      <small> {trial ? `· ${trialOffer(quotaOf(p.limits).trialDays ?? undefined).span}` : `/ ${CYCLE_LABELS[cycle]}`}</small>
                     </p>
                     {!trial && price !== null && cycle !== 'MONTHLY' && (
                       <p className="pub-per-month">

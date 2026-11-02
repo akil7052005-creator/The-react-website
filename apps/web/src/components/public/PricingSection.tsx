@@ -1,4 +1,4 @@
-import { CYCLE_LABELS, cycleSavingPct, PRICING_CYCLES, type BillingCycle } from '@weddyzone/shared'
+import { CYCLE_LABELS, cycleSavingPct, PRICING_CYCLES, quotaOf, trialOffer, type BillingCycle } from '@weddyzone/shared'
 import { useUrlState } from '../../hooks/useUrlState'
 import { perMonth, priceFor, usePlans } from '../../lib/billing'
 import { isTrialPlan, planLimitLines } from '../../lib/planCopy'
@@ -24,7 +24,7 @@ export function PricingSection() {
       <section className="pub-section" id="pricing" aria-labelledby="pricing-title">
         <div className="pub-wrap">
           <SectionTitle id="pricing-title">Plans &amp; Pricing</SectionTitle>
-          <p className="pub-lead">Start free for 14 days. Pay for 1, 6 or 12 months; upgrade any time with credit for unused days.</p>
+          <p className="pub-lead">Start {trialOffer().lower}. Pay for 1, 6 or 12 months; upgrade any time with credit for unused days.</p>
           <div className="pub-switch" role="tablist" aria-label="Billing period">
             {PRICING_CYCLES.map((c) => (
               <button key={c} type="button" role="tab" aria-selected={c === cycle} className={c === cycle ? 'on' : ''} onClick={() => setUrl({ months: CYCLE_PARAM[c] })}>
@@ -50,7 +50,7 @@ export function PricingSection() {
                         <p className="pub-plan-tag">{p.tagline}</p>
                         <p className="pub-price">
                           {trial ? 'Free' : price === null ? '—' : formatMoney(price)}
-                          <small> {trial ? '· 14 days' : `/ ${CYCLE_LABELS[cycle]}`}</small>
+                          <small> {trial ? `· ${trialOffer(quotaOf(p.limits).trialDays ?? undefined).span}` : `/ ${CYCLE_LABELS[cycle]}`}</small>
                         </p>
                         {!trial && price !== null && cycle !== 'MONTHLY' && (
                           <p className="pub-per-month">

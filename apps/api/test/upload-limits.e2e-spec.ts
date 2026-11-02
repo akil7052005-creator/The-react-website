@@ -44,14 +44,14 @@ describe('Photo uploads: plan-based limits', () => {
   afterAll(() => app.close())
 
   describe('GET /me/upload-limits', () => {
-    it("gives the plan's limits (trial: up to 100 photos at a time, no storage cap)", async () => {
+    it("gives the plan's limits (trial: up to 3,500 photos at a time, no storage cap)", async () => {
       const res = await A.agent.get('/api/v1/me/upload-limits').expect(200)
-      expect(res.body).toMatchObject({ planCode: 'STARTER', planName: 'Trial', maxPhotoMb: 100, maxFilesPerUpload: 100, uploadConcurrency: 4, storageGb: null, storageLeftBytes: null, readOnly: false, status: 'TRIAL', graceEndsAt: null })
+      expect(res.body).toMatchObject({ planCode: 'STARTER', planName: 'Trial', maxPhotoMb: 100, maxFilesPerUpload: 3500, uploadConcurrency: 4, storageGb: null, storageLeftBytes: null, readOnly: false, status: 'TRIAL', graceEndsAt: null })
       expect(res.body.renewLink).toBe('/subscriptions?renew=STARTER&cycle=MONTHLY')
     })
 
     it('follows the plan (seeded values for every plan)', async () => {
-      const expected = { PRO: [100, 2000, 4, null], ALL_ACCESS: [100, 5000, 6, null] } as const
+      const expected = { PRO: [100, 3500, 4, null], ALL_ACCESS: [100, 7000, 6, null] } as const
       for (const [code, [maxPhotoMb, maxFilesPerUpload, uploadConcurrency, storageGb]] of Object.entries(expected)) {
         await setPlan(code as PlanCode, code === 'ALL_ACCESS' ? { cycle: 'YEARLY' } : {})
         const res = await A.agent.get('/api/v1/me/upload-limits').expect(200)
@@ -63,7 +63,7 @@ describe('Photo uploads: plan-based limits', () => {
     it('uses the Starter values for fields a plan lacks', async () => {
       const pro = await prisma.plan.findUniqueOrThrow({ where: { code: 'PRO' } })
       const { maxPhotoMb, maxFilesPerUpload, uploadConcurrency, ...rest } = pro.limits as Record<string, unknown>
-      expect([maxPhotoMb, maxFilesPerUpload, uploadConcurrency]).toEqual([100, 2000, 4])
+      expect([maxPhotoMb, maxFilesPerUpload, uploadConcurrency]).toEqual([100, 3500, 4])
       await prisma.plan.update({ where: { id: pro.id }, data: { limits: rest as object } })
       await setPlan('PRO')
       const res = await A.agent.get('/api/v1/me/upload-limits').expect(200)

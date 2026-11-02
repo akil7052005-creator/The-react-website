@@ -1,6 +1,6 @@
 import type { INestApplication } from '@nestjs/common'
 import type { PrismaClient } from '@prisma/client'
-import { addDays, fromIst, istParts } from '@weddyzone/shared'
+import { addDays, daysLeft, fromIst, istParts, TRIAL_OFFER_END } from '@weddyzone/shared'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import request from 'supertest'
@@ -122,7 +122,8 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
 
     it('starts every new studio on a trial with a CREATED event', async () => {
       const res = await A.agent.get('/api/v1/me/subscription').expect(200)
-      expect(res.body).toMatchObject({ planCode: 'STARTER', planName: 'Trial', status: 'TRIAL', readOnly: false, daysLeft: 14 })
+      // Free until 31 Dec 2026 (sign-ups before then).
+      expect(res.body).toMatchObject({ planCode: 'STARTER', planName: 'Trial', status: 'TRIAL', readOnly: false, daysLeft: daysLeft(TRIAL_OFFER_END, new Date()) })
       const sub = await prisma.subscription.findUniqueOrThrow({ where: { studioId: A.studioId }, include: { events: true } })
       expect(sub.events.map((e) => e.type)).toEqual(['CREATED'])
     })

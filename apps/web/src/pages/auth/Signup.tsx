@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { CYCLE_LABELS, cycleSavingPct, PRICING_CYCLES, signupSchema, type BillingCycle, type MeDto } from '@weddyzone/shared'
+import { CYCLE_LABELS, cycleSavingPct, PRICING_CYCLES, signupSchema, trialOffer, type BillingCycle, type MeDto } from '@weddyzone/shared'
 import { useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -57,7 +57,7 @@ export function SignupForm({ plan, onPlanChange }: { plan: SignupPlan; onPlanCha
     onMutate: () => setFailure(null),
     onSuccess: (me) => {
       qc.setQueryData(ME_KEY, me)
-      toast.success(`Welcome to Wedmanage, ${me.user.name.split(' ')[0]}! Your 14-day free trial has begun.`)
+      toast.success(`Welcome to Wedmanage, ${me.user.name.split(' ')[0]}! Your free trial has begun: ${trialOffer().lower}.`)
       navigate(plan ? `/subscriptions?renew=${plan.code}&cycle=${plan.cycle}` : '/', { replace: true })
     },
     onError: (e) => {
@@ -148,7 +148,7 @@ export function SignupForm({ plan, onPlanChange }: { plan: SignupPlan; onPlanCha
       <SubmitButton busy={signup.isPending} className="pub-btn block">
         Create studio →
       </SubmitButton>
-      {!plan && <p className="pub-signup-note">14-day free trial · no card needed</p>}
+      {!plan && <p className="pub-signup-note">{trialOffer().note} · no card needed</p>}
     </form>
   )
 }

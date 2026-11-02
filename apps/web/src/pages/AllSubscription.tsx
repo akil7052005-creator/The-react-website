@@ -1,4 +1,4 @@
-import { BILLING_CYCLES, CYCLE_LABELS, cycleSavingPct, PLAN_CODES, PRICING_CYCLES, type BillingCycle } from '@weddyzone/shared'
+import { BILLING_CYCLES, CYCLE_LABELS, cycleSavingPct, PLAN_CODES, PRICING_CYCLES, quotaOf, trialOffer, type BillingCycle } from '@weddyzone/shared'
 import { useEffect, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { ErrorState, PageHeader, Skeleton } from '../components/ui'
@@ -87,7 +87,7 @@ function AllSubscription() {
 
                     <div className="price">
                       {trial ? 'Free' : price === null ? '—' : formatMoney(price)}
-                      <small> {trial ? '· 14 days' : `/ ${CYCLE_LABELS[cycle]}`}</small>
+                      <small> {trial ? `· ${trialOffer(quotaOf(p.limits).trialDays ?? undefined).span}` : `/ ${CYCLE_LABELS[cycle]}`}</small>
                     </div>
                     {!trial && price !== null && cycle !== 'MONTHLY' && (
                       <p className="muted plan-per-month">

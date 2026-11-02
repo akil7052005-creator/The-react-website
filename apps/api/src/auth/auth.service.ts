@@ -6,7 +6,7 @@ import {
   WEBSITE_SECTION_KEYS,
   type MeDto,
 } from '@weddyzone/shared'
-import { quotaOf } from '@weddyzone/shared'
+import { DEFAULT_TRIAL_DAYS, quotaOf, trialEndsAt, trialOffer } from '@weddyzone/shared'
 import type { z } from 'zod'
 import type {
   changePasswordSchema,
@@ -29,8 +29,8 @@ import { PrismaService, type Tx } from '../prisma/prisma.service'
 import { decryptSecret, verifyTotp } from './totp'
 
 export const SIGNUP_BONUS_CREDITS = 50
-/** Trial length when the Trial plan doesn't set trialDays. */
-export const TRIAL_DAYS = 14
+/** Trial length (after the "free until 31 Dec" offer) when the Trial plan doesn't set trialDays. */
+export const TRIAL_DAYS = DEFAULT_TRIAL_DAYS
 const BCRYPT_ROUNDS = 10
 // Compared against when the email is unknown, so response time does not reveal which emails exist.
 const DUMMY_HASH = bcrypt.hashSync('never-a-real-password', BCRYPT_ROUNDS)
@@ -40,7 +40,16 @@ export interface IssuedTokens {
   refresh: string
   /** How long the refresh cookie lives: ADMIN_SESSION_HOURS for platform admins, REFRESH_TOKEN_TTL_DAYS otherwise. */
   refreshMaxAgeMs: number
+  /** The refresh token's id (its jti). */
+  refreshId: string
 }
+
+/**
+ * A rotated refresh token still works for this long. Two tabs, a reload or a network retry can send
+ * the same refresh cookie twice at once; the later request then gets a fresh pair in the same login
+ * instead of being treated as a stolen token.
+ */
+export const REFRESH_REUSE_GRACE_MS = 60_000
 
 /** Platform admins get much shorter sessions than studio users. */
 export function refreshTtlMs(role: User['role']): number {
@@ -121,11 +130,12 @@ export class AuthService {
           status: 'TRIAL',
           isTrial: true,
           currentPeriodStart: now,
-          currentPeriodEnd: new Date(now.getTime() + trialDays * 86_400_000),
+          // Free until 31 Dec 2026 (23:59:59 IST) for sign-ups before then; trialDays after that.
+          currentPeriodEnd: trialEndsAt(now, trialDays),
           usageAnchor: now,
         },
       })
-      await tx.subscriptionEvent.create({ data: { subscriptionId: sub.id, type: 'CREATED', toPlan: `${starter.name} (trial)`, note: `${trialDays}-day free trial` } })
+      await tx.subscriptionEvent.create({ data: { subscriptionId: sub.id, type: 'CREATED', toPlan: `${starter.name} (trial)`, note: trialOffer(trialDays, now).line } })
       await tx.websiteSettings.create({
         data: {
           studioId: studio.id,
@@ -183,7 +193,8 @@ export class AuthService {
     return { user, tokens: await this.issueTokens(user) }
   }
 
-  async issueTokens(user: Pick<User, 'id' | 'studioId' | 'role'>): Promise<IssuedTokens> {
+  /** A new access + refresh pair; `familyId` keeps a rotation in the same login (a new login starts one). */
+  async issueTokens(user: Pick<User, 'id' | 'studioId' | 'role'>, familyId?: string, db: Tx | PrismaService = this.prisma): Promise<IssuedTokens> {
     const c = config()
     const access = await this.jwt.signAsync(
       { sub: user.id, sid: user.studioId, role: user.role },
@@ -195,20 +206,24 @@ export class AuthService {
       { sub: user.id, jti },
       { secret: c.JWT_REFRESH_SECRET, expiresIn: `${Math.round(ttlMs / 1000)}s` },
     )
-    await this.prisma.refreshToken.create({
+    await db.refreshToken.create({
       data: {
         id: jti,
         userId: user.id,
+        familyId: familyId ?? jti,
         tokenHash: sha256(refresh),
+        // Every rotation gets the full lifetime again: the session slides while it is used.
         expiresAt: new Date(Date.now() + ttlMs),
       },
     })
-    return { access, refresh, refreshMaxAgeMs: ttlMs }
+    return { access, refresh, refreshMaxAgeMs: ttlMs, refreshId: jti }
   }
 
   /**
-   * Rotates the refresh token. Presenting an already-rotated token means it
-   * was stolen or replayed, so every session of that user is revoked.
+   * Rotates the refresh token: exactly one request can exchange a token (a conditional update inside
+   * a transaction). A token rotated less than REFRESH_REUSE_GRACE_MS ago (a parallel request, a second
+   * tab, a retry) gets a fresh pair in the same login. Presented later than that, it was most likely
+   * stolen: that whole login (the token family) is revoked. Other logins of the user are not touched.
    */
   async refresh(token: string | undefined): Promise<IssuedTokens> {
     const expired = () => unauthenticated('Session expired, please log in again', ERROR_CODES.TOKEN_EXPIRED)
@@ -221,30 +236,47 @@ export class AuthService {
     }
     const record = await this.prisma.refreshToken.findUnique({ where: { tokenHash: sha256(token) } })
     if (!record || record.userId !== payload.sub) throw expired()
-    if (record.revokedAt) {
-      await this.prisma.refreshToken.updateMany({
-        where: { userId: record.userId, revokedAt: null },
-        data: { revokedAt: new Date() },
-      })
-      throw expired()
-    }
+    // Logged out, or the login was revoked.
+    if (record.revokedAt && !record.rotatedAt) throw expired()
     if (record.expiresAt < new Date()) throw expired()
     const user = await this.prisma.user.findUnique({ where: { id: record.userId }, include: { studio: { select: { removedAt: true } } } })
     if (!user) throw expired()
     if (user.studio?.removedAt) throw studioRemoved()
-    // Only one concurrent refresh wins; the loser gets a normal "expired" and the client retries with the new cookie.
-    const revoked = await this.prisma.refreshToken.updateMany({
-      where: { id: record.id, revokedAt: null },
-      data: { revokedAt: new Date() },
+
+    // The rotation. The conditional update takes the row lock, so a parallel request waits for it and
+    // then finds the token already rotated.
+    const rotated = await this.prisma.$transaction(async (tx) => {
+      const now = new Date()
+      const won = await tx.refreshToken.updateMany({ where: { id: record.id, revokedAt: null }, data: { revokedAt: now, rotatedAt: now } })
+      if (won.count === 0) return null
+      const tokens = await this.issueTokens(user, record.familyId, tx)
+      await tx.refreshToken.update({ where: { id: record.id }, data: { replacedById: tokens.refreshId } })
+      return tokens
     })
-    if (revoked.count === 0) throw expired()
-    return this.issueTokens(user)
+    if (rotated) return rotated
+
+    // Someone already exchanged this token.
+    const current = await this.prisma.refreshToken.findUniqueOrThrow({ where: { id: record.id } })
+    if (!current.rotatedAt) throw expired()
+    if (Date.now() - current.rotatedAt.getTime() <= REFRESH_REUSE_GRACE_MS) {
+      // A request that raced the rotation: a fresh pair in the same login, as long as that login is
+      // still alive (not logged out or revoked meanwhile).
+      const alive = await this.prisma.refreshToken.count({ where: { familyId: record.familyId, revokedAt: null, expiresAt: { gt: new Date() } } })
+      if (!alive) throw expired()
+      return this.issueTokens(user, record.familyId)
+    }
+    // Replayed long after it was exchanged: treat it as stolen and end that login.
+    await this.prisma.refreshToken.updateMany({ where: { familyId: record.familyId, revokedAt: null }, data: { revokedAt: new Date() } })
+    throw expired()
   }
 
+  /** Ends this login: every token of its family (a parallel refresh can leave more than one). */
   async logout(token: string | undefined) {
     if (!token) return
+    const record = await this.prisma.refreshToken.findUnique({ where: { tokenHash: sha256(token) }, select: { familyId: true } })
+    if (!record) return
     await this.prisma.refreshToken.updateMany({
-      where: { tokenHash: sha256(token), revokedAt: null },
+      where: { familyId: record.familyId, revokedAt: null },
       data: { revokedAt: new Date() },
     })
   }

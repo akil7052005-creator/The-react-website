@@ -184,9 +184,9 @@ describe('Phase 3 — plans, credits, invoices', () => {
       // 1, 6 or 12 months (3 months is no longer sold).
       expect(pro.prices).toEqual({ MONTHLY: 60_000, QUARTERLY: null, HALF_YEARLY: 300_000, YEARLY: 500_000 })
       expect(vip.prices).toEqual({ MONTHLY: 120_000, QUARTERLY: null, HALF_YEARLY: 600_000, YEARLY: 1_000_000 })
-      expect(pro.limits).toMatchObject({ eventsPerMonth: 10, photosPerEvent: 2000, uploadGbPerMonth: 500, addonEvents: 5 })
-      expect(vip.limits).toMatchObject({ eventsPerMonth: null, photosPerEvent: 5000, uploadGbPerMonth: 1024, favourites: true })
-      expect(res.body[0].limits).toMatchObject({ eventsTotal: 2, photosPerEvent: 100, uploadGbTotal: 2, trialDays: 14, galleryDays: 7 })
+      expect(pro.limits).toMatchObject({ eventsPerMonth: 10, photosPerEvent: 3500, uploadGbPerMonth: 500, addonEvents: 5 })
+      expect(vip.limits).toMatchObject({ eventsPerMonth: null, photosPerEvent: 7000, uploadGbPerMonth: 1024, favourites: true })
+      expect(res.body[0].limits).toMatchObject({ eventsTotal: 5, photosPerEvent: 3500, uploadGbTotal: 50, trialDays: 14, galleryDays: 7 })
     })
 
     it('buys Pro for 6 months (18% GST on top); 3 months and the Trial itself are not for sale', async () => {
@@ -249,8 +249,8 @@ describe('Phase 3 — plans, credits, invoices', () => {
       const res = await B.agent.get('/api/v1/subscription').expect(200)
       const keys = res.body.usage.map((u: { key: string }) => u.key)
       expect(keys).toEqual(['events', 'storage', 'albums', 'credits'])
-      expect(res.body.usage[0]).toMatchObject({ used: 0, limit: 2 })
-      expect(res.body.usage[1]).toMatchObject({ used: 0, limit: 2, unit: 'GB' })
+      expect(res.body.usage[0]).toMatchObject({ used: 0, limit: 5 })
+      expect(res.body.usage[1]).toMatchObject({ used: 0, limit: 50, unit: 'GB' })
     })
   })
 

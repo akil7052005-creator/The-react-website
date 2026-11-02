@@ -1,12 +1,12 @@
 // How plans read on the pricing pages (in the app and on the public site): the limits as short
 // lines, from the plan's own limits so an admin's change shows everywhere.
 
-import { quotaOf, type PlanDto } from '@weddyzone/shared'
+import { quotaOf, trialOffer, type PlanDto } from '@weddyzone/shared'
 
 const n = (v: number) => v.toLocaleString('en-IN')
 const gb = (v: number) => (v >= 1024 ? `${v % 1024 === 0 ? v / 1024 : (v / 1024).toFixed(1)} TB` : `${n(v)} GB`)
 
-/** "10 new customer events a month", "2,000 photos per event", … */
+/** "10 new customer events a month", "Up to 3,500 photos per event", … */
 export function planLimitLines(plan: PlanDto): string[] {
   const q = quotaOf(plan.limits)
   const lines: string[] = []
@@ -17,7 +17,8 @@ export function planLimitLines(plan: PlanDto): string[] {
   if (q.uploadGbTotal !== null) lines.push(`About ${gb(q.uploadGbTotal)} of uploads`)
   else if (q.uploadGbPerMonth !== null) lines.push(`${gb(q.uploadGbPerMonth)} of uploads a month`)
   if (q.galleryDays !== null) lines.push(`Customer gallery open ${q.galleryDays} days`)
-  if (q.trialDays !== null) lines.push(`Free for ${q.trialDays} days`)
+  // "Free until 31 Dec 2026" while the launch offer lasts, then "Free for 14 days".
+  if (q.trialDays !== null) lines.push(trialOffer(q.trialDays).line)
   if (q.addonEvents) lines.push(`+${q.addonEvents} events add-on any month`)
   lines.push(q.favourites ? 'Customer favourites (tick + heart)' : 'Customers pick with a heart')
   return lines

@@ -3,8 +3,8 @@ import type { MeDto } from '@weddyzone/shared'
 import { createContext, useContext, useEffect, useRef, type ReactNode } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import { api, isApiError, onSessionExpired } from '../lib/api'
-import { PageSkeleton } from '../components/ui'
+import { api, isApiError, onSessionExpired, type SessionEndReason } from '../lib/api'
+import { ErrorState, PageSkeleton } from '../components/ui'
 
 export const ME_KEY = ['me'] as const
 
@@ -22,6 +22,23 @@ export function useMeQuery({ cached = false }: { cached?: boolean } = {}) {
     retry: false,
     ...(cached && { refetchOnMount: false, retryOnMount: false }),
   })
+}
+
+const endedMessage = (reason: SessionEndReason, admin = false) =>
+  reason === 'logged-out' ? 'You logged out in another tab' : `${admin ? 'Admin session' : 'Session'} expired, please log in again`
+
+/** Only a 401 means "not logged in". A network or server error keeps the session already loaded. */
+const isUnauthorized = (e: unknown) => isApiError(e) && e.status === 401
+
+/** /auth/me couldn't be checked and there is no session loaded yet: retry instead of logging out. */
+function SessionCheckFailed({ error, onRetry }: { error: unknown; onRetry: () => void }) {
+  return (
+    <div className="center-page">
+      <div className="card">
+        <ErrorState error={error} onRetry={onRetry} title="We couldn't check your session" />
+      </div>
+    </div>
+  )
 }
 
 /** The logged-in user + studio. Only use inside <RequireAuth>. */
@@ -46,24 +63,22 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 
   useEffect(
     () =>
-      onSessionExpired(() => {
+      onSessionExpired((reason) => {
         // First visit without a session: the redirect below handles it quietly.
         if (!hadSession.current) return
         hadSession.current = false
         qc.clear()
-        toast.error('Session expired, please log in again', { id: 'session-expired' })
+        toast.error(endedMessage(reason), { id: 'session-expired' })
         navigate(`/login?next=${encodeURIComponent(location.pathname + location.search)}`, { replace: true })
       }),
     [navigate, qc, location.pathname, location.search],
   )
 
   if (me.isPending) return <PageSkeleton />
-  if (me.isError) {
-    if (isApiError(me.error) && me.error.status === 401) {
-      return <Navigate to={`/login?next=${encodeURIComponent(location.pathname + location.search)}`} replace />
-    }
-    return <Navigate to="/login" replace />
+  if (me.isError && isUnauthorized(me.error)) {
+    return <Navigate to={`/login?next=${encodeURIComponent(location.pathname + location.search)}`} replace />
   }
+  if (!me.data) return <SessionCheckFailed error={me.error} onRetry={() => void me.refetch()} />
   if (!me.data.studio) {
     // Platform admins have no studio; their home is the admin area.
     return <Navigate to={me.data.user.role === 'SUPER_ADMIN' ? '/admin' : '/login'} replace />
@@ -94,17 +109,18 @@ export function RequireAdmin({ children }: { children: ReactNode }) {
 
   useEffect(
     () =>
-      onSessionExpired(() => {
+      onSessionExpired((reason) => {
         if (!isAdmin) return
         qc.clear()
-        toast.error('Admin session expired, please log in again', { id: 'session-expired' })
+        toast.error(endedMessage(reason, true), { id: 'session-expired' })
         navigate(`/login?next=${encodeURIComponent(location.pathname + location.search)}`, { replace: true })
       }),
     [isAdmin, navigate, qc, location.pathname, location.search],
   )
 
   if (me.isPending) return <PageSkeleton />
-  if (me.isError) return <Navigate to={`/login?next=${encodeURIComponent(location.pathname + location.search)}`} replace />
+  if (me.isError && isUnauthorized(me.error)) return <Navigate to={`/login?next=${encodeURIComponent(location.pathname + location.search)}`} replace />
+  if (!me.data) return <SessionCheckFailed error={me.error} onRetry={() => void me.refetch()} />
   if (!isAdmin) {
     return (
       <div className="center-page">

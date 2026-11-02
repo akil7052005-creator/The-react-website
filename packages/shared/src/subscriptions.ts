@@ -45,6 +45,39 @@ export const CANCEL_REASON_LABELS: Record<CancelReason, string> = {
   OTHER: 'Something else',
 }
 
+// ------------------------------------------------------------------ trial offer
+
+/** Launch offer: a trial started before this moment (31 Dec 2026, 23:59:59 IST) is free until then. */
+export const TRIAL_OFFER_END = new Date('2026-12-31T23:59:59.000+05:30')
+/** The offer's end date for the copy: "Free until 31 Dec" / "Free until 31 Dec 2026". */
+export const TRIAL_OFFER_END_LABEL = { short: '31 Dec', long: '31 Dec 2026' } as const
+/** Trials started after the offer last this many days, unless the Trial plan says otherwise. */
+export const DEFAULT_TRIAL_DAYS = 14
+
+/** Is the "free until 31 Dec" offer still on? (After it, trials are `trialDays` long again.) */
+export const isTrialOfferOn = (now = new Date()) => now < TRIAL_OFFER_END
+
+/** When a trial that starts at `start` ends: the offer's end while it lasts, otherwise `trialDays` later. */
+export function trialEndsAt(start: Date, trialDays: number = DEFAULT_TRIAL_DAYS): Date {
+  return isTrialOfferOn(start) ? new Date(TRIAL_OFFER_END) : new Date(start.getTime() + trialDays * DAY_MS)
+}
+
+/** How a new trial reads, for the copy: "until 31 Dec" while the offer lasts, otherwise "14 days". */
+export function trialOffer(trialDays: number = DEFAULT_TRIAL_DAYS, now = new Date()) {
+  const on = isTrialOfferOn(now)
+  return {
+    on,
+    /** "Free until 31 Dec 2026" / "Free for 14 days" */
+    line: on ? `Free until ${TRIAL_OFFER_END_LABEL.long}` : `Free for ${trialDays} days`,
+    /** The same mid-sentence: "free until 31 Dec 2026" / "free for 14 days" */
+    lower: on ? `free until ${TRIAL_OFFER_END_LABEL.long}` : `free for ${trialDays} days`,
+    /** The note under the sign-up button: "Free until 31 Dec" / "14-day free trial" */
+    note: on ? `Free until ${TRIAL_OFFER_END_LABEL.short}` : `${trialDays}-day free trial`,
+    /** After "Free ·" on a price: "until 31 Dec" / "14 days" */
+    span: on ? `until ${TRIAL_OFFER_END_LABEL.short}` : `${trialDays} days`,
+  }
+}
+
 /** Plan prices exclude GST; platform subscriptions are charged 18% GST on top. */
 export const PLATFORM_GST_RATE = 18
 export function gstOn(basePaise: number): number {

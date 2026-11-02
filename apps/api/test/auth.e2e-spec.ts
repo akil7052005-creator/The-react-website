@@ -1,6 +1,7 @@
 import type { INestApplication } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
 import type { PrismaClient } from '@prisma/client'
+import { createHash } from 'crypto'
 import request from 'supertest'
 import { emailFailed } from '../src/common/errors'
 import type { MailService } from '../src/infra/mail.service'
@@ -18,11 +19,11 @@ describe('Auth & profile', () => {
   afterAll(() => app.close())
 
   describe('signup', () => {
-    it('creates a studio on a 14-day Trial with bonus credits and logs in', async () => {
+    it('creates a studio on a Trial (free until 31 Dec 2026) with bonus credits and logs in', async () => {
       const { agent, studioId } = await signup(app, { plan: 'trial' })
       const sub = await prisma.subscription.findUniqueOrThrow({ where: { studioId } })
       expect(sub).toMatchObject({ isTrial: true, status: 'TRIAL' })
-      expect(Math.round((sub.currentPeriodEnd.getTime() - sub.currentPeriodStart.getTime()) / 86_400_000)).toBe(14)
+      expect(sub.currentPeriodEnd.toISOString()).toBe('2026-12-31T18:29:59.000Z')
       const me = await agent.get('/api/v1/auth/me').expect(200)
       expect(me.body.user.role).toBe('OWNER')
       expect(me.body.studio.plan.code).toBe('STARTER')
@@ -98,25 +99,90 @@ describe('Auth & profile', () => {
       expectError(res.body, 'TOKEN_EXPIRED')
     })
 
-    it('rotates refresh tokens and revokes everything when an old one is replayed', async () => {
-      const { email, password, userId } = await signup(app)
-      const server = app.getHttpServer()
+    describe('refresh token rotation', () => {
       const cookie = (res: request.Response, name: string) =>
         (res.headers['set-cookie'] as unknown as string[]).find((c) => c.startsWith(`${name}=`))!.split(';')[0]
+      const hashOf = (rt: string) => createHash('sha256').update(rt.slice('wz_rt='.length)).digest('hex')
+      const login = async () => {
+        const { email, password, userId } = await signup(app)
+        const res = await request(app.getHttpServer()).post('/api/v1/auth/login').send({ email, password }).expect(200)
+        return { email, password, userId, rt: cookie(res, 'wz_rt') }
+      }
+      const refresh = (rt: string) => request(app.getHttpServer()).post('/api/v1/auth/refresh').set('Cookie', rt)
+      const me = (at: string) => request(app.getHttpServer()).get('/api/v1/auth/me').set('Cookie', at)
 
-      const login = await request(server).post('/api/v1/auth/login').send({ email, password }).expect(200)
-      const original = cookie(login, 'wz_rt')
-      const rotated = await request(server).post('/api/v1/auth/refresh').set('Cookie', original).expect(200)
-      const next = cookie(rotated, 'wz_rt')
-      expect(next).not.toBe(original)
-      await request(server).get('/api/v1/auth/me').set('Cookie', cookie(rotated, 'wz_at')).expect(200)
+      it('rotates the refresh token: a new pair each time, in the same login', async () => {
+        const { rt } = await login()
+        const rotated = await refresh(rt).expect(200)
+        expect(cookie(rotated, 'wz_rt')).not.toBe(rt)
+        await me(cookie(rotated, 'wz_at')).expect(200)
+        const [before, after] = await Promise.all([hashOf(rt), hashOf(cookie(rotated, 'wz_rt'))].map((h) => prisma.refreshToken.findUniqueOrThrow({ where: { tokenHash: h } })))
+        expect(after.familyId).toBe(before.familyId)
+        expect(before).toMatchObject({ replacedById: after.id })
+        expect(before.rotatedAt).not.toBeNull()
+      })
 
-      // Replaying the original (already rotated) refresh token revokes every session.
-      const replay = await request(server).post('/api/v1/auth/refresh').set('Cookie', original).expect(401)
-      expectError(replay.body, 'TOKEN_EXPIRED')
-      expect(await prisma.refreshToken.count({ where: { userId, revokedAt: null } })).toBe(0)
-      // So the legitimate newest token no longer works either.
-      await request(server).post('/api/v1/auth/refresh').set('Cookie', next).expect(401)
+      it('two parallel refreshes with the same cookie both succeed and the session stays alive', async () => {
+        const { rt } = await login()
+        const [a, b] = await Promise.all([refresh(rt), refresh(rt)])
+        expect([a.status, b.status]).toEqual([200, 200])
+        // Whichever response the browser keeps, its cookies work.
+        for (const res of [a, b]) {
+          await me(cookie(res, 'wz_at')).expect(200)
+          await refresh(cookie(res, 'wz_rt')).expect(200)
+        }
+      })
+
+      it('a token sent again within 60 s (a retry, a second tab) gets a fresh pair; no one is logged out', async () => {
+        const { rt, userId } = await login()
+        const first = await refresh(rt).expect(200)
+        const again = await refresh(rt).expect(200)
+        await me(cookie(again, 'wz_at')).expect(200)
+        await refresh(cookie(first, 'wz_rt')).expect(200)
+        expect(await prisma.refreshToken.count({ where: { userId, revokedAt: null } })).toBeGreaterThan(0)
+      })
+
+      it('a rotated token replayed after 60 s is treated as stolen: 401 and that login is revoked, other logins kept', async () => {
+        const { rt, email, password, userId } = await login()
+        const next = cookie(await refresh(rt).expect(200), 'wz_rt')
+        // A second login of the same user (another device).
+        const other = cookie(await request(app.getHttpServer()).post('/api/v1/auth/login').send({ email, password }).expect(200), 'wz_rt')
+        await prisma.refreshToken.updateMany({ where: { tokenHash: hashOf(rt) }, data: { rotatedAt: new Date(Date.now() - 61_000) } })
+
+        expectError((await refresh(rt).expect(401)).body, 'TOKEN_EXPIRED')
+        const family = (await prisma.refreshToken.findUniqueOrThrow({ where: { tokenHash: hashOf(rt) } })).familyId
+        expect(await prisma.refreshToken.count({ where: { familyId: family, revokedAt: null } })).toBe(0)
+        // The newest token of that login no longer works either; the other device stays signed in.
+        await refresh(next).expect(401)
+        await refresh(other).expect(200)
+        const otherFamily = (await prisma.refreshToken.findUniqueOrThrow({ where: { tokenHash: hashOf(other) } })).familyId
+        expect(await prisma.refreshToken.count({ where: { userId, familyId: otherFamily, revokedAt: null } })).toBe(1)
+      })
+
+      it('a logged-out login cannot be revived through the grace window', async () => {
+        const { rt } = await login()
+        const next = cookie(await refresh(rt).expect(200), 'wz_rt')
+        await request(app.getHttpServer()).post('/api/v1/auth/logout').set('Cookie', next).expect(200)
+        await refresh(rt).expect(401)
+        await refresh(next).expect(401)
+      })
+
+      it('the refresh cookie: HttpOnly, SameSite=Lax, path /api/v1/auth, 30 days; the access cookie 15 minutes', async () => {
+        const { email, password } = await signup(app)
+        const res = await request(app.getHttpServer()).post('/api/v1/auth/login').send({ email, password }).expect(200)
+        const all = res.headers['set-cookie'] as unknown as string[]
+        const rt = all.find((c) => c.startsWith('wz_rt='))!
+        const at = all.find((c) => c.startsWith('wz_at='))!
+        expect(rt).toMatch(/HttpOnly/)
+        expect(rt).toMatch(/SameSite=Lax/)
+        expect(rt).toMatch(/Path=\/api\/v1\/auth/)
+        expect(rt).toMatch(new RegExp(`Max-Age=${30 * 86_400}\\b`))
+        expect(at).toMatch(new RegExp(`Max-Age=${15 * 60}\\b`))
+        // A refresh slides the session: the new refresh cookie gets the full 30 days again.
+        expect(cookie(await refresh(rt.split(';')[0]).expect(200), 'wz_rt')).toBeTruthy()
+        const again = (await refresh(rt.split(';')[0])).headers['set-cookie'] as unknown as string[]
+        expect(again.find((c) => c.startsWith('wz_rt='))).toMatch(new RegExp(`Max-Age=${30 * 86_400}\\b`))
+      })
     })
 
     it('logs out and clears the session', async () => {

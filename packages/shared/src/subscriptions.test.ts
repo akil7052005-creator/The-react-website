@@ -224,3 +224,25 @@ describe('money and badges', () => {
     expect(platformInvoiceNumber(2099, 1)).toBe('WZ/2099-00/00001')
   })
 })
+
+describe('trial offer: free until 31 Dec 2026, then 14 days', () => {
+  it('a trial started before the offer ends runs until 31 Dec 2026, 23:59:59 IST', async () => {
+    const { trialEndsAt, TRIAL_OFFER_END } = await import('./subscriptions')
+    expect(TRIAL_OFFER_END.toISOString()).toBe('2026-12-31T18:29:59.000Z')
+    for (const start of ['2026-11-02T10:00:00+05:30', '2026-12-30T08:00:00+05:30', '2026-12-31T23:59:58+05:30']) {
+      expect(trialEndsAt(new Date(start), 14).toISOString()).toBe('2026-12-31T18:29:59.000Z')
+    }
+  })
+
+  it('a trial started after it gets the plan\'s trial days', async () => {
+    const { trialEndsAt } = await import('./subscriptions')
+    expect(trialEndsAt(new Date('2027-01-01T00:00:00+05:30'), 14).toISOString()).toBe('2027-01-14T18:30:00.000Z')
+    expect(trialEndsAt(new Date('2027-03-10T12:00:00Z')).toISOString()).toBe('2027-03-24T12:00:00.000Z')
+  })
+
+  it('reads "Free until 31 Dec" while it lasts and "14 days" after', async () => {
+    const { trialOffer } = await import('./subscriptions')
+    expect(trialOffer(14, new Date('2026-11-02T10:00:00+05:30'))).toEqual({ on: true, line: 'Free until 31 Dec 2026', lower: 'free until 31 Dec 2026', note: 'Free until 31 Dec', span: 'until 31 Dec' })
+    expect(trialOffer(14, new Date('2027-01-01T00:00:00+05:30'))).toEqual({ on: false, line: 'Free for 14 days', lower: 'free for 14 days', note: '14-day free trial', span: '14 days' })
+  })
+})

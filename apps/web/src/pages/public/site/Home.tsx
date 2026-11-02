@@ -1,3 +1,4 @@
+import { trialOffer } from '@weddyzone/shared'
 import aboutJpg from '../../../assets/Wedding_image.jpg'
 import heroJpg from '../../../assets/home-hero-mandap.jpg'
 import { useMeQuery } from '../../../auth/AuthProvider'
@@ -20,11 +21,11 @@ const COUPLE_STEPS = [
 ]
 
 const META: Record<Arrival | 'home', [string, string]> = {
-  home: ['Photo selection for wedding studios', `${APP_NAME}: upload a wedding, share it on WhatsApp and get the couple's photo picks back. Free 14-day trial.`],
+  home: ['Photo selection for wedding studios', `${APP_NAME}: upload a wedding, share it on WhatsApp and get the couple's photo picks back. ${trialOffer().line}.`],
   about: ['About Us', `The story behind ${APP_NAME}, photo selection made for Indian wedding studios.`],
-  pricing: ['Plans & Pricing', 'Trial, Pro and VIP plans for wedding studios, for 1, 6 or 12 months. Start with a free 14-day trial.'],
+  pricing: ['Plans & Pricing', `Trial, Pro and VIP plans for wedding studios, for 1, 6 or 12 months. Start ${trialOffer().lower}.`],
   login: ['Log in', `Log in to your ${APP_NAME} studio.`],
-  signup: ['Start free trial', `Create your ${APP_NAME} studio: free for 14 days, no card needed.`],
+  signup: ['Start free trial', `Create your ${APP_NAME} studio: ${trialOffer().lower}, no card needed.`],
 }
 
 /**

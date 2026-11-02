@@ -19,7 +19,7 @@ test('home: one h1, the hero with its card, sections, footer; alt text; no sidew
   await expect(page.locator('meta[property="og:title"]')).toHaveAttribute('content', /Photo selection/)
   await expect(card(page)).toBeVisible()
   await expect(card(page).getByRole('radio', { name: 'Trial' })).toHaveAttribute('aria-checked', 'true')
-  await expect(card(page).getByText('14-day free trial · no card needed')).toBeVisible()
+  await expect(card(page).getByText('Free until 31 Dec · no card needed')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'How it works' })).toBeVisible()
   await expect(page.locator('#about')).toBeAttached()
   await expect(page.getByText('brandlift123@gmail.com').first()).toBeAttached()
@@ -107,7 +107,7 @@ test('pricing: 1, 6 or 12 months with the new prices and savings', async ({ page
   await expect(card(page).getByRole('radio', { name: 'VIP' })).toHaveAttribute('aria-checked', 'true')
   await expect(card(page).getByLabel('Billing period')).toHaveValue('YEARLY')
   await expect(card(page)).toContainText('₹10,000 + GST')
-  await expect(card(page).getByText('14-day free trial · no card needed')).toHaveCount(0)
+  await expect(card(page).getByText('Free until 31 Dec · no card needed')).toHaveCount(0)
   await expect(card(page).getByLabel('Your name')).toBeFocused()
 })
 
@@ -163,7 +163,7 @@ test.describe('desktop menu', () => {
     await expect(card(page).getByLabel('Your name')).toBeFocused()
     // Switch back to Trial on the card.
     await card(page).getByRole('radio', { name: 'Trial' }).click()
-    await expect(card(page).getByText('14-day free trial · no card needed')).toBeVisible()
+    await expect(card(page).getByText('Free until 31 Dec · no card needed')).toBeVisible()
   })
 
   test('Login panel: show/hide password, errors inside, forgot password and back; then log in to the dashboard', async ({ page }) => {

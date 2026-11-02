@@ -22,7 +22,7 @@ function rows(current: PlanDto, vip: PlanDto) {
   ]
 }
 
-/** VIP: unlimited events (fair use), 5,000 photos per event, 1 TB a month and customer favourites. */
+/** VIP: unlimited events (fair use), 7,000 photos per event, 1 TB a month and customer favourites. */
 function AllAccess() {
   const plans = usePlans()
   const sub = useSubscription()
@@ -35,7 +35,7 @@ function AllAccess() {
 
   return (
     <div className="stack">
-      <PageHeader eyebrow="Plans" featureBadge="Top tier" title="VIP" subtitle="Unlimited customer events (fair use), 5,000 photos per event, 1 TB of uploads a month and customer favourites." />
+      <PageHeader eyebrow="Plans" featureBadge="Top tier" title="VIP" subtitle="Unlimited customer events (fair use), 7,000 photos per event, 1 TB of uploads a month and customer favourites." />
 
       <div className="lux lux-catchy">
         <div className="grid grid-2" style={{ alignItems: 'center' }}>
