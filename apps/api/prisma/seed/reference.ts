@@ -31,7 +31,16 @@ export const PLANS = [
       maxFilesPerUpload: 3500,
       uploadConcurrency: 4,
     },
-    features: ['5 customer events in total', 'Up to 3,500 photos per event', 'About 50 GB of uploads', 'Customer gallery open 7 days', 'Free until 31 Dec 2026'],
+    // eventsTotal and uploadGbTotal are per trial period: November and December during the launch
+    // offer (dates in packages/shared/src/subscriptions.ts), the whole 14-day trial after it.
+    features: [
+      '5 customer events in November + 5 in December',
+      'Up to 3,500 photos per event',
+      '50 GB of uploads each month (about 5,000 photos)',
+      'Customer gallery open 7 days',
+      'No card needed',
+      'Customers pick with a heart',
+    ],
     comingSoon: [],
   },
   {
@@ -60,7 +69,7 @@ export const PLANS = [
       maxFilesPerUpload: 3500,
       uploadConcurrency: 4,
     },
-    features: ['10 new customer events a month', 'Up to 3,500 photos per event', '500 GB of uploads a month', '+5 events add-on any month', 'Pick with a heart'],
+    features: ['10 new customer events a month', 'Up to 3,500 photos per event', '500 GB of uploads a month (all events)', '+5 events add-on any month', 'Pick with a heart'],
     comingSoon: [],
   },
   {

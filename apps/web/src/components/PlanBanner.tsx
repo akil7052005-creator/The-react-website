@@ -27,7 +27,20 @@ export function PlanBanner({ always = false }: { always?: boolean }) {
   let text: React.ReactNode
   let cta = { to: b.renewLink, label: 'Renew' }
 
-  switch (b.status) {
+  // A free trial that has ended (grace or expired): choose a plan, there is nothing to renew.
+  const trialOver = b.isTrial && (b.status === 'GRACE' || b.status === 'EXPIRED')
+
+  switch (trialOver ? 'TRIAL_ENDED' : b.status) {
+    case 'TRIAL_ENDED':
+      tone = 'red'
+      icon = 'hourglass-bottom'
+      text = (
+        <>
+          <strong>Your free trial ended on {longDate(b.endDate)}.</strong> Upgrade to Pro or VIP to add events and upload photos. Nothing is deleted.
+        </>
+      )
+      cta = { to: '/subscriptions', label: 'Upgrade' }
+      break
     case 'TRIAL':
       tone = b.daysLeft <= 7 ? 'amber' : 'green'
       icon = 'hourglass-split'

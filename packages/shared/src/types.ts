@@ -366,6 +366,8 @@ export interface MySubscriptionBannerDto {
   planName: string
   planCode: PlanCode
   status: SubscriptionStatus
+  /** A free trial (after it ends, the banner asks to choose a plan rather than renew). */
+  isTrial: boolean
   endDate: string
   graceEndsAt: string | null
   daysLeft: number

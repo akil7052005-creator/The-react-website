@@ -46,8 +46,9 @@ describe('Photo uploads: plan-based limits', () => {
   describe('GET /me/upload-limits', () => {
     it("gives the plan's limits (trial: up to 3,500 photos at a time, no storage cap)", async () => {
       const res = await A.agent.get('/api/v1/me/upload-limits').expect(200)
-      expect(res.body).toMatchObject({ planCode: 'STARTER', planName: 'Trial', maxPhotoMb: 100, maxFilesPerUpload: 3500, uploadConcurrency: 4, storageGb: null, storageLeftBytes: null, readOnly: false, status: 'TRIAL', graceEndsAt: null })
-      expect(res.body.renewLink).toBe('/subscriptions?renew=STARTER&cycle=MONTHLY')
+      expect(res.body).toMatchObject({ planCode: 'STARTER', planName: 'Trial', maxPhotoMb: 100, maxFilesPerUpload: 3500, uploadConcurrency: 4, storageGb: null, storageLeftBytes: null, readOnly: false, status: 'TRIAL', graceEndsAt: null, isTrial: true })
+      // A free trial has nothing to renew: its link is the plans page.
+      expect(res.body.renewLink).toBe('/subscriptions')
     })
 
     it('follows the plan (seeded values for every plan)', async () => {

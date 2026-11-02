@@ -310,13 +310,14 @@ export class SubscriptionJobsService implements OnApplicationBootstrap, OnModule
     for (const s of live) {
       const m = await this.usage.meter(s.studioId)
       const window = m.windowStart.slice(0, 10)
+      const trialFor = m.period ? ` for ${m.period.name}` : ''
       const checks: { key: string; used: number; limit: number | null; label: string; text: string }[] = [
-        { key: 'events', used: m.events.used, limit: m.events.limit, label: m.lifetime ? 'trial events' : 'events this month', text: `${m.events.used} of ${m.events.limit}` },
+        { key: 'events', used: m.events.used, limit: m.events.limit, label: m.lifetime ? `trial events${trialFor}` : 'events this month', text: `${m.events.used} of ${m.events.limit}` },
         {
           key: 'uploads',
           used: m.uploads.usedBytes / GB,
           limit: m.uploads.limitBytes === null ? null : m.uploads.limitBytes / GB,
-          label: m.lifetime ? 'trial uploads' : 'uploads this month',
+          label: m.lifetime ? `trial uploads${trialFor}` : 'uploads this month',
           text: `${(m.uploads.usedBytes / GB).toFixed(1)} of ${m.uploads.limitBytes === null ? '' : Math.round(m.uploads.limitBytes / GB)} GB`,
         },
       ]

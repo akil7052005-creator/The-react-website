@@ -1,9 +1,10 @@
 import { Link } from 'react-router-dom'
-import { gbText, meterText, usePlanActions, useUsage } from '../lib/billing'
+import { gbText, limitNote, meterText, usePlanActions, useUsage } from '../lib/billing'
 
 /**
- * The plan meter: "Events 7/10 · Uploads 320 GB of 500 GB · resets on 8 Nov". Amber from 80 % (8 of
- * 10 events) with "Upgrade" and, on Pro, "Buy +5 events"; red when a limit is reached.
+ * The plan meter: "Events 7/10 · Uploads 320 GB of 500 GB · resets on 8 Nov" (Trial: "Events 2/5
+ * (November) · Uploads 12 GB of 50 GB · resets on 1 Dec"). Amber from 80 % (8 of 10 events) with
+ * "Upgrade" and, on Pro, "Buy +5 events"; red when a limit is reached.
  */
 export function UsageMeter() {
   const q = useUsage()
@@ -24,7 +25,7 @@ export function UsageMeter() {
       </div>
       <div className="um-bars">
         {m.events.limit !== null && (
-          <div className="um-bar" title={`Events ${m.events.used} of ${m.events.limit}`}>
+          <div className="um-bar" title={`Events ${m.events.used} of ${m.events.limit}${m.period ? ` (${m.period.name})` : ''}`}>
             <span>Events</span>
             <div className="uf-track" role="progressbar" aria-label="Events used" aria-valuenow={m.events.used} aria-valuemin={0} aria-valuemax={m.events.limit}>
               <span style={{ width: `${pct(m.events.used, m.events.limit)}%` }} />
@@ -44,17 +45,19 @@ export function UsageMeter() {
         <div className="um-actions">
           <p className="um-note" role={tone === 'red' ? 'alert' : undefined}>
             {m.blocked
-              ? 'Your plan has ended: renew to add events and upload photos.'
+              ? m.isTrial
+                ? 'Your free trial has ended: upgrade to add events and upload photos.'
+                : 'Your plan has ended: renew to add events and upload photos.'
               : eventsFull
-                ? `You've used all your events${m.lifetime ? ' on the Trial' : ' this month'}.`
+                ? limitNote(m, 'events')
                 : uploadsFull
-                  ? `You've used all your uploads${m.lifetime ? ' on the Trial' : ' this month'}.`
+                  ? limitNote(m, 'uploads')
                   : m.warn
                     ? 'You are close to your plan limit.'
                     : 'You are on the free Trial.'}
           </p>
           <Link to="/subscriptions" className="btn btn-sm btn-primary">
-            <i className="bi bi-arrow-up-circle" /> {m.blocked ? 'Renew' : 'Upgrade'}
+            <i className="bi bi-arrow-up-circle" /> {m.blocked && !m.isTrial ? 'Renew' : 'Upgrade'}
           </Link>
           {m.addon && !m.blocked && (
             <button type="button" className="btn btn-sm btn-ghost" onClick={() => void buyAddon(m.addon!)} data-testid="buy-addon">

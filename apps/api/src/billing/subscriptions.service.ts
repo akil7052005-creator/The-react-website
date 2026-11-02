@@ -99,6 +99,7 @@ export class SubscriptionsService {
       planName: eff.plan.name,
       planCode: eff.plan.code,
       status: dto.status,
+      isTrial: eff.subscription.isTrial,
       endDate: dto.currentPeriodEnd,
       graceEndsAt: dto.graceEndsAt,
       daysLeft: dto.daysLeft,

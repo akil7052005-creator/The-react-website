@@ -59,14 +59,14 @@ export function proratedCredit(paidPaise: number, periodStart: Date, periodEnd: 
 export interface PlanQuota {
   /** New events per 30-day window; null = no monthly cap. */
   eventsPerMonth: number | null
-  /** Events over the whole plan (Trial); null = none. */
+  /** Trial events per trial period (November, December; the whole trial after the offer); null = none. */
   eventsTotal: number | null
   /** VIP fair use: the monthly ceiling behind "unlimited". */
   fairUseEventsPerMonth: number | null
   photosPerEvent: number | null
   /** Upload allowance per window, measured in original file size; null = none. */
   uploadGbPerMonth: number | null
-  /** Upload allowance over the whole plan (Trial). */
+  /** Trial upload allowance per trial period, like `eventsTotal`. */
   uploadGbTotal: number | null
   /** How long a trial lasts. */
   trialDays: number | null
@@ -120,12 +120,18 @@ export interface UsageMeterDto {
   planCode: PlanCode
   planName: string
   isTrial: boolean
-  /** Whole-plan limits (Trial) instead of monthly ones. */
+  /** Trial limits (per trial period) instead of 30-day windows. */
   lifetime: boolean
+  /**
+   * Trial launch offer: the allowance period ("November") and, when a fresh allowance starts at
+   * `resetsOn`, the next one's name ("December"). Null on paid plans and after the offer.
+   */
+  period: { name: string; next: string | null } | null
   events: { used: number; limit: number | null; addon: number }
   uploads: { usedBytes: number; limitBytes: number | null }
   photosPerEvent: number | null
   windowStart: string
+  /** When the next allowance starts (or, on the trial's last period, when the trial ends). */
   resetsOn: string
   /** "+5 events" can be bought now; its size and price. */
   addon: { events: number; pricePaise: number } | null

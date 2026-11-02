@@ -21,8 +21,10 @@ export const fileTooLarge = (l: Pick<UploadLimitsDto, 'maxPhotoMb' | 'planName'>
   return new AppError(HttpStatus.PAYLOAD_TOO_LARGE, ERROR_CODES.FILE_TOO_LARGE, message, { file: message }, { resource: 'photoSize', limit: l.maxPhotoMb })
 }
 
-export const renewToUpload = (l: Pick<UploadLimitsDto, 'renewLink' | 'planCode'>) =>
-  new AppError(HttpStatus.FORBIDDEN, ERROR_CODES.PLAN_LIMIT, 'Renew your plan to upload', { file: 'Renew your plan to upload' }, { resource: 'subscription', renewLink: l.renewLink, plan: l.planCode })
+export const renewToUpload = (l: Pick<UploadLimitsDto, 'renewLink' | 'planCode' | 'isTrial'>) => {
+  const message = l.isTrial ? 'Your free trial has ended. Upgrade to Pro or VIP to upload photos.' : 'Renew your plan to upload'
+  return new AppError(HttpStatus.FORBIDDEN, ERROR_CODES.PLAN_LIMIT, message, { file: message }, { resource: 'subscription', renewLink: l.renewLink, plan: l.planCode })
+}
 
 export const storageFull = (usedBytes: number, l: Pick<UploadLimitsDto, 'storageGb' | 'planCode'>) => {
   const used = Math.round((usedBytes / GB) * 10) / 10
@@ -63,7 +65,9 @@ export class UploadLimitsService {
       readOnly: eff.readOnly || eff.status === 'GRACE',
       status: eff.status,
       graceEndsAt: grace,
-      renewLink: renewPath(eff.plan.code, eff.subscription.cycle),
+      isTrial: eff.subscription.isTrial,
+      // A trial has nothing to renew: it links to the plans page.
+      renewLink: eff.subscription.isTrial ? '/subscriptions' : renewPath(eff.plan.code, eff.subscription.cycle),
     }
   }
 }

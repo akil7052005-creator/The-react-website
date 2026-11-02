@@ -64,7 +64,9 @@ export interface UploadLimitsDto extends PlanUploadLimits {
   status: SubscriptionStatus
   /** Set while the plan is in grace: uploads work until then. */
   graceEndsAt: string | null
-  /** One-click renewal page for this plan. */
+  /** A free trial: once it has ended, uploads ask to upgrade (to /subscriptions) rather than renew. */
+  isTrial: boolean
+  /** One-click renewal page for this plan (the plans page for a trial). */
   renewLink: string
 }
 

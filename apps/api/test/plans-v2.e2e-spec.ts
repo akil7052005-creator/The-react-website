@@ -76,11 +76,14 @@ describe('Plans: Trial, Pro, VIP', () => {
       expect((await T.agent.get('/api/v1/me/subscription').expect(200)).body.endDate).toBe('2026-12-31T18:29:59.000Z')
     })
 
-    it('allows 5 customer events in total, then asks to upgrade', async () => {
+    // The trial's periods (November, December) and their exact messages are tested with a fixed
+    // clock in trial-periods.e2e-spec.ts; these run on today's date.
+    it('allows 5 customer events in the trial period, then asks to upgrade', async () => {
       expect(await meter(T)).toMatchObject({ planCode: 'STARTER', planName: 'Trial', isTrial: true, lifetime: true, events: { used: 0, limit: 5 }, photosPerEvent: 3500, favourites: false, addon: null })
       for (let i = 1; i <= 5; i++) await newEvent(T, i).expect(201)
       const res = await newEvent(T, 6).expect(402)
-      expect(res.body.error).toMatchObject({ code: 'PLAN_LIMIT', message: 'Your Trial includes 5 customer events. Upgrade to add more.' })
+      expect(res.body.error.code).toBe('PLAN_LIMIT')
+      expect(res.body.error.message).toMatch(/^You've used your 5 trial events for |^Your Trial includes 5 customer events\./)
       expect(res.body.error.details).toMatchObject({ resource: 'events', limit: 5, used: 5, plan: 'STARTER', addon: null })
       // Deleting an event doesn't give it back: events are counted when created.
       const list = (await T.agent.get('/api/v1/selections').expect(200)).body.data
@@ -98,14 +101,14 @@ describe('Plans: Trial, Pro, VIP', () => {
       await T.agent.patch(`/api/v1/selections/${sel.id}/settings`).send({ galleryExpiry: 7 }).expect(200)
     })
 
-    it('about 50 GB of uploads over the whole trial', async () => {
+    it('50 GB of uploads in the trial period', async () => {
       const [sel] = (await T.agent.get('/api/v1/selections').expect(200)).body.data
       expect((await meter(T)).uploads.limitBytes).toBe(50 * GB)
       await sign(T, sel.id, 1, 49 * GB).expect(200)
-      // A 51 GB original is more than the whole trial allows.
+      // A 51 GB original is more than the period allows.
       const big = await sign(T, sel.id, 2, 51 * GB).expect(402)
-      expect(big.body.error.details).toMatchObject({ resource: 'uploads', limit: 50 })
-      expect(big.body.error.message).toBe('Your Trial includes about 50 GB of uploads and 0 GB is used. Upgrade to upload more.')
+      expect(big.body.error.details).toMatchObject({ resource: 'uploads', limit: 50, used: 0 })
+      expect(big.body.error.message).toMatch(/0 GB of your 50 GB for |includes about 50 GB of uploads/)
     })
 
     it('3,500 photos per event: the 3,500th is fine, the 3,501st is refused', async () => {

@@ -1,24 +1,35 @@
 // How plans read on the pricing pages (in the app and on the public site): the limits as short
 // lines, from the plan's own limits so an admin's change shows everywhere.
 
-import { quotaOf, trialOffer, type PlanDto } from '@weddyzone/shared'
+import { quotaOf, trialPeriodsAhead, type PlanDto } from '@weddyzone/shared'
 
 const n = (v: number) => v.toLocaleString('en-IN')
 const gb = (v: number) => (v >= 1024 ? `${v % 1024 === 0 ? v / 1024 : (v / 1024).toFixed(1)} TB` : `${n(v)} GB`)
+/** Photos that fit in `gbs` of uploads, at about 10 MB an original: 50 GB → "about 5,000 photos". */
+const photosIn = (gbs: number) => `about ${n(Math.round(gbs * 100))} photos`
 
-/** "10 new customer events a month", "Up to 3,500 photos per event", … */
-export function planLimitLines(plan: PlanDto): string[] {
+/**
+ * "10 new customer events a month", "Up to 3,500 photos per event", … The Trial's events and uploads
+ * are per trial period: "5 customer events in November + 5 in December" while the launch offer has
+ * both months ahead, "… in December" during December, and for the whole trial after the offer.
+ */
+export function planLimitLines(plan: PlanDto, now = new Date()): string[] {
   const q = quotaOf(plan.limits)
+  const ahead = trialPeriodsAhead(now)
   const lines: string[] = []
-  if (q.eventsTotal !== null) lines.push(`${n(q.eventsTotal)} customer events in total`)
+  if (q.eventsTotal !== null) lines.push(ahead.length ? `${n(q.eventsTotal)} customer events in ${ahead.join(` + ${n(q.eventsTotal)} in `)}` : `${n(q.eventsTotal)} customer events in total`)
   else if (q.eventsPerMonth !== null) lines.push(`${n(q.eventsPerMonth)} new customer events a month`)
   else lines.push('Unlimited customer events (fair use)')
   if (q.photosPerEvent !== null) lines.push(`Up to ${n(q.photosPerEvent)} photos per event`)
-  if (q.uploadGbTotal !== null) lines.push(`About ${gb(q.uploadGbTotal)} of uploads`)
-  else if (q.uploadGbPerMonth !== null) lines.push(`${gb(q.uploadGbPerMonth)} of uploads a month`)
+  if (q.uploadGbTotal !== null) {
+    const when = ahead.length > 1 ? ' each month' : ahead.length === 1 ? ` in ${ahead[0]}` : ''
+    lines.push(`${gb(q.uploadGbTotal)} of uploads${when} (${photosIn(q.uploadGbTotal)})`)
+  } else if (q.uploadGbPerMonth !== null) {
+    // Pro: the monthly uploads are shared by all of the month's events, not per event.
+    lines.push(`${gb(q.uploadGbPerMonth)} of uploads a month${q.eventsPerMonth !== null ? ' (all events)' : ''}`)
+  }
   if (q.galleryDays !== null) lines.push(`Customer gallery open ${q.galleryDays} days`)
-  // "Free until 31 Dec 2026" while the launch offer lasts, then "Free for 14 days".
-  if (q.trialDays !== null) lines.push(trialOffer(q.trialDays).line)
+  if (q.trialDays !== null) lines.push('No card needed')
   if (q.addonEvents) lines.push(`+${q.addonEvents} events add-on any month`)
   lines.push(q.favourites ? 'Customer favourites (tick + heart)' : 'Customers pick with a heart')
   return lines

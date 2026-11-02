@@ -48,12 +48,31 @@ export function gbText(bytes: number) {
   return `${gb >= 10 ? Math.round(gb) : Math.round(gb * 10) / 10} GB`
 }
 
-/** "Events 7/10 · Uploads 320 GB of 500 GB · resets on 8 Nov". */
+/** "1 Dec": when the meter resets (IST, whatever the browser's time zone). */
+export const resetDay = (m: Pick<UsageMeterDto, 'resetsOn'>) => new Date(m.resetsOn).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })
+
+/**
+ * "Events 7/10 · Uploads 320 GB of 500 GB · resets on 8 Nov". Trial: "Events 2/5 (November) ·
+ * Uploads 12 GB of 50 GB · resets on 1 Dec", then "… (December) · … · trial ends 31 Dec".
+ */
 export function meterText(m: UsageMeterDto) {
-  const events = m.events.limit === null ? `Events ${m.events.used}` : `Events ${m.events.used}/${m.events.limit}`
+  const period = m.period ? ` (${m.period.name})` : ''
+  const events = m.events.limit === null ? `Events ${m.events.used}` : `Events ${m.events.used}/${m.events.limit}${period}`
   const uploads = m.uploads.limitBytes === null ? `Uploads ${gbText(m.uploads.usedBytes)}` : `Uploads ${gbText(m.uploads.usedBytes)} of ${gbText(m.uploads.limitBytes)}`
-  const when = new Date(m.resetsOn).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
-  return `${events} · ${uploads} · ${m.lifetime ? `trial ends ${when}` : `resets on ${when}`}`
+  const when = resetDay(m)
+  return `${events} · ${uploads} · ${m.lifetime && !m.period?.next ? `trial ends ${when}` : `resets on ${when}`}`
+}
+
+/** The meter's note when a limit is reached ("You've used your 5 trial events for November. 5 more unlock on 1 Dec."). */
+export function limitNote(m: UsageMeterDto, what: 'events' | 'uploads'): string {
+  const p = m.period
+  if (what === 'events') {
+    if (!p) return `You've used all your events${m.lifetime ? ' on the Trial' : ' this month'}.`
+    return `You've used your ${m.events.limit} trial events for ${p.name}. ${p.next ? `${m.events.limit} more unlock on ${resetDay(m)}.` : 'Upgrade to Pro to keep creating events.'}`
+  }
+  if (!p || m.uploads.limitBytes === null) return `You've used all your uploads${m.lifetime ? ' on the Trial' : ' this month'}.`
+  const gb = gbText(m.uploads.limitBytes)
+  return `You've used your ${gb} of uploads for ${p.name}. ${p.next ? `${gb} more on ${resetDay(m)}.` : 'Upgrade to Pro to upload more.'}`
 }
 
 /** Compact plan status for banners (GET /me/subscription). */

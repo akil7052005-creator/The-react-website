@@ -229,6 +229,8 @@ export class SelectionsService {
         data: {
           id,
           studioId,
+          // Events count towards the plan's period by this time: the same clock that checked the limit.
+          createdAt: new Date(),
           code: await this.newCode(tx),
           eventId: event.id,
           quota: body.quota,
@@ -309,6 +311,8 @@ export class SelectionsService {
         data: {
           id,
           studioId,
+          // Events count towards the plan's period by this time: the same clock that checked the limit.
+          createdAt: new Date(),
           code: await this.newCode(tx),
           eventId: event.id,
           quota: body.quota,

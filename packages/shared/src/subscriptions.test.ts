@@ -246,3 +246,42 @@ describe('trial offer: free until 31 Dec 2026, then 14 days', () => {
     expect(trialOffer(14, new Date('2027-01-01T00:00:00+05:30'))).toEqual({ on: false, line: 'Free for 14 days', lower: 'free for 14 days', note: '14-day free trial', span: '14 days' })
   })
 })
+
+describe('trial periods: November, then December (IST)', () => {
+  const at = async (iso: string) => (await import('./subscriptions')).trialPeriodAt(new Date(iso))
+  const DEC_1 = '2026-11-30T18:30:00.000Z' // 1 Dec 2026, 00:00 IST
+
+  it('November runs to 30 Nov 23:59:59 IST and counts everything before it; 5 more unlock on 1 Dec', async () => {
+    for (const iso of ['2026-10-20T10:00:00+05:30', '2026-11-02T10:00:00+05:30', '2026-11-30T23:59:59.999+05:30']) {
+      const p = await at(iso)
+      expect(p.name).toBe('November')
+      expect(p.start.getTime()).toBe(0)
+      expect(p.next).toEqual({ name: 'December', start: new Date(DEC_1), label: '1 Dec' })
+    }
+  })
+
+  it('December starts at 1 Dec 00:00 IST (a fresh allowance) and is the last period', async () => {
+    for (const iso of ['2026-12-01T00:00:00+05:30', '2026-12-15T12:00:00+05:30', '2026-12-31T23:59:59+05:30']) {
+      const p = await at(iso)
+      expect(p).toEqual({ name: 'December', start: new Date(DEC_1), next: null })
+    }
+  })
+
+  it('after the offer there are no named periods: a 14-day trial is one period', async () => {
+    const p = await at('2027-01-05T10:00:00+05:30')
+    expect(p).toEqual({ name: null, start: new Date('2026-12-31T18:30:00.000Z'), next: null })
+  })
+
+  it('a studio signing up in November gets both periods, in December only December, after it none', async () => {
+    const { trialPeriodsAhead } = await import('./subscriptions')
+    expect(trialPeriodsAhead(new Date('2026-11-02T10:00:00+05:30'))).toEqual(['November', 'December'])
+    expect(trialPeriodsAhead(new Date('2026-12-01T00:00:00+05:30'))).toEqual(['December'])
+    expect(trialPeriodsAhead(new Date('2027-01-01T00:00:00+05:30'))).toEqual([])
+  })
+
+  it('the offer\'s end and labels come from the last period\'s date', async () => {
+    const { TRIAL_OFFER_END, TRIAL_OFFER_END_LABEL } = await import('./subscriptions')
+    expect(TRIAL_OFFER_END.toISOString()).toBe('2026-12-31T18:29:59.000Z')
+    expect(TRIAL_OFFER_END_LABEL).toEqual({ short: '31 Dec', long: '31 Dec 2026' })
+  })
+})

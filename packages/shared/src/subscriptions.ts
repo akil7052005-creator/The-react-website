@@ -47,12 +47,64 @@ export const CANCEL_REASON_LABELS: Record<CancelReason, string> = {
 
 // ------------------------------------------------------------------ trial offer
 
+/**
+ * Launch offer: the free trial runs until the last period's day (31 Dec 2026, 23:59:59 IST), in
+ * allowance periods. Each period gets the Trial plan's events (`eventsTotal`) and uploads
+ * (`uploadGbTotal`) afresh; unused ones don't carry over. A studio that signs up in December gets
+ * December only. `until` is the period's last day in IST (inclusive): change the dates here.
+ */
+export const TRIAL_OFFER_PERIODS: readonly { name: string; until: string }[] = [
+  { name: 'November', until: '2026-11-30' },
+  { name: 'December', until: '2026-12-31' },
+]
+
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+/** "2026-12-01" → "1 Dec" (or "1 Dec 2026"). */
+const dayLabel = (isoDay: string, withYear = false) => {
+  const [y, m, d] = isoDay.split('-').map(Number)
+  return `${d} ${MONTH_SHORT[m - 1]}${withYear ? ` ${y}` : ''}`
+}
+/** 00:00 IST on the day after `isoDay`: when the next period starts. */
+const istDayAfter = (isoDay: string) => new Date(new Date(`${isoDay}T00:00:00.000+05:30`).getTime() + DAY_MS)
+const LAST_OFFER_DAY = TRIAL_OFFER_PERIODS[TRIAL_OFFER_PERIODS.length - 1].until
+
 /** Launch offer: a trial started before this moment (31 Dec 2026, 23:59:59 IST) is free until then. */
-export const TRIAL_OFFER_END = new Date('2026-12-31T23:59:59.000+05:30')
+export const TRIAL_OFFER_END = new Date(`${LAST_OFFER_DAY}T23:59:59.000+05:30`)
 /** The offer's end date for the copy: "Free until 31 Dec" / "Free until 31 Dec 2026". */
-export const TRIAL_OFFER_END_LABEL = { short: '31 Dec', long: '31 Dec 2026' } as const
+export const TRIAL_OFFER_END_LABEL = { short: dayLabel(LAST_OFFER_DAY), long: dayLabel(LAST_OFFER_DAY, true) } as const
 /** Trials started after the offer last this many days, unless the Trial plan says otherwise. */
 export const DEFAULT_TRIAL_DAYS = 14
+
+/** The trial allowance period a moment falls in. */
+export interface TrialPeriod {
+  /** "November"; null after the offer (a 14-day trial is one period). */
+  name: string | null
+  /** Events and uploads from here on count towards this period (the first one also counts everything before it). */
+  start: Date
+  /** The next offer period, when one follows: its name, first moment and first day for the copy ("1 Dec"). */
+  next: { name: string; start: Date; label: string } | null
+}
+
+/** Which trial period `now` is in: November (and anything before), December, or after the offer. */
+export function trialPeriodAt(now = new Date()): TrialPeriod {
+  let start = new Date(0)
+  for (let i = 0; i < TRIAL_OFFER_PERIODS.length; i++) {
+    const end = istDayAfter(TRIAL_OFFER_PERIODS[i].until)
+    if (now < end) {
+      const following = TRIAL_OFFER_PERIODS[i + 1]
+      return {
+        name: TRIAL_OFFER_PERIODS[i].name,
+        start,
+        next: following ? { name: following.name, start: end, label: dayLabel(istDate(end)) } : null,
+      }
+    }
+    start = end
+  }
+  return { name: null, start, next: null }
+}
+
+/** The offer periods a studio signing up at `now` gets: [November, December] in November, [December] in December, none after. */
+export const trialPeriodsAhead = (now = new Date()) => TRIAL_OFFER_PERIODS.filter((p) => now < istDayAfter(p.until)).map((p) => p.name)
 
 /** Is the "free until 31 Dec" offer still on? (After it, trials are `trialDays` long again.) */
 export const isTrialOfferOn = (now = new Date()) => now < TRIAL_OFFER_END

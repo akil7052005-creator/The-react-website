@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common'
-import { ERROR_CODES, LIMIT_WARN_RATIO, quotaOf, usageWindow, type PlanQuota, type UsageItem, type UsageMeterDto } from '@weddyzone/shared'
+import { ERROR_CODES, LIMIT_WARN_RATIO, quotaOf, trialPeriodAt, usageWindow, type PlanQuota, type TrialPeriod, type UsageItem, type UsageMeterDto } from '@weddyzone/shared'
 import { AppError, planLimit } from '../common/errors'
 import { startOfMonthUtc } from '../common/util'
 import { PrismaService, type Tx } from '../prisma/prisma.service'
@@ -7,27 +7,35 @@ import { PlansService, type EffectiveSubscription } from './plans.service'
 
 const GB = 1024 ** 3
 
-export const subscriptionReadOnly = (planName: string, status: string) =>
+/** `trialEndedOn`: the studio was on a free trial that ended then (it asks to choose a plan, not to renew). */
+export const subscriptionReadOnly = (planName: string, status: string, trialEndedOn?: Date) =>
   new AppError(
     HttpStatus.PAYMENT_REQUIRED,
     ERROR_CODES.SUBSCRIPTION_READ_ONLY,
-    status === 'CANCELLED'
-      ? `Your ${planName} plan has ended, so your studio is read-only. Choose a plan to add new events and uploads.`
-      : status === 'GRACE'
-        ? `Your ${planName} plan has ended. Galleries stay view-only for 7 days: renew to add new events and uploads.`
-        : `Your ${planName} plan has expired, so your studio is read-only. Renew to add new events and uploads.`,
+    trialEndedOn
+      ? `Your free trial ended on ${istDay(trialEndedOn)}. Upgrade to Pro or VIP to add new events and uploads.`
+      : status === 'CANCELLED'
+        ? `Your ${planName} plan has ended, so your studio is read-only. Choose a plan to add new events and uploads.`
+        : status === 'GRACE'
+          ? `Your ${planName} plan has ended. Galleries stay view-only for 7 days: renew to add new events and uploads.`
+          : `Your ${planName} plan has expired, so your studio is read-only. Renew to add new events and uploads.`,
     undefined,
     { status, renewLink: '/subscriptions' },
   )
+
+/** A trial that has ended: when (for the "choose a plan" message), else undefined. */
+const endedTrial = (eff: EffectiveSubscription) => (eff.subscription.isTrial && eff.status !== 'CANCELLED' ? eff.subscription.currentPeriodEnd : undefined)
 
 /** The usage window a studio is in, and what its plan allows. */
 export interface UsageWindow {
   eff: EffectiveSubscription
   quota: PlanQuota
-  /** Trial: limits are for the whole trial, not per 30 days. */
+  /** Trial: limits are per trial period (see `period`), not per 30 days. */
   lifetime: boolean
   start: Date
   resetsOn: Date
+  /** Trial launch offer: "November" and, when a fresh allowance follows before the trial ends, the next period. */
+  period: { name: string; next: TrialPeriod['next'] } | null
 }
 
 const fmtGb = (bytes: number) => {
@@ -48,15 +56,24 @@ export class UsageService {
     private readonly plans: PlansService,
   ) {}
 
-  /** The current window: 30 days from the plan's start date (the whole trial on Trial). */
+  /**
+   * The current window: 30 days from the plan's start date. On Trial it is the trial period
+   * (November, then December, during the launch offer: each with a fresh allowance, nothing carried
+   * over; after the offer, the whole trial).
+   */
   async window(studioId: string, db: Tx | PrismaService = this.prisma, now = new Date()): Promise<UsageWindow> {
     const eff = await this.plans.effective(studioId, db)
     const quota = quotaOf(eff.plan.limits)
     const s = eff.subscription
     const lifetime = s.isTrial || quota.eventsTotal !== null || quota.uploadGbTotal !== null
-    if (lifetime) return { eff, quota, lifetime, start: new Date(0), resetsOn: s.currentPeriodEnd }
+    if (lifetime) {
+      const p = trialPeriodAt(now)
+      // A fresh allowance only if the next period starts before the trial ends.
+      const next = p.next && p.next.start < s.currentPeriodEnd ? p.next : null
+      return { eff, quota, lifetime, start: p.start, resetsOn: next ? next.start : s.currentPeriodEnd, period: p.name ? { name: p.name, next } : null }
+    }
     const w = usageWindow(s.usageAnchor ?? s.currentPeriodStart, now)
-    return { eff, quota, lifetime, ...w }
+    return { eff, quota, lifetime, ...w, period: null }
   }
 
   /** Events created in the window (deleted ones count too: an event is counted when it's created). */
@@ -88,10 +105,10 @@ export class UsageService {
 
   /** Grace, expired and cancelled studios can view but add no events or uploads. */
   private assertOpen(w: Pick<UsageWindow, 'eff'>) {
-    if (w.eff.readOnly || w.eff.status === 'GRACE') throw subscriptionReadOnly(w.eff.plan.name, w.eff.status)
+    if (w.eff.readOnly || w.eff.status === 'GRACE') throw subscriptionReadOnly(w.eff.plan.name, w.eff.status, endedTrial(w.eff))
   }
 
-  /** GET /me/usage: the dashboard meter ("Events 7/10 · Uploads 320 GB of 500 GB · resets on …"). */
+  /** GET /me/usage: the dashboard meter ("Events 7/10 · Uploads 320 GB of 500 GB · resets on …"; Trial: "Events 2/5 (November)"). */
   async meter(studioId: string): Promise<UsageMeterDto> {
     const w = await this.window(studioId)
     const [used, bytes, addon] = await Promise.all([this.eventsUsed(studioId, w.start, this.prisma), this.uploadedBytes(studioId, w.start, this.prisma), this.addonEvents(studioId, w.start, this.prisma)])
@@ -103,6 +120,7 @@ export class UsageService {
       planName: w.eff.plan.name,
       isTrial: w.eff.subscription.isTrial,
       lifetime: w.lifetime,
+      period: w.period ? { name: w.period.name, next: w.period.next?.name ?? null } : null,
       events: { used, limit, addon },
       uploads: { usedBytes: bytes, limitBytes },
       photosPerEvent: w.quota.photosPerEvent,
@@ -125,11 +143,13 @@ export class UsageService {
     ])
     const { plan } = await this.plans.effective(studioId)
     const limits = this.plans.limits(plan)
+    // Trial: "(November)" during the launch offer, "(trial)" after it.
+    const trialPart = m.period ? `(${m.period.name})` : '(trial)'
     return [
-      { key: 'events', label: m.lifetime ? 'Customer events (trial)' : 'Events this month', used: m.events.used, limit: m.events.limit, unit: '' },
+      { key: 'events', label: m.lifetime ? `Customer events ${trialPart}` : 'Events this month', used: m.events.used, limit: m.events.limit, unit: '' },
       {
         key: 'storage',
-        label: m.lifetime ? 'Uploads (trial)' : 'Uploads this month',
+        label: m.lifetime ? `Uploads ${trialPart}` : 'Uploads this month',
         used: Math.round((m.uploads.usedBytes / GB) * 100) / 100,
         limit: m.uploads.limitBytes === null ? null : Math.round((m.uploads.limitBytes / GB) * 100) / 100,
         unit: 'GB',
@@ -146,7 +166,7 @@ export class UsageService {
    */
   async assertWritable(studioId: string, db: Tx | PrismaService = this.prisma) {
     const eff = await this.plans.effective(studioId, db)
-    if (eff.readOnly) throw subscriptionReadOnly(eff.plan.name, eff.status)
+    if (eff.readOnly) throw subscriptionReadOnly(eff.plan.name, eff.status, endedTrial(eff))
     return eff
   }
 
@@ -161,8 +181,12 @@ export class UsageService {
     if (used >= limit) {
       const plan = w.eff.plan
       const canAddon = !w.lifetime && !!w.quota.addonEvents && w.quota.addonEventsPricePaise !== null
+      const p = w.period
       const message = w.lifetime
-        ? `Your ${plan.name} includes ${limit} customer events. Upgrade to add more.`
+        ? p
+          ? // "You've used your 5 trial events for November. 5 more unlock on 1 Dec."
+            `You've used your ${limit} trial events for ${p.name}. ${p.next ? `${w.quota.eventsTotal ?? limit} more unlock on ${p.next.label}.` : 'Upgrade to Pro to keep creating events.'}`
+          : `Your ${plan.name} includes ${limit} customer events. Upgrade to add more.`
         : w.quota.eventsPerMonth === null
           ? `You've reached the fair-use limit of ${limit} events this month on ${plan.name}. It resets on ${istDay(w.resetsOn)}.`
           : `You've used all ${limit} events this month on ${plan.name}. Upgrade${canAddon ? ` or buy +${w.quota.addonEvents} events` : ''} to add more. Resets on ${istDay(w.resetsOn)}.`
@@ -171,6 +195,7 @@ export class UsageService {
         limit,
         used,
         plan: plan.code,
+        period: p?.name ?? null,
         resetsOn: w.resetsOn.toISOString(),
         addon: canAddon ? { events: w.quota.addonEvents, pricePaise: w.quota.addonEventsPricePaise } : null,
       })
@@ -201,11 +226,14 @@ export class UsageService {
     if (limitBytes !== null) {
       const used = await this.uploadedBytes(studioId, w.start, db)
       if (used + originalBytes > limitBytes) {
+        const p = w.period
         throw planLimit(
           w.lifetime
-            ? `Your ${plan.name} includes about ${fmtGb(limitBytes)} GB of uploads and ${fmtGb(used)} GB is used. Upgrade to upload more.`
+            ? p
+              ? `You've uploaded ${fmtGb(used)} GB of your ${fmtGb(limitBytes)} GB for ${p.name}. ${p.next ? `Upgrade to Pro to upload more now, or wait until ${p.next.label} for ${fmtGb(limitBytes)} GB more.` : 'Upgrade to Pro to upload more.'}`
+              : `Your ${plan.name} includes about ${fmtGb(limitBytes)} GB of uploads and ${fmtGb(used)} GB is used. Upgrade to upload more.`
             : `You've uploaded ${fmtGb(used)} GB of ${fmtGb(limitBytes)} GB this month on ${plan.name}. Upgrade for more, or wait until ${istDay(w.resetsOn)}.`,
-          { resource: 'uploads', limit: Math.round(limitBytes / GB), used: Math.round((used / GB) * 10) / 10, plan: plan.code, resetsOn: w.resetsOn.toISOString() },
+          { resource: 'uploads', limit: Math.round(limitBytes / GB), used: Math.round((used / GB) * 10) / 10, plan: plan.code, period: p?.name ?? null, resetsOn: w.resetsOn.toISOString() },
         )
       }
     }

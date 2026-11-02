@@ -20,11 +20,11 @@ const PLANS_KEY = ['admin', 'plans'] as const
 type NumericLimit = Exclude<keyof PlanLimits, 'favourites'>
 const LIMIT_FIELDS: { key: NumericLimit; label: string; unit?: string; unlimited: boolean; optional?: boolean }[] = [
   { key: 'eventsPerMonth', label: 'New customer events per month', unlimited: true },
-  { key: 'eventsTotal', label: 'Customer events in total (trial)', unlimited: true, optional: true },
+  { key: 'eventsTotal', label: 'Trial customer events per period (Nov, Dec)', unlimited: true, optional: true },
   { key: 'fairUseEventsPerMonth', label: 'Fair-use events per month', unlimited: true, optional: true },
   { key: 'photosPerEvent', label: 'Photos per event', unlimited: true, optional: true },
   { key: 'uploadGbPerMonth', label: 'Uploads per month', unit: 'GB, original size', unlimited: true, optional: true },
-  { key: 'uploadGbTotal', label: 'Uploads in total (trial)', unit: 'GB', unlimited: true, optional: true },
+  { key: 'uploadGbTotal', label: 'Trial uploads per period (Nov, Dec)', unit: 'GB', unlimited: true, optional: true },
   { key: 'trialDays', label: 'Trial length', unit: 'days', unlimited: true, optional: true },
   { key: 'galleryDays', label: 'Customer gallery open at most', unit: 'days', unlimited: true, optional: true },
   { key: 'addonEvents', label: 'Events in the add-on', unlimited: true, optional: true },
