@@ -12,7 +12,7 @@ import { toastError } from '../../lib/query'
 const PAGE_SIZES = ['10', '25', '50', '100']
 const PLAN_FILTERS = [
   { value: 'all', label: 'All plans' },
-  { value: 'TRIAL', label: 'Trial' },
+  { value: 'TRIAL', label: 'Free Subscription' },
   { value: 'PRO', label: 'Pro' },
   { value: 'VIP', label: 'VIP' },
   { value: 'NONE', label: 'Never paid / no plan' },

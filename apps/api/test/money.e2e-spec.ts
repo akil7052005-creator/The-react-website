@@ -173,10 +173,10 @@ describe('Phase 3 — plans, credits, invoices', () => {
   })
 
   describe('plans & subscriptions', () => {
-    it('lists Trial, Pro and VIP with prices for 1, 3, 6 and 12 months (Studio is retired)', async () => {
+    it('lists Free Subscription, Pro and VIP with prices for 1, 3, 6 and 12 months (Studio is retired)', async () => {
       const res = await A.agent.get('/api/v1/plans').expect(200)
       expect(res.body.map((p: { code: string; name: string }) => [p.code, p.name])).toEqual([
-        ['STARTER', 'Trial'],
+        ['STARTER', 'Free Subscription'],
         ['PRO', 'Pro'],
         ['ALL_ACCESS', 'VIP'],
       ])

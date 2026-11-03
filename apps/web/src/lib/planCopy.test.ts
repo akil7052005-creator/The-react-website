@@ -44,7 +44,7 @@ describe('usage meter', () => {
   const GB = 1024 ** 3
   const meter = (over: Partial<UsageMeterDto>): UsageMeterDto => ({
     planCode: 'STARTER',
-    planName: 'Trial',
+    planName: 'Free Subscription',
     isTrial: true,
     lifetime: true,
     period: { name: 'November', next: 'December' },

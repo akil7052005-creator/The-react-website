@@ -123,7 +123,7 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
     it('starts every new studio on a trial with a CREATED event', async () => {
       const res = await A.agent.get('/api/v1/me/subscription').expect(200)
       // Free until 31 Dec 2026 (sign-ups before then).
-      expect(res.body).toMatchObject({ planCode: 'STARTER', planName: 'Trial', status: 'TRIAL', readOnly: false, daysLeft: daysLeft(TRIAL_OFFER_END, new Date()) })
+      expect(res.body).toMatchObject({ planCode: 'STARTER', planName: 'Free Subscription', status: 'TRIAL', readOnly: false, daysLeft: daysLeft(TRIAL_OFFER_END, new Date()) })
       const sub = await prisma.subscription.findUniqueOrThrow({ where: { studioId: A.studioId }, include: { events: true } })
       expect(sub.events.map((e) => e.type)).toEqual(['CREATED'])
     })
@@ -167,7 +167,7 @@ describe('Subscriptions: webhooks, deadline alerts, admin panel', () => {
 
       const events = await prisma.subscriptionEvent.findMany({ where: { subscriptionId: sub.id }, orderBy: { createdAt: 'asc' } })
       expect(events.map((x) => x.type)).toEqual(['CREATED', 'CREATED'])
-      expect(events[1]).toMatchObject({ fromPlan: 'Trial (trial)', toPlan: 'Pro', amount: 590_000 })
+      expect(events[1]).toMatchObject({ fromPlan: 'Free Subscription', toPlan: 'Pro', amount: 590_000 })
 
       const adminAlerts = await prisma.notification.findMany({ where: { recipientType: 'ADMIN', type: 'SUBSCRIPTION_PURCHASED' } })
       expect(adminAlerts.map((n) => n.channel).sort()).toEqual(['EMAIL', 'IN_APP'])

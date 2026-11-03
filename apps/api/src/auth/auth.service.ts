@@ -135,7 +135,7 @@ export class AuthService {
           usageAnchor: now,
         },
       })
-      await tx.subscriptionEvent.create({ data: { subscriptionId: sub.id, type: 'CREATED', toPlan: `${starter.name} (trial)`, note: trialOffer(trialDays, now).line } })
+      await tx.subscriptionEvent.create({ data: { subscriptionId: sub.id, type: 'CREATED', toPlan: starter.name, note: trialOffer(trialDays, now).line } })
       await tx.websiteSettings.create({
         data: {
           studioId: studio.id,

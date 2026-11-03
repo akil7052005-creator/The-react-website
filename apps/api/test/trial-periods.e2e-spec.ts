@@ -107,7 +107,7 @@ describe('Free trial: 5 events + 50 GB in November, and again in December', () =
 
     it('November: 5 events are fine, the 6th is blocked with the November message', async () => {
       expect(await meter(N)).toMatchObject({
-        planName: 'Trial',
+        planName: 'Free Subscription',
         isTrial: true,
         lifetime: true,
         period: { name: 'November', next: 'December' },
@@ -178,7 +178,7 @@ describe('Free trial: 5 events + 50 GB in November, and again in December', () =
     await sign(T, sel, 1).expect(200)
     await fillPhotos(T, sel, 1)
     const over = await sign(T, sel, 2).expect(402)
-    expect(over.body.error.message).toBe('This event has 3,500 photos: Trial allows 3,500 per event. Upgrade for more photos per event.')
+    expect(over.body.error.message).toBe('This event has 3,500 photos: Free Subscription allows 3,500 per event. Upgrade for more photos per event.')
   })
 
   describe('a studio that signs up in December', () => {

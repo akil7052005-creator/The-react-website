@@ -1206,9 +1206,9 @@
   border-color: var(--pub-accent);
   box-shadow: 0 0 0 3px rgba(224, 20, 74, 0.15);
 }
+/* Each plan as wide as its name ("Free Subscription" on one line), the rest of the row shared out. */
 .pub-plan-switch {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
   gap: 4px;
   margin: 0 0 10px;
   padding: 4px;
@@ -1216,7 +1216,10 @@
   background: var(--pub-bg);
 }
 .pub-plan-switch button {
+  flex: 1 0 auto;
   min-height: 34px;
+  padding: 0 12px;
+  white-space: nowrap;
   border: 0;
   border-radius: 30px;
   background: transparent;

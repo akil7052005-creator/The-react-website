@@ -67,10 +67,10 @@ export function meterText(m: UsageMeterDto) {
 export function limitNote(m: UsageMeterDto, what: 'events' | 'uploads'): string {
   const p = m.period
   if (what === 'events') {
-    if (!p) return `You've used all your events${m.lifetime ? ' on the Trial' : ' this month'}.`
+    if (!p) return `You've used all your events${m.lifetime ? ` on the ${m.planName}` : ' this month'}.`
     return `You've used your ${m.events.limit} trial events for ${p.name}. ${p.next ? `${m.events.limit} more unlock on ${resetDay(m)}.` : 'Upgrade to Pro to keep creating events.'}`
   }
-  if (!p || m.uploads.limitBytes === null) return `You've used all your uploads${m.lifetime ? ' on the Trial' : ' this month'}.`
+  if (!p || m.uploads.limitBytes === null) return `You've used all your uploads${m.lifetime ? ` on the ${m.planName}` : ' this month'}.`
   const gb = gbText(m.uploads.limitBytes)
   return `You've used your ${gb} of uploads for ${p.name}. ${p.next ? `${gb} more on ${resetDay(m)}.` : 'Upgrade to Pro to upload more.'}`
 }

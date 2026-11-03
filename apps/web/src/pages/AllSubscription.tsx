@@ -77,7 +77,7 @@ function AllSubscription() {
                 const price = priceFor(p, cycle)
                 return (
                   <div key={p.code} className={`plan plan-catchy ${p.popular ? 'popular' : ''} ${isCurrent || onTrial ? 'is-current-plan' : ''}`} data-testid={`plan-${p.code}`}>
-                    {(isCurrent || onTrial) && <span className="plan-flag plan-flag-current">{onTrial ? 'Your trial' : 'Your Current Plan'}</span>}
+                    {(isCurrent || onTrial) && <span className="plan-flag plan-flag-current">{onTrial ? 'Your free subscription' : 'Your Current Plan'}</span>}
                     {!isCurrent && !onTrial && p.popular && <span className="plan-flag">Most Popular</span>}
 
                     <div className="plan-header">
@@ -107,7 +107,7 @@ function AllSubscription() {
 
                     {trial ? (
                       <button className="btn btn-block btn-ghost" disabled>
-                        {onTrial ? `Trial ends ${new Date(current!.currentPeriodEnd).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : 'Free trial for new studios'}
+                        {onTrial ? `Free subscription ends ${new Date(current!.currentPeriodEnd).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : 'Free subscription for new studios'}
                       </button>
                     ) : (
                       <button

@@ -10,6 +10,7 @@ import {
   graceEnd,
   istDate,
   istParts,
+  planWithTrial,
   type AlertSettings,
   type ReminderStage,
 } from '@weddyzone/shared'
@@ -155,7 +156,7 @@ export class SubscriptionJobsService implements OnApplicationBootstrap, OnModule
   /** Alerts (and the status change) for the stage that is due. All in one transaction per subscription. */
   private async stageAlerts(row: Row, stage: ReminderStage, now: Date, settings: AlertSettings): Promise<QueuedAlert[]> {
     const dedupe = alertDedupeKey('expiry', row.id, row.currentPeriodEnd, stage.label)
-    const plan = `${row.plan.name}${row.isTrial ? ' trial' : ''}`
+    const plan = planWithTrial(row.plan, row.isTrial)
     const renew = renewPath(row.plan.code, row.cycle)
     const date = istDay(row.currentPeriodEnd)
     const adminLink = `/admin/subscriptions/${row.id}`
@@ -380,7 +381,7 @@ export class SubscriptionJobsService implements OnApplicationBootstrap, OnModule
       ...(expiringSoon.length
         ? expiringSoon.map((s) => {
             const left = daysLeft(s.currentPeriodEnd, now)
-            return line(`${s.studio.name} · ${s.plan.name}${s.isTrial ? ' trial' : ''} (${cycleLabel(s.cycle)}) · deadline ${istDay(s.currentPeriodEnd)} · ${left <= 0 ? 'today' : plural(left, 'day') + ' left'} · ${s.studio.phone ?? 'no phone'}`)
+            return line(`${s.studio.name} · ${planWithTrial(s.plan, s.isTrial)} (${cycleLabel(s.cycle)}) · deadline ${istDay(s.currentPeriodEnd)} · ${left <= 0 ? 'today' : plural(left, 'day') + ' left'} · ${s.studio.phone ?? 'no phone'}`)
           })
         : [line('None')]),
       '',

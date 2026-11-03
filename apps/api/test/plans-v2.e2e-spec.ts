@@ -79,11 +79,11 @@ describe('Plans: Trial, Pro, VIP', () => {
     // The trial's periods (November, December) and their exact messages are tested with a fixed
     // clock in trial-periods.e2e-spec.ts; these run on today's date.
     it('allows 5 customer events in the trial period, then asks to upgrade', async () => {
-      expect(await meter(T)).toMatchObject({ planCode: 'STARTER', planName: 'Trial', isTrial: true, lifetime: true, events: { used: 0, limit: 5 }, photosPerEvent: 3500, favourites: false, addon: null })
+      expect(await meter(T)).toMatchObject({ planCode: 'STARTER', planName: 'Free Subscription', isTrial: true, lifetime: true, events: { used: 0, limit: 5 }, photosPerEvent: 3500, favourites: false, addon: null })
       for (let i = 1; i <= 5; i++) await newEvent(T, i).expect(201)
       const res = await newEvent(T, 6).expect(402)
       expect(res.body.error.code).toBe('PLAN_LIMIT')
-      expect(res.body.error.message).toMatch(/^You've used your 5 trial events for |^Your Trial includes 5 customer events\./)
+      expect(res.body.error.message).toMatch(/^You've used your 5 trial events for |^Your Free Subscription includes 5 customer events\./)
       expect(res.body.error.details).toMatchObject({ resource: 'events', limit: 5, used: 5, plan: 'STARTER', addon: null })
       // Deleting an event doesn't give it back: events are counted when created.
       const list = (await T.agent.get('/api/v1/selections').expect(200)).body.data
@@ -113,7 +113,7 @@ describe('Plans: Trial, Pro, VIP', () => {
 
     it('3,500 photos per event: the 3,500th is fine, the 3,501st is refused', async () => {
       const [sel] = (await T.agent.get('/api/v1/selections').expect(200)).body.data
-      await expectPhotoLimit(T, sel.id, 3500, 'Trial')
+      await expectPhotoLimit(T, sel.id, 3500, 'Free Subscription')
     })
 
     it('one photo through the real upload still works on Trial', async () => {

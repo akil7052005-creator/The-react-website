@@ -70,7 +70,7 @@ function MySubscription() {
         <div className="lux lux-catchy">
           <p className="eyebrow">
             <i className="bi bi-patch-check-fill" />{' '}
-            {sub.isTrial ? 'Free Trial' : ended ? 'Ended — read-only' : sub.status === 'GRACE' ? 'Grace period' : sub.cancelAtPeriodEnd ? 'Cancelled Membership' : 'Active Membership'}
+            {sub.isTrial ? 'Free Subscription' : ended ? 'Ended — read-only' : sub.status === 'GRACE' ? 'Grace period' : sub.cancelAtPeriodEnd ? 'Cancelled Membership' : 'Active Membership'}
           </p>
           <h2>
             <em>{plan.name}</em> Studio Plan
@@ -81,7 +81,7 @@ function MySubscription() {
           </p>
           <p style={{ marginTop: 10, color: 'rgba(255, 255, 255, 0.85)' }}>
             {sub.isTrial && !ended ? (
-              <>Trial ends on {dateText(sub.currentPeriodEnd)} · choose a plan to keep going</>
+              <>Free subscription ends on {dateText(sub.currentPeriodEnd)} · choose a plan to keep going</>
             ) : ended ? (
               <>Ended on {dateText(sub.currentPeriodEnd)} · renew to add events and uploads again</>
             ) : sub.status === 'GRACE' ? (

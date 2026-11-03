@@ -46,7 +46,7 @@ export function PlanBanner({ always = false }: { always?: boolean }) {
       icon = 'hourglass-split'
       text = (
         <>
-          <strong>{/trial/i.test(b.planName) ? 'Free trial' : `${b.planName} trial`}</strong> · {daysText(b.daysLeft)}
+          <strong>{b.planCode === 'STARTER' ? b.planName : `${b.planName} trial`}</strong> · {daysText(b.daysLeft)}
         </>
       )
       cta = { to: '/subscriptions', label: 'Choose a plan' }

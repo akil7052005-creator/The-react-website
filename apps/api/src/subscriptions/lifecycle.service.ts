@@ -16,7 +16,7 @@ import {
   type ReminderChannel,
   type VerifyPaymentInput,
 } from '@weddyzone/shared'
-import { CYCLE_LABELS, CYCLE_MONTHS, proratedCredit } from '@weddyzone/shared'
+import { CYCLE_LABELS, CYCLE_MONTHS, planWithTrial, proratedCredit } from '@weddyzone/shared'
 import { badRequest, conflict, notFound } from '../common/errors'
 import { randomToken } from '../common/util'
 import { config } from '../config'
@@ -334,7 +334,7 @@ export class SubscriptionLifecycleService implements OnApplicationBootstrap {
     if (included > 0) await this.ledger.applyCredits(tx, payment.studioId, included, 'PLAN_GRANT', { type: 'payment', id: payment.id })
     await this.rewardReferral(tx, payment.studioId, queued)
 
-    await this.event(tx, sub.id, type, { fromPlan: sub.isTrial ? `${sub.plan.name} (trial)` : sub.plan.name, toPlan: plan.name, amount: payment.amount, note: `Invoice ${invoiceNumber}` })
+    await this.event(tx, sub.id, type, { fromPlan: planWithTrial(sub.plan, sub.isTrial), toPlan: plan.name, amount: payment.amount, note: `Invoice ${invoiceNumber}` })
 
     const studio = await tx.studio.findUniqueOrThrow({ where: { id: payment.studioId } })
     const label = `${plan.name} (${cycleLabel(cycle)})`

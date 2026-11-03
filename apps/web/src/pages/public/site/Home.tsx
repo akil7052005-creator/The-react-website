@@ -23,7 +23,7 @@ const COUPLE_STEPS = [
 const META: Record<Arrival | 'home', [string, string]> = {
   home: ['Photo selection for wedding studios', `${APP_NAME}: upload a wedding, share it on WhatsApp and get the couple's photo picks back. ${trialOffer().line}.`],
   about: ['About Us', `The story behind ${APP_NAME}, photo selection made for Indian wedding studios.`],
-  pricing: ['Plans & Pricing', `Trial, Pro and VIP plans for wedding studios, for 1, 6 or 12 months. Start ${trialOffer().lower}.`],
+  pricing: ['Plans & Pricing', `Free Subscription, Pro and VIP plans for wedding studios, for 1, 6 or 12 months. Start ${trialOffer().lower}.`],
   login: ['Log in', `Log in to your ${APP_NAME} studio.`],
   signup: ['Start free trial', `Create your ${APP_NAME} studio: ${trialOffer().lower}, no card needed.`],
 }

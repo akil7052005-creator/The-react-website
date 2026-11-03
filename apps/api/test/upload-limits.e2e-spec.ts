@@ -46,7 +46,7 @@ describe('Photo uploads: plan-based limits', () => {
   describe('GET /me/upload-limits', () => {
     it("gives the plan's limits (trial: up to 3,500 photos at a time, no storage cap)", async () => {
       const res = await A.agent.get('/api/v1/me/upload-limits').expect(200)
-      expect(res.body).toMatchObject({ planCode: 'STARTER', planName: 'Trial', maxPhotoMb: 100, maxFilesPerUpload: 3500, uploadConcurrency: 4, storageGb: null, storageLeftBytes: null, readOnly: false, status: 'TRIAL', graceEndsAt: null, isTrial: true })
+      expect(res.body).toMatchObject({ planCode: 'STARTER', planName: 'Free Subscription', maxPhotoMb: 100, maxFilesPerUpload: 3500, uploadConcurrency: 4, storageGb: null, storageLeftBytes: null, readOnly: false, status: 'TRIAL', graceEndsAt: null, isTrial: true })
       // A free trial has nothing to renew: its link is the plans page.
       expect(res.body.renewLink).toBe('/subscriptions')
     })
@@ -101,7 +101,7 @@ describe('Photo uploads: plan-based limits', () => {
     it('rejects a photo over the plan size with 413 FILE_TOO_LARGE (a plan set to 25 MB)', async () => {
       await setLimits('STARTER', { maxPhotoMb: 25 })
       const res = await upload(photo(26 * MB), 'big.png').expect(413)
-      expect(res.body.error).toMatchObject({ code: 'FILE_TOO_LARGE', message: 'Larger than 25 MB on your Trial plan', fields: { file: 'Larger than 25 MB on your Trial plan' } })
+      expect(res.body.error).toMatchObject({ code: 'FILE_TOO_LARGE', message: 'Larger than 25 MB on your Free Subscription plan', fields: { file: 'Larger than 25 MB on your Free Subscription plan' } })
       await setLimits('STARTER', { maxPhotoMb: 100 })
       // Under the plan size but over 2 MB: refused too, only previews are stored online.
       expect((await upload(photo(24 * MB), 'under-limit.png').expect(422)).body.error.message).toMatch(/larger than 2 MB/)
@@ -112,7 +112,7 @@ describe('Photo uploads: plan-based limits', () => {
       await setLimits('STARTER', { maxPhotoMb: 1 })
       await setLimits('PRO', { maxPhotoMb: 2 })
       const file = photo(Math.round(1.5 * MB))
-      expect((await upload(file, 'one-and-a-half.png').expect(413)).body.error.message).toBe('Larger than 1 MB on your Trial plan')
+      expect((await upload(file, 'one-and-a-half.png').expect(413)).body.error.message).toBe('Larger than 1 MB on your Free Subscription plan')
       await setPlan('PRO')
       await upload(file, 'one-and-a-half.png').expect(201)
       expect((await upload(photo(3 * MB), 'three.png').expect(413)).body.error.message).toBe('Larger than 2 MB on your Pro plan')

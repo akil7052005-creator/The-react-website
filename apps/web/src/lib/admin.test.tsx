@@ -98,6 +98,8 @@ describe('plan cards', () => {
 describe('plan and cycle in one column', () => {
   it('reads "Pro · Monthly"', () => {
     expect(planCycle({ plan: { id: 'p', code: 'PRO', name: 'Pro' }, cycle: 'MONTHLY', isTrial: false })).toBe('Pro · Monthly')
-    expect(planCycle({ plan: { id: 's', code: 'STARTER', name: 'Starter' }, cycle: 'MONTHLY', isTrial: true })).toBe('Starter trial · Monthly')
+    // The free plan is the trial: no "trial" after its name. A trial of a paid plan still says so.
+    expect(planCycle({ plan: { id: 's', code: 'STARTER', name: 'Free Subscription' }, cycle: 'MONTHLY', isTrial: true })).toBe('Free Subscription · Monthly')
+    expect(planCycle({ plan: { id: 'p', code: 'PRO', name: 'Pro' }, cycle: 'MONTHLY', isTrial: true })).toBe('Pro trial · Monthly')
   })
 })

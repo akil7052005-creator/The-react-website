@@ -54,7 +54,7 @@ export function UsageMeter() {
                   ? limitNote(m, 'uploads')
                   : m.warn
                     ? 'You are close to your plan limit.'
-                    : 'You are on the free Trial.'}
+                    : `You are on the ${m.planName}.`}
           </p>
           <Link to="/subscriptions" className="btn btn-sm btn-primary">
             <i className="bi bi-arrow-up-circle" /> {m.blocked && !m.isTrial ? 'Renew' : 'Upgrade'}

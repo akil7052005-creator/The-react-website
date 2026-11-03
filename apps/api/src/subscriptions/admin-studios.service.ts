@@ -1,6 +1,6 @@
 import { Injectable, Logger, type OnApplicationBootstrap, type OnModuleDestroy } from '@nestjs/common'
 import type { PlanCode, Prisma } from '@prisma/client'
-import { CYCLE_LABELS, type AdminStudioQuery, type AdminStudioRowDto, type Paginated } from '@weddyzone/shared'
+import { CYCLE_LABELS, PLAN_NAMES, type AdminStudioQuery, type AdminStudioRowDto, type Paginated } from '@weddyzone/shared'
 import { badRequest, notFound } from '../common/errors'
 import { paginate } from '../common/util'
 import { config } from '../config'
@@ -113,7 +113,7 @@ export class AdminStudiosService implements OnApplicationBootstrap, OnModuleDest
       name: r.name,
       owner: owner ? { name: owner.name, phone: owner.phone ?? r.phone } : null,
       email: owner?.email ?? r.email,
-      plan: sub ? (trial ? 'Trial' : sub.plan.name) : null,
+      plan: sub ? (trial ? PLAN_NAMES.STARTER : sub.plan.name) : null,
       period: sub && !trial ? CYCLE_LABELS[sub.cycle] : null,
       startDate: sub ? sub.currentPeriodStart.toISOString() : null,
       expiryDate: sub ? sub.currentPeriodEnd.toISOString() : null,

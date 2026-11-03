@@ -26,8 +26,14 @@ export function cycleSavingPct(prices: PlanPrices | undefined, cycle: BillingCyc
   return pct > 0 ? pct : null
 }
 
-/** Display names: the codes stay as they are in the database (Starter → Trial, All-Access → VIP). */
-export const PLAN_NAMES: Record<PlanCode, string> = { STARTER: 'Trial', PRO: 'Pro', STUDIO: 'Studio', ALL_ACCESS: 'VIP' }
+/** Display names: the codes stay as they are in the database (Starter → Free Subscription, All-Access → VIP). */
+export const PLAN_NAMES: Record<PlanCode, string> = { STARTER: 'Free Subscription', PRO: 'Pro', STUDIO: 'Studio', ALL_ACCESS: 'VIP' }
+
+/**
+ * A subscription's plan in lists, emails and history: the plan's name ("Pro", "Free Subscription").
+ * The free plan is the trial, so it gets no suffix; a trial of a paid plan reads "Pro trial".
+ */
+export const planWithTrial = (plan: { code: string; name: string }, isTrial: boolean) => (isTrial && plan.code !== 'STARTER' ? `${plan.name} trial` : plan.name)
 
 /** Price of each billing period in paise (GST extra); null = not offered. */
 export type PlanPrices = Partial<Record<BillingCycle, number | null>>

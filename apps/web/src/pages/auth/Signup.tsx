@@ -96,7 +96,7 @@ export function SignupForm({ plan, onPlanChange }: { plan: SignupPlan; onPlanCha
       <div className="pub-plan-switch" role="radiogroup" aria-label="Plan" data-testid="signup-plan">
         {(
           [
-            [null, 'Trial'],
+            [null, nameOf('STARTER', 'Free Subscription')],
             ['PRO', nameOf('PRO', 'Pro')],
             ['ALL_ACCESS', nameOf('ALL_ACCESS', 'VIP')],
           ] as const

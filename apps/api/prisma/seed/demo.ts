@@ -10,6 +10,7 @@ import {
   formatInvoiceNumber,
   gstOn,
   istParts,
+  planWithTrial,
   platformInvoiceNumber,
   todayIST,
   WEBSITE_SECTION_KEYS,
@@ -528,7 +529,7 @@ export async function seedDemo(prisma: PrismaClient, uploadDirRaw: string, webAs
         gstAmount: trial ? 0 : gstOn(base),
       },
     })
-    await prisma.subscriptionEvent.create({ data: { subscriptionId: sub.id, type: 'CREATED', toPlan: trial ? `${p.name} (trial)` : p.name, amount: trial ? null : base + gstOn(base), createdAt: start } })
+    await prisma.subscriptionEvent.create({ data: { subscriptionId: sub.id, type: 'CREATED', toPlan: planWithTrial(p, trial), amount: trial ? null : base + gstOn(base), createdAt: start } })
     if (!trial) {
       await prisma.payment.create({
         data: {

@@ -18,7 +18,7 @@ test('home: one h1, the hero with its card, sections, footer; alt text; no sidew
   await expect(page).toHaveTitle(/Photo selection for wedding studios/)
   await expect(page.locator('meta[property="og:title"]')).toHaveAttribute('content', /Photo selection/)
   await expect(card(page)).toBeVisible()
-  await expect(card(page).getByRole('radio', { name: 'Trial' })).toHaveAttribute('aria-checked', 'true')
+  await expect(card(page).getByRole('radio', { name: 'Free Subscription' })).toHaveAttribute('aria-checked', 'true')
   await expect(card(page).getByText('Free until 31 Dec · no card needed')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'How it works' })).toBeVisible()
   await expect(page.locator('#about')).toBeAttached()
@@ -162,7 +162,7 @@ test.describe('desktop menu', () => {
     await expect(card(page).getByRole('radio', { name: 'Pro' })).toHaveAttribute('aria-checked', 'true')
     await expect(card(page).getByLabel('Your name')).toBeFocused()
     // Switch back to Trial on the card.
-    await card(page).getByRole('radio', { name: 'Trial' }).click()
+    await card(page).getByRole('radio', { name: 'Free Subscription' }).click()
     await expect(card(page).getByText('Free until 31 Dec · no card needed')).toBeVisible()
   })
 

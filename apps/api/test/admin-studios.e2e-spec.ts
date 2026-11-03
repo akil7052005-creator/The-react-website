@@ -38,7 +38,7 @@ describe('Admin → Studios: table, remove and restore', () => {
     expect(row).toMatchObject({ plan: 'Pro', period: '1 year', status: 'ACTIVE', email: pro.email, removed: null })
     expect(row.daysLeft).toBeGreaterThan(300)
     const t = res.body.data.find((r: { id: string }) => r.id === trial.studioId)
-    expect(t).toMatchObject({ plan: 'Trial', period: null })
+    expect(t).toMatchObject({ plan: 'Free Subscription', period: null })
 
     const onlyTrial = await admin.get('/api/v1/admin/studios?plan=TRIAL').expect(200)
     expect(onlyTrial.body.data.map((r: { id: string }) => r.id)).toEqual([trial.studioId])

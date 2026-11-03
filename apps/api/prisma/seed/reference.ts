@@ -2,13 +2,13 @@ import type { PrismaClient } from '@prisma/client'
 
 // Reference data every environment needs. Upserts, so it is safe to re-run in production.
 
-// Trial / Pro / VIP (Update 2). The codes stay STARTER / PRO / ALL_ACCESS in the database; STUDIO is
+// Free Subscription (the trial) / Pro / VIP. The codes stay STARTER / PRO / ALL_ACCESS in the database; STUDIO is
 // kept hidden for history. Prices are in paise, GST extra.
 export const PLANS = [
   {
     code: 'STARTER' as const,
-    name: 'Trial',
-    tagline: 'Try everything free until 31 Dec',
+    name: 'Free Subscription',
+    tagline: 'Free Subscription Up to December 31',
     monthlyPrice: null,
     yearlyPrice: 0,
     prices: {},
@@ -204,7 +204,7 @@ export const TEMPLATES = [
 
 export const FAQS = [
   ['Getting started', 'How do I set up my studio?', 'Fill in My Profile (studio name, address, state and logo), then create your first client and event from the dashboard with New Event. Your plan, credits and website are ready from day one.'],
-  ['Getting started', 'Can I add my team?', 'Team seats depend on your plan: Trial and Pro include 1 account and VIP includes 10.'],
+  ['Getting started', 'Can I add my team?', 'Team seats depend on your plan: Free Subscription and Pro include 1 account and VIP includes 10.'],
   ['Selections & albums', 'How do clients select their photos?', 'Create a Photo Selection for the event, upload the photos and share the link over WhatsApp. Clients heart their favourites, and you see the selection update live.'],
   ['Selections & albums', 'What happens when a client reaches the quota?', 'The selection locks at the quota: clients must remove a photo before adding another. The page tells them exactly how many picks they have left.'],
   ['Selections & albums', 'How do I export picks to Lightroom?', 'Open the selection and use Lightroom XML Sync. It downloads the picked filenames as a text list you can paste into a Lightroom Classic filter.'],
