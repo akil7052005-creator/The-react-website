@@ -9,10 +9,12 @@ import {
   DEFAULT_ALERT_SETTINGS,
   dueStage,
   fromIst,
-  gstOn,
+  GST_RATE,
   istDate,
   isReadOnlyStatus,
   platformInvoiceNumber,
+  splitInclusiveGst,
+  splitInclusiveGstPaise,
   type SubscriptionState,
 } from './subscriptions'
 
@@ -206,9 +208,9 @@ describe('dedupe keys', () => {
 })
 
 describe('money and badges', () => {
-  it('adds 18% GST', () => {
-    expect(gstOn(2_499_000)).toBe(449_820) // Pro yearly ₹24,990 → ₹4,498.20 GST
-    expect(gstOn(99_900)).toBe(17_982)
+  it('takes 18% GST out of a GST-inclusive price, never adds it', () => {
+    expect(splitInclusiveGst(600)).toEqual({ totalPaise: 60_000, basePaise: 50_847, gstPaise: 9_153 }) // ₹508.47 + ₹91.53
+    expect(splitInclusiveGst(1200)).toEqual({ totalPaise: 120_000, basePaise: 101_695, gstPaise: 18_305 }) // ₹1,016.95 + ₹183.05
   })
 
   it('colours the days-left badge', () => {
@@ -283,5 +285,42 @@ describe('trial periods: November, then December (IST)', () => {
     const { TRIAL_OFFER_END, TRIAL_OFFER_END_LABEL } = await import('./subscriptions')
     expect(TRIAL_OFFER_END.toISOString()).toBe('2026-12-31T18:29:59.000Z')
     expect(TRIAL_OFFER_END_LABEL).toEqual({ short: '31 Dec', long: '31 Dec 2026' })
+  })
+})
+
+describe('splitInclusiveGst: every price includes 18% GST', () => {
+  // [item, price in rupees (GST included), taxable value in paise, GST in paise]. Plan and add-on
+  // prices as seeded (prisma/seed/reference.ts); credit packs from CREDIT_PACKS.
+  const prices: [string, number, number, number][] = [
+    ['Pro · 1 month', 600, 50_847, 9_153],
+    ['Pro · 6 months', 3_000, 254_237, 45_763],
+    ['Pro · 1 year', 5_000, 423_729, 76_271],
+    ['VIP · 1 month', 1_200, 101_695, 18_305],
+    ['VIP · 6 months', 6_000, 508_475, 91_525],
+    ['VIP · 1 year', 10_000, 847_458, 152_542],
+    ['+5 events add-on', 499, 42_288, 7_612],
+    ['500 WhatsApp credits', 399, 33_814, 6_086],
+    ['2,000 WhatsApp credits', 1_399, 118_559, 21_341],
+    ['5,000 WhatsApp credits', 2_999, 254_153, 45_747],
+    ['a prorated upgrade (₹437.33)', 437.33, 37_062, 6_671],
+  ]
+
+  it.each(prices)('%s: ₹%s is the total, with the GST inside it', (_item, rupees, base, gst) => {
+    const s = splitInclusiveGst(rupees)
+    expect(s).toEqual({ totalPaise: Math.round(rupees * 100), basePaise: base, gstPaise: gst })
+    // Nothing is added on top: base + GST is the price, to the paisa.
+    expect(s.basePaise + s.gstPaise).toBe(s.totalPaise)
+    // The paise version gives the same, and matches base = total / 1.18.
+    expect(splitInclusiveGstPaise(s.totalPaise)).toEqual(s)
+    expect(s.basePaise).toBe(Math.round(s.totalPaise / (1 + GST_RATE)))
+  })
+
+  it('adds up exactly for every amount from ₹1 to ₹20,000, with the GST 18% of the taxable value (to the paisa)', () => {
+    const wrong: number[] = []
+    for (let total = 100; total <= 2_000_000; total++) {
+      const { basePaise, gstPaise } = splitInclusiveGstPaise(total)
+      if (basePaise + gstPaise !== total || Math.abs(gstPaise - basePaise * GST_RATE) > 1) wrong.push(total)
+    }
+    expect(wrong).toEqual([])
   })
 })

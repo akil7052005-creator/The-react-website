@@ -6,7 +6,10 @@ import type { Tx } from '../prisma/prisma.service'
 
 export interface ChargeRequest {
   purpose: PaymentPurpose
+  /** What is charged: the price, 18% GST included. */
   amountPaise: number
+  /** The GST inside `amountPaise` (splitInclusiveGstPaise), saved on the payment. */
+  gstPaise: number
   description: string
   meta?: Prisma.InputJsonValue
 }
@@ -77,6 +80,7 @@ export class MockPaymentService extends PaymentService {
         studioId,
         purpose: req.purpose,
         amount: req.amountPaise,
+        gst: req.gstPaise,
         description: req.description,
         status: 'SUCCESS',
         provider: this.provider,

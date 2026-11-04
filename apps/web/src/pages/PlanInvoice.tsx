@@ -156,7 +156,7 @@ function PlanInvoiceView({ path, backTo, onBack, backLabel }: { path: string; ba
                 <dd>{formatMoney(inv.igstPaise)}</dd>
               </>
             )}
-            <dt className="grand">Total</dt>
+            <dt className="grand">Total (incl. GST)</dt>
             <dd className="grand">{formatMoney(inv.totalPaise)}</dd>
           </dl>
         </section>

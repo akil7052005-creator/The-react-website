@@ -106,7 +106,7 @@ test('pricing: 1, 6 or 12 months with the new prices and savings', async ({ page
   await page.getByTestId('public-plan-ALL_ACCESS').getByRole('button', { name: /Choose/ }).click()
   await expect(card(page).getByRole('radio', { name: 'VIP' })).toHaveAttribute('aria-checked', 'true')
   await expect(card(page).getByLabel('Billing period')).toHaveValue('YEARLY')
-  await expect(card(page)).toContainText('₹10,000 + GST')
+  await expect(card(page)).toContainText('₹10,000 incl. GST')
   await expect(card(page).getByText('Free until 31 Dec · no card needed')).toHaveCount(0)
   await expect(card(page).getByLabel('Your name')).toBeFocused()
 })

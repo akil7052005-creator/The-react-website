@@ -8,9 +8,9 @@ import {
   DEFAULT_ALERT_SETTINGS,
   financialYearStart,
   formatInvoiceNumber,
-  gstOn,
   istParts,
   planWithTrial,
+  splitInclusiveGstPaise,
   platformInvoiceNumber,
   todayIST,
   WEBSITE_SECTION_KEYS,
@@ -129,8 +129,8 @@ export async function seedDemo(prisma: PrismaClient, uploadDirRaw: string, webAs
     data: { studioId: studio.id, name: 'Arjun Mehta', email: DEMO_EMAIL, phone: '+919876543210', passwordHash, role: 'OWNER', lastLoginAt: new Date() },
   })
 
-  // Pro monthly, paid three months running (GST on top), renewing in a couple of days.
-  const proGst = gstOn(plans.PRO.monthlyPrice!)
+  // Pro monthly, paid three months running (the price includes GST), renewing in a couple of days.
+  const proGst = splitInclusiveGstPaise(plans.PRO.monthlyPrice!).gstPaise
   const anchorDay = istParts(ago(28 + 2 * 30)).day
   let periodStart = ago(28 + 2 * 30)
   const demoSub = await prisma.subscription.create({
@@ -142,11 +142,11 @@ export async function seedDemo(prisma: PrismaClient, uploadDirRaw: string, webAs
       currentPeriodStart: periodStart,
       currentPeriodEnd: addCycle(periodStart, 'MONTHLY', anchorDay),
       anchorDay,
-      amountPaid: plans.PRO.monthlyPrice! + proGst,
+      amountPaid: plans.PRO.monthlyPrice!,
       gstAmount: proGst,
     },
   })
-  await prisma.subscriptionEvent.create({ data: { subscriptionId: demoSub.id, type: 'CREATED', toPlan: 'Pro', amount: plans.PRO.monthlyPrice! + proGst, createdAt: periodStart } })
+  await prisma.subscriptionEvent.create({ data: { subscriptionId: demoSub.id, type: 'CREATED', toPlan: 'Pro', amount: plans.PRO.monthlyPrice!, createdAt: periodStart } })
   for (let m = 0; m < 3; m++) {
     const periodEnd = addCycle(periodStart, 'MONTHLY', anchorDay)
     await prisma.payment.create({
@@ -154,7 +154,7 @@ export async function seedDemo(prisma: PrismaClient, uploadDirRaw: string, webAs
         studioId: studio.id,
         purpose: 'SUBSCRIPTION',
         description: 'Pro plan · Monthly',
-        amount: plans.PRO.monthlyPrice! + proGst,
+        amount: plans.PRO.monthlyPrice!,
         gst: proGst,
         status: 'SUCCESS',
         provider: 'mock',
@@ -169,7 +169,7 @@ export async function seedDemo(prisma: PrismaClient, uploadDirRaw: string, webAs
         createdAt: periodStart,
       },
     })
-    if (m > 0) await prisma.subscriptionEvent.create({ data: { subscriptionId: demoSub.id, type: 'RENEWED', fromPlan: 'Pro', toPlan: 'Pro', amount: plans.PRO.monthlyPrice! + proGst, createdAt: periodStart } })
+    if (m > 0) await prisma.subscriptionEvent.create({ data: { subscriptionId: demoSub.id, type: 'RENEWED', fromPlan: 'Pro', toPlan: 'Pro', amount: plans.PRO.monthlyPrice!, createdAt: periodStart } })
     await prisma.subscription.update({ where: { id: demoSub.id }, data: { currentPeriodStart: periodStart, currentPeriodEnd: periodEnd } })
     periodStart = periodEnd
   }
@@ -525,19 +525,19 @@ export async function seedDemo(prisma: PrismaClient, uploadDirRaw: string, webAs
         currentPeriodEnd: end,
         graceEndsAt: plan.endInDays < 0 ? addDays(end, DEFAULT_ALERT_SETTINGS.graceDays) : null,
         anchorDay: trial ? null : istParts(start).day,
-        amountPaid: trial ? 0 : base + gstOn(base),
-        gstAmount: trial ? 0 : gstOn(base),
+        amountPaid: trial ? 0 : base,
+        gstAmount: trial ? 0 : splitInclusiveGstPaise(base).gstPaise,
       },
     })
-    await prisma.subscriptionEvent.create({ data: { subscriptionId: sub.id, type: 'CREATED', toPlan: planWithTrial(p, trial), amount: trial ? null : base + gstOn(base), createdAt: start } })
+    await prisma.subscriptionEvent.create({ data: { subscriptionId: sub.id, type: 'CREATED', toPlan: planWithTrial(p, trial), amount: trial ? null : base, createdAt: start } })
     if (!trial) {
       await prisma.payment.create({
         data: {
           studioId: s.id,
           purpose: 'SUBSCRIPTION',
           description: `${p.name} plan · ${plan.cycle === 'YEARLY' ? 'Yearly' : 'Monthly'}`,
-          amount: base + gstOn(base),
-          gst: gstOn(base),
+          amount: base,
+          gst: splitInclusiveGstPaise(base).gstPaise,
           status: 'SUCCESS',
           provider: 'mock',
           subscriptionId: sub.id,

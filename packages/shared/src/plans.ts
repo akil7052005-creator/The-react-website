@@ -35,7 +35,7 @@ export const PLAN_NAMES: Record<PlanCode, string> = { STARTER: 'Free Subscriptio
  */
 export const planWithTrial = (plan: { code: string; name: string }, isTrial: boolean) => (isTrial && plan.code !== 'STARTER' ? `${plan.name} trial` : plan.name)
 
-/** Price of each billing period in paise (GST extra); null = not offered. */
+/** Price of each billing period in paise, 18% GST included (what the studio pays); null = not offered. */
 export type PlanPrices = Partial<Record<BillingCycle, number | null>>
 
 /** Days in one usage window. */
@@ -53,7 +53,7 @@ export function usageWindow(anchor: Date, now = new Date()): { start: Date; rese
   return { start, resetsOn: new Date(start.getTime() + span) }
 }
 
-/** Pro-rated credit for the unused part of a paid period (paise, GST excluded). */
+/** Pro-rated credit for the unused part of a paid period (paise, from the amount actually paid, GST included). */
 export function proratedCredit(paidPaise: number, periodStart: Date, periodEnd: Date, now = new Date()): number {
   const total = periodEnd.getTime() - periodStart.getTime()
   if (total <= 0 || paidPaise <= 0 || now >= periodEnd) return 0

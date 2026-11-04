@@ -4,6 +4,7 @@ import {
   LOW_CREDIT_THRESHOLD,
   MESSAGE_TEMPLATE_KEYS,
   MESSAGE_TYPE_LABELS,
+  splitInclusiveGstPaise,
   type GatewayCheckoutDto,
   type Paginated,
   type PaymentMode,
@@ -91,7 +92,7 @@ function WhatsAppCredit() {
       icon: 'whatsapp',
       message: (
         <>
-          You'll pay <strong>{formatMoney(pack.pricePaise)}</strong> (+18% GST) and the credits are added to your balance immediately. Credits never expire.
+          You'll pay <strong>{formatMoney(pack.pricePaise)}</strong> (incl. {formatMoney(splitInclusiveGstPaise(pack.pricePaise).gstPaise)} GST) and the credits are added to your balance immediately. Credits never expire.
           <TestModeNote mode={mode} />
         </>
       ),

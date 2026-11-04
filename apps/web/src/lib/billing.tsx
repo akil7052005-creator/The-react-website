@@ -2,8 +2,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   CYCLE_LABELS,
   CYCLE_MONTHS,
-  gstOn,
+  splitInclusiveGstPaise,
   type BillingCycle,
+  type CheckoutQuoteDto,
   type GatewayCheckoutDto,
   type MySubscriptionBannerDto,
   type PaymentDto,
@@ -165,29 +166,41 @@ export function usePlanActions() {
     qc.invalidateQueries({ queryKey: ['referrals'] })
   }
 
-  const change = (plan: PlanDto, cycle: BillingCycle, current?: SubscriptionDto, couponCode?: string) => {
+  const change = async (plan: PlanDto, cycle: BillingCycle, current?: SubscriptionDto, couponCode?: string) => {
     const price = priceFor(plan, cycle)
     if (price === null) {
       toast.error(`${plan.name} isn't available for ${CYCLE_LABELS[cycle]}`)
-      return Promise.resolve(false)
+      return false
+    }
+    // The exact amount from the server: prices include GST, and any credit for unused days or
+    // coupon is already taken off (the same sum checkout charges).
+    let quote: CheckoutQuoteDto
+    try {
+      quote = await api.get<CheckoutQuoteDto>('/subscription/quote', { planCode: plan.code, cycle, couponCode })
+    } catch (e) {
+      toastError(e)
+      return false
     }
     const currentPrice = current ? current.pricePaise : 0
     const renewal = isRenewal(current, plan, cycle)
     const verb = renewal ? 'Renew' : !current || current.isTrial || current.readOnly ? 'Subscribe to' : price >= currentPrice ? 'Upgrade to' : 'Switch to'
-    const gst = gstOn(price)
     const done = renewal ? `${plan.name} renewed` : `You're now on the ${plan.name} plan`
+    const less = [
+      quote.creditPaise ? `${formatMoney(quote.creditPaise)} credit for the unused days of your current plan` : null,
+      quote.discountPaise ? `${formatMoney(quote.discountPaise)} off with coupon ${couponCode}` : null,
+    ].filter(Boolean)
     let pending: GatewayCheckoutDto | null = null
     return confirm({
       title: `${verb} ${plan.name}?`,
       icon: 'patch-check',
       message: (
         <>
-          You'll pay <strong>{formatMoney(price + gst)}</strong> ({formatMoney(price)} + {formatMoney(gst)} GST) for {CYCLE_LABELS[cycle]}
-          {couponCode ? <>, less your coupon <strong>{couponCode}</strong></> : null}.{' '}
+          You'll pay <strong>{formatMoney(quote.payablePaise)}</strong> (incl. {formatMoney(quote.gstPaise)} GST) for {CYCLE_LABELS[cycle]}
+          {less.length ? <>: {formatMoney(quote.pricePaise)} less {less.join(' and ')}</> : null}.{' '}
           {renewal && current && !current.readOnly && current.status !== 'GRACE'
             ? `Your plan continues from ${new Date(current.currentPeriodEnd).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}, so you lose no days`
             : current && !current.isTrial && !current.readOnly && !renewal
-              ? `The ${plan.name} plan starts straight away; the unused days of your current plan are taken off the price`
+              ? `The ${plan.name} plan starts straight away`
               : `The ${plan.name} plan starts as soon as the payment is confirmed`}
           {plan.limits.includedCredits ? ` and includes ${plan.limits.includedCredits.toLocaleString('en-IN')} WhatsApp credits` : ''}.
           <TestModeNote mode={mode} />
@@ -237,7 +250,8 @@ export function usePlanActions() {
 
   /** "Buy +5 events" for this month. */
   const buyAddon = (addon: { events: number; pricePaise: number }) => {
-    const gst = gstOn(addon.pricePaise)
+    // The add-on's price includes GST.
+    const { gstPaise } = splitInclusiveGstPaise(addon.pricePaise)
     const done = `+${addon.events} events added for this month`
     let pending: GatewayCheckoutDto | null = null
     return confirm({
@@ -245,7 +259,7 @@ export function usePlanActions() {
       icon: 'plus-circle',
       message: (
         <>
-          You'll pay <strong>{formatMoney(addon.pricePaise + gst)}</strong> ({formatMoney(addon.pricePaise)} + {formatMoney(gst)} GST). The extra events are for this month only: unused ones
+          You'll pay <strong>{formatMoney(addon.pricePaise)}</strong> (incl. {formatMoney(gstPaise)} GST). The extra events are for this month only: unused ones
           don't carry over.
           <TestModeNote mode={mode} />
         </>

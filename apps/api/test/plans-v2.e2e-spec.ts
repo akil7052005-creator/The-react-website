@@ -147,9 +147,10 @@ describe('Plans: Trial, Pro, VIP', () => {
       expect(res.body.error.details).toMatchObject({ resource: 'events', limit: 10, used: 10, addon: { events: 5, pricePaise: 49_900 } })
     })
 
-    it('"+5 events" is paid (GST on top) and lasts for this month only', async () => {
+    it('"+5 events" costs exactly ₹499 (GST included) and lasts for this month only', async () => {
       const bought = (await P.agent.post('/api/v1/subscription/addon-events').expect(200)).body
-      expect(bought.payment).toMatchObject({ purpose: 'EVENT_ADDON', amountPaise: 49_900 + 8_982, status: 'SUCCESS' })
+      // ₹499 is what's paid: ₹422.88 + ₹76.12 GST, nothing added on top.
+      expect(bought.payment).toMatchObject({ purpose: 'EVENT_ADDON', amountPaise: 49_900, gstPaise: 7_612, status: 'SUCCESS' })
       expect(bought.usage.events).toMatchObject({ used: 10, limit: 15, addon: 5 })
       for (let i = 11; i <= 15; i++) await newEvent(P, i).expect(201)
       await newEvent(P, 16).expect(402)

@@ -77,7 +77,7 @@ export function PricingSection() {
                   })}
             </div>
           )}
-          <p className="pub-note">All prices exclude 18% GST.</p>
+          <p className="pub-note">All prices include 18% GST.</p>
         </div>
       </section>
       <section className="pub-section alt" aria-labelledby="faq">

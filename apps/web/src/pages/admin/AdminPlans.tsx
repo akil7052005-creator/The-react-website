@@ -126,7 +126,7 @@ function PlanEditor({ plan, onClose }: { plan: AdminPlanDto; onClose: () => void
       open
       onClose={close}
       title={`Edit ${plan.name}`}
-      subtitle="Changes show on every studio's pricing pages straight away. Prices exclude GST."
+      subtitle="Changes show on every studio's pricing pages straight away. Prices include 18% GST (what studios pay)."
       icon="box-seam"
       size="lg"
       busy={save.isPending}

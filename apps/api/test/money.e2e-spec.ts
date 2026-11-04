@@ -1,5 +1,6 @@
 import type { INestApplication } from '@nestjs/common'
 import type { PrismaClient } from '@prisma/client'
+import { splitInclusiveGstPaise } from '@weddyzone/shared'
 import { SubscriptionsService } from '../src/billing/subscriptions.service'
 import { createTestApp, resetDb, setStudioState, signup, type SignedUp } from './helpers'
 
@@ -155,7 +156,8 @@ describe('Phase 3 — plans, credits, invoices', () => {
       const before = (await A.agent.get('/api/v1/credits').expect(200)).body.balance
       const res = await A.agent.post('/api/v1/credits/purchase').send({ packCode: 'PACK_2000' }).expect(200)
       expect(res.body).toMatchObject({ creditBalance: before + 2000, testMode: true })
-      expect(res.body.payment).toMatchObject({ purpose: 'CREDIT_PACK', amountPaise: 139_900, status: 'SUCCESS', provider: 'mock' })
+      // ₹1,399 is what's paid: ₹1,185.59 + ₹213.41 GST, recorded on the payment.
+      expect(res.body.payment).toMatchObject({ purpose: 'CREDIT_PACK', amountPaise: 139_900, gstPaise: 21_341, status: 'SUCCESS', provider: 'mock' })
       const ledger = await prisma.creditLedger.findFirst({ where: { studioId: A.studioId, reason: 'PURCHASE' } })
       expect(ledger).toMatchObject({ delta: 2000, balanceAfter: before + 2000 })
       await A.agent.post('/api/v1/credits/purchase').send({ packCode: 'PACK_9' }).expect(400)
@@ -189,13 +191,13 @@ describe('Phase 3 — plans, credits, invoices', () => {
       expect(res.body[0].limits).toMatchObject({ eventsTotal: 5, photosPerEvent: 3500, uploadGbTotal: 50, trialDays: 14, galleryDays: 7 })
     })
 
-    it('buys Pro for 6 months (18% GST on top); 3 months and the Trial itself are not for sale', async () => {
+    it('buys Pro for 6 months for exactly its price (18% GST included); 3 months and the Trial itself are not for sale', async () => {
       await A.agent.post('/api/v1/subscription/change').send({ planCode: 'STARTER', cycle: 'MONTHLY' }).expect(400)
       await A.agent.post('/api/v1/subscription/change').send({ planCode: 'PRO', cycle: 'QUARTERLY' }).expect(400)
       const res = await A.agent.post('/api/v1/subscription/change').send({ planCode: 'PRO', cycle: 'HALF_YEARLY' }).expect(200)
       expect(res.body.subscription).toMatchObject({ plan: { code: 'PRO' }, cycle: 'HALF_YEARLY', isTrial: false, status: 'ACTIVE', pricePaise: 300_000 })
-      // ₹3,000 + 18% = ₹3,540
-      expect(res.body.payment).toMatchObject({ purpose: 'SUBSCRIPTION', amountPaise: 354_000, gstPaise: 54_000, status: 'SUCCESS' })
+      // ₹3,000 is what's paid: ₹2,542.37 + ₹457.63 GST, nothing added on top.
+      expect(res.body.payment).toMatchObject({ purpose: 'SUBSCRIPTION', amountPaise: 300_000, gstPaise: 45_763, status: 'SUCCESS' })
       expect(res.body.payment.invoiceNumber).toMatch(/^WZ\/\d{4}-\d{2}\/\d{5}$/)
       const sub = await prisma.subscription.findUniqueOrThrow({ where: { studioId: A.studioId } })
       // 6 months from today, and the monthly limits count from today.
@@ -206,16 +208,32 @@ describe('Phase 3 — plans, credits, invoices', () => {
       await A.agent.post('/api/v1/subscription/change').send({ planCode: 'PRO', cycle: 'HALF_YEARLY' }).expect(409)
     })
 
-    it('upgrades to VIP straight away, with credit for the unused days of Pro', async () => {
+    it('upgrades to VIP straight away, with credit for the unused days of Pro; the GST is taken out of what is left', async () => {
+      // The dialog's quote: the credit comes off the GST-inclusive price first.
+      const quote = (await A.agent.get('/api/v1/subscription/quote').query({ planCode: 'ALL_ACCESS', cycle: 'YEARLY' }).expect(200)).body
+      // Almost the whole 6 months of Pro (₹3,000 paid) is unused, so VIP for a year (₹10,000) costs about ₹7,000 in all.
+      expect(quote.pricePaise).toBe(1_000_000)
+      expect(quote.creditPaise).toBeGreaterThan(290_000)
+      expect(quote.creditPaise).toBeLessThanOrEqual(300_000)
+      expect(quote.payablePaise).toBe(1_000_000 - quote.creditPaise)
+      const { basePaise, gstPaise } = splitInclusiveGstPaise(quote.payablePaise)
+      expect(quote).toMatchObject({ basePaise, gstPaise })
+      expect(quote.basePaise + quote.gstPaise).toBe(quote.payablePaise)
+
       const res = await A.agent.post('/api/v1/subscription/change').send({ planCode: 'ALL_ACCESS', cycle: 'YEARLY' }).expect(200)
       expect(res.body.subscription).toMatchObject({ plan: { code: 'ALL_ACCESS', name: 'VIP' }, cycle: 'YEARLY', status: 'ACTIVE' })
       const payment = await prisma.payment.findFirstOrThrow({ where: { studioId: A.studioId, purpose: 'SUBSCRIPTION', status: 'SUCCESS' }, orderBy: { createdAt: 'desc' } })
-      const meta = payment.meta as { prorationPaise: number; basePaise: number }
-      // Almost the whole 6 months of Pro (₹3,000) is unused: VIP for a year (₹10,000) costs about ₹7,000 + GST.
-      expect(meta.basePaise).toBe(1_000_000)
-      expect(meta.prorationPaise).toBeGreaterThan(290_000)
-      expect(payment.amount - payment.gst).toBe(1_000_000 - meta.prorationPaise)
+      const meta = payment.meta as { prorationPaise: number; pricePaise: number }
+      expect(meta.pricePaise).toBe(1_000_000)
+      // What was charged is the quote (a few seconds later, the credit may be a paisa or two less).
+      expect(Math.abs(payment.amount - quote.payablePaise)).toBeLessThanOrEqual(5)
+      expect(payment.amount).toBe(1_000_000 - meta.prorationPaise)
+      expect(payment.gst).toBe(splitInclusiveGstPaise(payment.amount).gstPaise)
       expect(payment.description).toMatch(/credit for unused days/)
+      // Its invoice: taxable value + GST = the amount charged, to the paisa.
+      const invoice = (await A.agent.get(`/api/v1/subscription/payments/${payment.id}/invoice`).expect(200)).body
+      expect(invoice.totalPaise).toBe(payment.amount)
+      expect(invoice.taxablePaise + invoice.cgstPaise + invoice.sgstPaise + invoice.igstPaise).toBe(payment.amount)
     })
 
     it("refuses a period a plan isn't sold for", async () => {

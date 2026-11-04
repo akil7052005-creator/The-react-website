@@ -2,9 +2,10 @@ import { Injectable } from '@nestjs/common'
 import type { BillingCycle, Payment, PaymentPurpose, PlanCode, Prisma } from '@prisma/client'
 import {
   CREDIT_PACKS,
-  gstOn,
   renewsAutomatically,
+  splitInclusiveGstPaise,
   type CancelReason,
+  type CheckoutQuoteDto,
   type GatewayCheckoutDto,
   type ListQuery,
   type MySubscriptionBannerDto,
@@ -118,9 +119,16 @@ export class SubscriptionsService {
     return paginate(rows.map(paymentDto), total, q)
   }
 
+  /** GET /subscription/quote: what choosing this plan will charge (GST included), shown before paying. */
+  async quote(studioId: string, planCode: PlanCode, cycle: BillingCycle, couponCode?: string): Promise<CheckoutQuoteDto> {
+    const q = await this.lifecycle.quote(studioId, planCode, cycle, couponCode)
+    return { planCode: q.planCode, cycle: q.cycle, pricePaise: q.pricePaise, discountPaise: q.discountPaise, creditPaise: q.creditPaise, payablePaise: q.payablePaise, basePaise: q.basePaise, gstPaise: q.gstPaise }
+  }
+
   /**
-   * Upgrade/downgrade/renew. Opens a gateway order; the plan changes only when the gateway
-   * confirms the payment by webhook (instantly in test mode). No proration in v1.
+   * Upgrade/downgrade/renew. Opens a gateway order for the quoted amount (GST included, credit for
+   * unused days taken off); the plan changes only when the gateway confirms the payment by webhook
+   * (instantly in test mode).
    */
   async changePlan(studioId: string, planCode: PlanCode, cycle: BillingCycle, couponCode?: string) {
     const payment = await this.lifecycle.checkout(studioId, planCode, cycle, couponCode)
@@ -164,20 +172,16 @@ export class SubscriptionsService {
     const { addonEvents: events, addonEventsPricePaise: price } = w.quota
     if (w.lifetime || !events || price === null) throw badRequest(`Extra events aren't available on ${w.eff.plan.name}. Upgrade instead.`)
     if (w.eff.readOnly || w.eff.status === 'GRACE') throw badRequest('Renew your plan first, then add events.')
-    const gst = gstOn(price)
+    // The add-on's price includes GST: charge exactly that and take the GST out of it.
+    const { basePaise, gstPaise } = splitInclusiveGstPaise(price)
+    const meta = { events, windowStart: w.start.toISOString(), pricePaise: price, basePaise, gstPaise, gstIncluded: true }
     const description = `+${events} events (until ${w.resetsOn.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' })})`
     if (!this.payments.instant) {
-      const pending = await this.openOrder(studioId, 'EVENT_ADDON', price + gst, gst, description, { events, windowStart: w.start.toISOString(), basePaise: price, gstPaise: gst })
+      const pending = await this.openOrder(studioId, 'EVENT_ADDON', price, gstPaise, description, meta)
       return { payment: paymentDto(pending), usage: await this.usage.meter(studioId), ...this.mode(), checkout: await this.checkoutFor(pending) }
     }
     const payment = await this.prisma.$transaction(async (tx) => {
-      const payment = await this.payments.charge(tx, studioId, {
-        purpose: 'EVENT_ADDON',
-        amountPaise: price + gst,
-        description,
-        meta: { events, windowStart: w.start.toISOString(), basePaise: price, gstPaise: gst },
-      })
-      await tx.payment.update({ where: { id: payment.id }, data: { gst } })
+      const payment = await this.payments.charge(tx, studioId, { purpose: 'EVENT_ADDON', amountPaise: price, gstPaise, description, meta })
       await tx.usageAddon.create({ data: { studioId, windowStart: w.start, events, paymentId: payment.id } })
       await this.notifications.notify(studioId, { type: 'PLAN_CHANGED', title: `+${events} events`, body: 'added for this month', link: '/my-subscription', icon: 'plus-circle' }, tx)
       return payment
@@ -195,18 +199,16 @@ export class SubscriptionsService {
     const pack = CREDIT_PACKS.find((p) => p.code === packCode)
     if (!pack) throw badRequest('Unknown credit pack', { packCode: 'Select a pack' })
     const description = `${pack.credits.toLocaleString('en-IN')} WhatsApp credits`
+    // The pack's price includes GST: charge exactly that and record the GST inside it.
+    const { basePaise, gstPaise } = splitInclusiveGstPaise(pack.pricePaise)
+    const meta = { packCode, credits: pack.credits, pricePaise: pack.pricePaise, basePaise, gstPaise, gstIncluded: true }
     if (!this.payments.instant) {
-      const pending = await this.openOrder(studioId, 'CREDIT_PACK', pack.pricePaise, 0, description, { packCode, credits: pack.credits })
+      const pending = await this.openOrder(studioId, 'CREDIT_PACK', pack.pricePaise, gstPaise, description, meta)
       const studio = await this.prisma.studio.findUniqueOrThrow({ where: { id: studioId }, select: { creditBalance: true } })
       return { payment: paymentDto(pending), creditBalance: studio.creditBalance, ...this.mode(), checkout: await this.checkoutFor(pending) }
     }
     const { payment, creditBalance } = await this.prisma.$transaction(async (tx) => {
-      const payment = await this.payments.charge(tx, studioId, {
-        purpose: 'CREDIT_PACK',
-        amountPaise: pack.pricePaise,
-        description,
-        meta: { packCode },
-      })
+      const payment = await this.payments.charge(tx, studioId, { purpose: 'CREDIT_PACK', amountPaise: pack.pricePaise, gstPaise, description, meta })
       const creditBalance = await this.ledger.applyCredits(tx, studioId, pack.credits, 'PURCHASE', { type: 'payment', id: payment.id })
       await this.notifications.notify(
         studioId,

@@ -111,7 +111,7 @@ function AllAccess() {
       )}
 
       <p className="muted" style={{ textAlign: 'center' }}>
-        All prices exclude 18% GST. Compare every plan on{' '}
+        All prices include 18% GST. Compare every plan on{' '}
         <Link to="/subscriptions" className="link">
           Plans &amp; Pricing
         </Link>

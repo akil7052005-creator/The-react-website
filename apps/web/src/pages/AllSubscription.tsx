@@ -125,7 +125,7 @@ function AllSubscription() {
       )}
 
       <p className="muted" style={{ textAlign: 'center' }}>
-        All prices exclude 18% GST. Upgrades start straight away, with credit for the unused days of your current plan. Questions?{' '}
+        All prices include 18% GST. Upgrades start straight away, with credit for the unused days of your current plan. Questions?{' '}
         <Link to="/support" className="link">
           Contact support
         </Link>

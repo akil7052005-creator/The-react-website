@@ -7,11 +7,12 @@ import {
   computeStatus,
   CREDIT_PACKS,
   financialYearStart,
-  gstOn,
   istDate,
   istParts,
   platformInvoiceNumber,
   REFERRAL_REWARD_PAISE,
+  splitInclusiveGstPaise,
+  type CheckoutQuoteDto,
   type PlanCode,
   type ReminderChannel,
   type VerifyPaymentInput,
@@ -82,15 +83,15 @@ export class SubscriptionLifecycleService implements OnApplicationBootstrap {
   // ------------------------------------------------------------------ checkout
 
   /**
-   * Opens a gateway order for a plan. Nothing about the subscription changes here: the plan is
-   * applied when the gateway confirms the payment by webhook. In test mode the mock gateway
-   * confirms straight away through that same webhook handler.
+   * What choosing a plan charges. Prices include 18% GST: the coupon and the credit for the unused
+   * days of the current plan come off the price first, then the GST is taken out of what is left
+   * (never added on top). Used by GET /subscription/quote and by checkout, so both always agree.
    */
-  async checkout(studioId: string, planCode: PlanCode, cycle: BillingCycle, couponCode?: string): Promise<Payment> {
+  async quote(studioId: string, planCode: PlanCode, cycle: BillingCycle, couponCode?: string) {
     const plan = await this.plans.byCode(planCode)
     if (!plan.isActive) throw badRequest('This plan is not available', { planCode: 'This plan is not available' })
-    const base = listPrice(plan, cycle)
-    if (base === null) {
+    const price = listPrice(plan, cycle)
+    if (price === null) {
       throw badRequest(`${plan.name} isn't sold for ${CYCLE_LABELS[cycle]}`, { cycle: `${plan.name} isn't available for ${CYCLE_LABELS[cycle]}` })
     }
     const eff = await this.plans.effective(studioId)
@@ -98,9 +99,10 @@ export class SubscriptionLifecycleService implements OnApplicationBootstrap {
     if (eff.status === 'ACTIVE' && !s.isTrial && !s.cancelAtPeriodEnd && s.planId === plan.id && s.cycle === cycle) {
       throw conflict(`You're already on the ${plan.name} plan (${CYCLE_LABELS[cycle]})`)
     }
-    // Changing plan (or period) mid-way: the unused days of what was paid count towards the new plan.
+    // Changing plan (or period) mid-way: the unused days of what was paid (GST included) count
+    // towards the new plan, at most down to ₹1.
     const changing = !s.isTrial && !eff.readOnly && !(s.planId === plan.id && s.cycle === cycle) && s.currentPeriodEnd > new Date()
-    const prorationPaise = changing ? Math.min(Math.max(0, base - 100), proratedCredit(Math.max(0, s.amountPaid - s.gstAmount), s.currentPeriodStart, s.currentPeriodEnd)) : 0
+    const credit = changing ? Math.min(Math.max(0, price - 100), proratedCredit(Math.max(0, s.amountPaid), s.currentPeriodStart, s.currentPeriodEnd)) : 0
 
     let coupon: { id: string; percentOff: number } | null = null
     if (couponCode) {
@@ -110,9 +112,21 @@ export class SubscriptionLifecycleService implements OnApplicationBootstrap {
       }
       coupon = { id: c.id, percentOff: c.percentOff }
     }
-    const discount = coupon ? Math.round((base * coupon.percentOff) / 100) : 0
-    const taxable = Math.max(100, base - discount - prorationPaise)
-    const gst = gstOn(taxable)
+    const discount = coupon ? Math.round((price * coupon.percentOff) / 100) : 0
+    const { totalPaise: payable, basePaise, gstPaise } = splitInclusiveGstPaise(Math.max(100, price - discount - credit))
+    const dto: CheckoutQuoteDto = { planCode, cycle, pricePaise: price, discountPaise: discount, creditPaise: credit, payablePaise: payable, basePaise, gstPaise }
+    return { ...dto, plan, eff, coupon }
+  }
+
+  /**
+   * Opens a gateway order for a plan, for exactly the quoted amount (GST included). Nothing about
+   * the subscription changes here: the plan is applied when the gateway confirms the payment by
+   * webhook. In test mode the mock gateway confirms straight away through that same webhook handler.
+   */
+  async checkout(studioId: string, planCode: PlanCode, cycle: BillingCycle, couponCode?: string): Promise<Payment> {
+    const q = await this.quote(studioId, planCode, cycle, couponCode)
+    const { plan, eff, coupon } = q
+    const s = eff.subscription
 
     // An earlier plan checkout left unpaid is closed (if it's paid after all, the webhook still applies it).
     await this.prisma.payment.updateMany({ where: { studioId, purpose: 'SUBSCRIPTION', status: 'PENDING' }, data: { status: 'FAILED', failureReason: 'Not completed' } })
@@ -120,15 +134,26 @@ export class SubscriptionLifecycleService implements OnApplicationBootstrap {
       data: {
         studioId,
         purpose: 'SUBSCRIPTION',
-        description: `${plan.name} plan · ${cycleLabel(cycle)}${coupon ? ` · ${coupon.percentOff}% off` : ''}${prorationPaise ? ` · ${inr(prorationPaise)} credit for unused days` : ''}`,
-        amount: taxable + gst,
-        gst,
+        description: `${plan.name} plan · ${cycleLabel(cycle)}${coupon ? ` · ${coupon.percentOff}% off` : ''}${q.creditPaise ? ` · ${inr(q.creditPaise)} credit for unused days` : ''}`,
+        amount: q.payablePaise,
+        gst: q.gstPaise,
         status: 'PENDING',
         provider: this.payments.provider,
         subscriptionId: s.id,
         planId: plan.id,
         cycle,
-        meta: { planCode, cycle, previousPlan: eff.plan.code, basePaise: base, discountPaise: discount, prorationPaise, couponId: coupon?.id ?? null },
+        meta: {
+          planCode,
+          cycle,
+          previousPlan: eff.plan.code,
+          pricePaise: q.pricePaise,
+          discountPaise: q.discountPaise,
+          prorationPaise: q.creditPaise,
+          basePaise: q.basePaise,
+          gstPaise: q.gstPaise,
+          gstIncluded: true,
+          couponId: coupon?.id ?? null,
+        },
       },
     })
     const orderId = await this.payments.createOrder(payment).catch(async (e: unknown) => {
@@ -361,13 +386,13 @@ export class SubscriptionLifecycleService implements OnApplicationBootstrap {
           dedupe: `purchase:${payment.id}`,
           type: 'SUBSCRIPTION_PURCHASED',
           title: `${studio.name} chose ${label}`,
-          message: `${inr(payment.amount - payment.gst)} + GST · ${type === 'RENEWED' ? 'renewal' : type.toLowerCase()} · expires ${istDay(end)}`,
+          message: `${inr(payment.amount)} incl. ${inr(payment.gst)} GST · ${type === 'RENEWED' ? 'renewal' : type.toLowerCase()} · expires ${istDay(end)}`,
           link: `/admin/subscriptions/${sub.id}`,
           icon: 'cash-coin',
           subscriptionId: sub.id,
           email: {
-            subject: `New subscription: ${studio.name} chose ${label}, ${inr(payment.amount - payment.gst)} + GST`,
-            text: `${studio.name} chose ${label}, ${inr(payment.amount - payment.gst)} + ${inr(payment.gst)} GST, expires ${istDay(end)}.\nInvoice ${invoiceNumber}.\n\n${absoluteUrl(`/admin/subscriptions/${sub.id}`)}`,
+            subject: `New subscription: ${studio.name} chose ${label}, ${inr(payment.amount)} incl. GST`,
+            text: `${studio.name} chose ${label}, ${inr(payment.amount)} (incl. ${inr(payment.gst)} GST), expires ${istDay(end)}.\nInvoice ${invoiceNumber}.\n\n${absoluteUrl(`/admin/subscriptions/${sub.id}`)}`,
           },
         },
         tx,
@@ -405,9 +430,9 @@ export class SubscriptionLifecycleService implements OnApplicationBootstrap {
       '',
       `Tax invoice ${p.invoiceNumber}`,
       `Seller: ${c.PLATFORM_LEGAL_NAME}`,
-      `Amount (before GST): ${inr(p.amount - p.gst)}`,
-      `GST @ 18%: ${inr(p.gst)}`,
-      `Total paid: ${inr(p.amount)} (${amountInWords(p.amount)})`,
+      `Taxable value: ${inr(p.amount - p.gst)}`,
+      `GST @ 18% (included): ${inr(p.gst)}`,
+      `Total paid (incl. GST): ${inr(p.amount)} (${amountInWords(p.amount)})`,
       '',
       `View or print the invoice: ${absoluteUrl(`/my-subscription/invoices/${p.id}`)}`,
     ].join('\n')
@@ -425,7 +450,8 @@ export class SubscriptionLifecycleService implements OnApplicationBootstrap {
     const start = continues ? sub.currentPeriodEnd : now
     const anchorDay = continues ? (sub.anchorDay ?? istParts(sub.currentPeriodStart).day) : istParts(now).day
     const end = addCycle(start, sub.cycle, anchorDay)
-    const gst = amount - Math.round((amount * 100) / 118)
+    // The renewal charge includes GST: take it out of the amount charged.
+    const { gstPaise: gst } = splitInclusiveGstPaise(amount)
     const invoiceNumber = await this.nextInvoiceNumber(tx, now)
     const payment = await tx.payment.create({
       data: {
@@ -480,7 +506,7 @@ export class SubscriptionLifecycleService implements OnApplicationBootstrap {
           dedupe: `renewal:${payment.id}`,
           type: 'SUBSCRIPTION_RENEWED',
           title: `${studio.name} auto-renewed ${label}`,
-          message: `${inr(amount - gst)} + GST · next deadline ${istDay(end)}`,
+          message: `${inr(amount)} incl. ${inr(gst)} GST · next deadline ${istDay(end)}`,
           link: `/admin/subscriptions/${sub.id}`,
           icon: 'arrow-repeat',
           subscriptionId: sub.id,
@@ -554,7 +580,7 @@ export class SubscriptionLifecycleService implements OnApplicationBootstrap {
           dedupe,
           type: 'PAYMENT_FAILED',
           title: `Payment failed: ${studio.name}`,
-          message: `${plan.name} (${cycleLabel(cycle)})${payment ? ` · ${inr(payment.amount - payment.gst)} + GST` : ''} · ${reason}`,
+          message: `${plan.name} (${cycleLabel(cycle)})${payment ? ` · ${inr(payment.amount)} incl. GST` : ''} · ${reason}`,
           link: `/admin/subscriptions/${sub.id}`,
           icon: 'exclamation-octagon',
           subscriptionId: sub.id,

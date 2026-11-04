@@ -56,6 +56,12 @@ export class PlansController {
     return this.subs.paymentHistory(studioId, q)
   }
 
+  /** What choosing a plan will charge (GST included, any credit for unused days taken off), shown before paying. */
+  @Get('subscription/quote')
+  quote(@StudioId() studioId: string, @Query(zod(changePlanSchema)) q: z.output<typeof changePlanSchema>) {
+    return this.subs.quote(studioId, q.planCode, q.cycle, q.couponCode)
+  }
+
   @Post('subscription/change')
   @HttpCode(200)
   @ApiZodBody(changePlanSchema)

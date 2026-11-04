@@ -130,10 +130,28 @@ export function trialOffer(trialDays: number = DEFAULT_TRIAL_DAYS, now = new Dat
   }
 }
 
-/** Plan prices exclude GST; platform subscriptions are charged 18% GST on top. */
+/**
+ * Every Wedmanage price (plans, upgrades, the "+5 events" add-on, WhatsApp credit packs, renewals)
+ * includes 18% GST: the price shown is what the studio pays, and the GST is taken out of it, never
+ * added on top.
+ */
 export const PLATFORM_GST_RATE = 18
-export function gstOn(basePaise: number): number {
-  return Math.round((basePaise * PLATFORM_GST_RATE) / 100)
+export const GST_RATE = PLATFORM_GST_RATE / 100
+
+/**
+ * The taxable value and GST inside a GST-inclusive amount, in whole paise, so base + GST is always
+ * exactly the total: 60000 (₹600) → 50847 + 9153; 120000 (₹1,200) → 101695 + 18305.
+ * base = total / 1.18, worked in integers (total × 100 / 118) so no floating-point error creeps in.
+ */
+export function splitInclusiveGstPaise(totalPaise: number): { totalPaise: number; basePaise: number; gstPaise: number } {
+  const total = Math.round(totalPaise)
+  const basePaise = Math.round((total * 100) / (100 + PLATFORM_GST_RATE))
+  return { totalPaise: total, basePaise, gstPaise: total - basePaise }
+}
+
+/** The same for an amount in rupees: splitInclusiveGst(600) → { totalPaise: 60000, basePaise: 50847, gstPaise: 9153 }. */
+export function splitInclusiveGst(totalRupees: number) {
+  return splitInclusiveGstPaise(Math.round(totalRupees * 100))
 }
 
 export interface AlertSettings {

@@ -205,7 +205,7 @@ function MySubscription() {
                   <tr>
                     <th>Billing Date</th>
                     <th>Plan Cycle</th>
-                    <th className="num">Amount</th>
+                    <th className="num">Amount (incl. GST)</th>
                     <th className="num">Status</th>
                     <th className="num">Invoice</th>
                   </tr>
@@ -215,7 +215,14 @@ function MySubscription() {
                     <tr key={p.id}>
                       <td>{formatDate(p.createdAt)}</td>
                       <td>{p.description}</td>
-                      <td className="num cell-main">{formatMoney(p.amountPaise)}</td>
+                      <td className="num cell-main">
+                        {formatMoney(p.amountPaise)}
+                        {p.gstPaise > 0 && (
+                          <small className="muted" style={{ display: 'block', fontWeight: 400 }}>
+                            incl. {formatMoney(p.gstPaise)} GST
+                          </small>
+                        )}
+                      </td>
                       <td className="num">
                         <StatusPill status={p.status === 'SUCCESS' ? 'Paid' : p.status === 'FAILED' ? 'Failed' : 'Pending'} />
                       </td>

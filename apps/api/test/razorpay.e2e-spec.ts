@@ -1,5 +1,6 @@
 import type { INestApplication } from '@nestjs/common'
 import type { PrismaClient } from '@prisma/client'
+import { CREDIT_PACKS, splitInclusiveGstPaise } from '@weddyzone/shared'
 import { createHmac } from 'crypto'
 import request from 'supertest'
 import { RazorpayPaymentService } from '../src/core/razorpay-payment.service'
@@ -106,18 +107,19 @@ describe('Razorpay: Checkout orders, confirmation, webhooks', () => {
 
   it('opens a Razorpay order for a plan; nothing changes until it is paid', async () => {
     const res = await A.agent.post('/api/v1/subscription/change').send({ planCode: 'PRO', cycle: 'YEARLY' }).expect(200)
-    expect(res.body.payment).toMatchObject({ status: 'PENDING', amountPaise: 590_000, provider: 'razorpay' })
+    // Pro for a year is ₹5,000, GST included: exactly that is charged (₹4,237.29 + ₹762.71 GST).
+    expect(res.body.payment).toMatchObject({ status: 'PENDING', amountPaise: 500_000, gstPaise: 76_271, provider: 'razorpay' })
     expect(res.body.checkout).toMatchObject({
       provider: 'razorpay',
       keyId: KEY_ID,
       paymentId: res.body.payment.id,
-      amountPaise: 590_000,
+      amountPaise: 500_000,
       currency: 'INR',
       name: 'Wedmanage Studio',
       prefill: { email: A.email },
     })
     const order = rzp.orders.get(res.body.checkout.orderId)!
-    expect(order).toMatchObject({ amount: 590_000, receipt: res.body.payment.id })
+    expect(order).toMatchObject({ amount: 500_000, receipt: res.body.payment.id })
     expect((await sub()).plan.code).toBe('STARTER')
   })
 
@@ -136,14 +138,14 @@ describe('Razorpay: Checkout orders, confirmation, webhooks', () => {
     const pending = await prisma.payment.findFirstOrThrow({ where: { studioId: A.studioId, status: 'PENDING' } })
     const paid = rzp.pay(pending.gatewayOrderId!, 'authorized')
     const res = await A.agent.post(`/api/v1/subscription/payments/${pending.id}/verify`).send(paid).expect(200)
-    expect(res.body.payment).toMatchObject({ status: 'SUCCESS', amountPaise: 590_000 })
+    expect(res.body.payment).toMatchObject({ status: 'SUCCESS', amountPaise: 500_000 })
     expect(res.body.payment.invoiceNumber).toMatch(/^WZ\//)
     expect(rzp.payments.get(paid.razorpayPaymentId)!.status).toBe('captured')
     const after = await sub()
     expect(after).toMatchObject({ isTrial: false, cycle: 'YEARLY', status: 'ACTIVE' })
     expect(after.plan.code).toBe('PRO')
 
-    const hooked = await hook(captured(paid.razorpayOrderId, paid.razorpayPaymentId, 590_000), 'evt_rzp_1').expect(200)
+    const hooked = await hook(captured(paid.razorpayOrderId, paid.razorpayPaymentId, 500_000), 'evt_rzp_1').expect(200)
     expect(hooked.body.handled).toBe('already_paid')
     expect((await sub()).currentPeriodEnd).toEqual(after.currentPeriodEnd)
     // Confirming again is harmless.
@@ -227,6 +229,36 @@ describe('Razorpay: Checkout orders, confirmation, webhooks', () => {
     await prisma.subscription.update({ where: { id: s.id }, data: { autoRenew: true, gatewaySubscriptionId: 'sub_mock_leftover' } })
     await app.get(SubscriptionLifecycleService).onApplicationBootstrap()
     expect(await sub()).toMatchObject({ autoRenew: false, gatewaySubscriptionId: null })
+  })
+
+  it('every plan, period, the add-on and every credit pack opens an order for exactly its shown price (GST inside it)', async () => {
+    const plans = (await A.agent.get('/api/v1/plans').expect(200)).body as { code: string; prices: Record<string, number | null>; limits: { addonEventsPricePaise?: number } }[]
+    const orderFor = (res: { body: { payment: { amountPaise: number; gstPaise: number }; checkout: { orderId: string; amountPaise: number } } }, price: number) => {
+      const split = splitInclusiveGstPaise(price)
+      expect(res.body.payment).toMatchObject({ amountPaise: price, gstPaise: split.gstPaise })
+      expect(res.body.checkout.amountPaise).toBe(price)
+      expect(rzp.orders.get(res.body.checkout.orderId)!.amount).toBe(price)
+      expect(split.basePaise + split.gstPaise).toBe(price)
+    }
+    let checked = 0
+    for (const p of plans) {
+      for (const [cycle, price] of Object.entries(p.prices)) {
+        if (!price) continue
+        // A studio that isn't on a plan yet, so no credit for unused days comes off.
+        const S = await signup(app, { plan: 'trial' })
+        const quote = (await S.agent.get('/api/v1/subscription/quote').query({ planCode: p.code, cycle }).expect(200)).body
+        expect(quote).toMatchObject({ pricePaise: price, creditPaise: 0, discountPaise: 0, payablePaise: price, gstPaise: splitInclusiveGstPaise(price).gstPaise })
+        orderFor(await S.agent.post('/api/v1/subscription/change').send({ planCode: p.code, cycle }).expect(200), price)
+        checked++
+      }
+    }
+    expect(checked).toBe(6) // Pro and VIP, each for 1, 6 and 12 months
+    // Credit packs and the add-on, on a Pro studio of its own (its orders are left unpaid).
+    const P = await signup(app, { plan: 'PRO' })
+    for (const pack of CREDIT_PACKS) orderFor(await P.agent.post('/api/v1/credits/purchase').send({ packCode: pack.code }).expect(200), pack.pricePaise)
+    const addon = plans.find((p) => p.code === 'PRO')!.limits.addonEventsPricePaise!
+    expect(addon).toBe(49_900)
+    orderFor(await P.agent.post('/api/v1/subscription/addon-events').expect(200), addon)
   })
 
   it('Razorpay down: a clear error, and no half-open payment is left behind', async () => {

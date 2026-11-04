@@ -128,7 +128,7 @@ export function SignupForm({ plan, onPlanChange }: { plan: SignupPlan; onPlanCha
           </select>
           {price !== null && (
             <span className="pub-plan-price">
-              {formatMoney(price)} + GST{save ? <span className="pub-save">Save {save}%</span> : null}
+              {formatMoney(price)} incl. GST{save ? <span className="pub-save">Save {save}%</span> : null}
             </span>
           )}
         </div>

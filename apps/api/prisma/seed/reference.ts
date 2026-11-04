@@ -3,7 +3,7 @@ import type { PrismaClient } from '@prisma/client'
 // Reference data every environment needs. Upserts, so it is safe to re-run in production.
 
 // Free Subscription (the trial) / Pro / VIP. The codes stay STARTER / PRO / ALL_ACCESS in the database; STUDIO is
-// kept hidden for history. Prices are in paise, GST extra.
+// kept hidden for history. Prices are in paise and include 18% GST (what the studio pays).
 export const PLANS = [
   {
     code: 'STARTER' as const,

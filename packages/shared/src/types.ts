@@ -328,7 +328,7 @@ export interface PlanDto {
   tagline: string
   monthlyPricePaise: number | null
   yearlyPricePaise: number
-  /** Price of each billing period (1, 3, 6, 12 months) in paise, GST extra; null = not offered. */
+  /** Price of each billing period (1, 3, 6, 12 months) in paise, 18% GST included; null = not offered. */
   prices: Record<BillingCycle, number | null>
   limits: PlanLimits
   features: string[]
@@ -393,12 +393,33 @@ export interface PaymentDto {
   description: string
   /** Total charged, GST included. */
   amountPaise: number
+  /** The 18% GST inside `amountPaise` (amountPaise − gstPaise is the taxable value). */
   gstPaise: number
   status: 'SUCCESS' | 'FAILED' | 'PENDING'
   provider: string
   invoiceNumber: string | null
   paidAt: string | null
   createdAt: string
+}
+
+/**
+ * GET /subscription/quote: what choosing a plan will charge, before paying. Prices include 18% GST:
+ * the credit and any coupon come off the price first, then the GST is taken out of what is left.
+ */
+export interface CheckoutQuoteDto {
+  planCode: PlanCode
+  cycle: BillingCycle
+  /** The plan's price for the period, GST included. */
+  pricePaise: number
+  /** Coupon discount off the price. */
+  discountPaise: number
+  /** Credit for the unused days of the current plan. */
+  creditPaise: number
+  /** What the studio pays: price − discount − credit (at least ₹1). */
+  payablePaise: number
+  /** The taxable value and GST inside `payablePaise`; they add up to it exactly. */
+  basePaise: number
+  gstPaise: number
 }
 
 /** Tax invoice Wedmanage issues to a studio for a plan payment. */

@@ -25,8 +25,8 @@ test('a purchase shows up for the admin at once, who can extend its deadline', a
   const row = page.getByRole('row', { name: /Fresh Frames/ })
   await expect(row).toHaveCount(1)
   await expect(row.getByRole('cell', { name: 'Pro · Yearly' })).toBeVisible()
-  // Admin amounts exclude GST: ₹5,000, not the ₹5,900 charged.
-  await expect(row.getByRole('cell', { name: '₹5,000' })).toBeVisible()
+  // Admin amounts exclude GST: the ₹5,000 charged includes ₹762.71 GST, so ₹4,237.29 shows.
+  await expect(row.getByRole('cell', { name: '₹4,237.29' })).toBeVisible()
   await expect(row.getByText('Active')).toBeVisible()
   // The bell opens the alerts; "View all" goes to the full feed.
   await page.getByRole('button', { name: /^Alerts/ }).click()

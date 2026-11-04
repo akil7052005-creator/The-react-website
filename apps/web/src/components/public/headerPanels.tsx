@@ -172,7 +172,7 @@ export function PricingPanel({ onChoose, onCompare }: { onChoose: (plan: SignupP
         </div>
       )}
       <div className="pub-price-foot">
-        <span className="pub-note">All prices exclude 18% GST.</span>
+        <span className="pub-note">All prices include 18% GST.</span>
         <button type="button" className="pub-link" onClick={onCompare}>
           Compare all plans →
         </button>
