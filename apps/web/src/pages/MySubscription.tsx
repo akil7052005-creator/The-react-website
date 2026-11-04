@@ -214,7 +214,14 @@ function MySubscription() {
                   {recentPayments.map((p) => (
                     <tr key={p.id}>
                       <td>{formatDate(p.createdAt)}</td>
-                      <td>{p.description}</td>
+                      <td>
+                        {p.description}
+                        {p.paidByAdmin && (
+                          <small className="muted" style={{ display: 'block' }}>
+                            <i className="bi bi-shield-check" /> Paid by admin
+                          </small>
+                        )}
+                      </td>
                       <td className="num cell-main">
                         {formatMoney(p.amountPaise)}
                         {p.gstPaise > 0 && (

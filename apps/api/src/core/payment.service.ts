@@ -125,7 +125,8 @@ export class MockPaymentService extends PaymentService {
   }
 }
 
-export function paymentDto(p: Payment): PaymentDto {
+/** `paidByAdmin` (the admin's name) is included only in platform-admin views. */
+export function paymentDto(p: Payment & { paidByAdmin?: { name: string } | null }): PaymentDto {
   return {
     id: p.id,
     purpose: p.purpose,
@@ -137,5 +138,7 @@ export function paymentDto(p: Payment): PaymentDto {
     invoiceNumber: p.invoiceNumber,
     paidAt: p.paidAt?.toISOString() ?? null,
     createdAt: p.createdAt.toISOString(),
+    paidByAdmin: !!p.paidByAdminId,
+    paidByAdminName: p.paidByAdmin?.name ?? null,
   }
 }

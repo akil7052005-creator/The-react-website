@@ -192,7 +192,7 @@ export class AdminSubscriptionsService {
     if (!s) throw notFound('Subscription')
     const [events, payments, notifications, usage] = await Promise.all([
       this.prisma.subscriptionEvent.findMany({ where: { subscriptionId: id }, include: { actor: { select: { name: true } } }, orderBy: { createdAt: 'desc' }, take: 100 }),
-      this.prisma.payment.findMany({ where: { studioId: s.studioId, purpose: 'SUBSCRIPTION' }, orderBy: { createdAt: 'desc' }, take: 50 }),
+      this.prisma.payment.findMany({ where: { studioId: s.studioId, purpose: 'SUBSCRIPTION' }, include: { paidByAdmin: { select: { name: true } } }, orderBy: { createdAt: 'desc' }, take: 50 }),
       this.prisma.notification.findMany({
         where: { OR: [{ subscriptionId: id }, { studioId: s.studioId, type: { startsWith: 'SUBSCRIPTION' } }] },
         orderBy: { createdAt: 'desc' },

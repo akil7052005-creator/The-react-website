@@ -2648,6 +2648,89 @@ a.ps-upload {
 .admin-studios tr.is-removed td {
   color: var(--text-2);
 }
+.as-plan {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.as-plan-edit {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 7px;
+  background: #fff;
+  color: var(--text-2);
+  font-size: 13px;
+  cursor: pointer;
+}
+.as-plan-edit:hover {
+  border-color: var(--ef-red);
+  color: var(--ef-red);
+}
+.as-plan-edit:focus-visible {
+  outline: 2px solid var(--ef-red);
+  outline-offset: 2px;
+}
+
+/* Admin → Studios → Change plan */
+.acp-current {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #f6f7f9;
+}
+.acp-current dt {
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+.acp-current dd {
+  margin: 2px 0 0;
+  font-weight: 700;
+}
+.acp-summary {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid #f3d6dd;
+  border-radius: 10px;
+  background: #fff7f9;
+}
+.acp-total {
+  margin: 0;
+  font-size: 16px;
+}
+.acp-detail {
+  margin: 6px 0 0;
+  color: var(--text-2);
+  font-size: 13px;
+}
+.acp-total + .acp-detail {
+  margin-top: 6px;
+}
+.acp-summary > .acp-detail:first-child {
+  margin-top: 0;
+}
+.acp-error {
+  margin: 0;
+  color: #c81e3a;
+  font-weight: 600;
+}
+.acp-note {
+  margin: 12px 0 0;
+  color: var(--text-2);
+  font-size: 13px;
+}
+@media (max-width: 560px) {
+  .acp-current {
+    grid-template-columns: 1fr;
+  }
+}
 .as-removed {
   white-space: nowrap;
   font-size: 13px;

@@ -23,6 +23,7 @@ import { SharePreviewController, SharePreviewService } from './selections/share-
 import { UploadLimitsController, UploadLimitsService } from './selections/upload-limits'
 import { PlatformWhatsAppService } from './infra/platform-whatsapp.service'
 import { AdminStudiosController } from './subscriptions/admin-studios.controller'
+import { AdminPlanPaymentsService } from './subscriptions/admin-plan-payments.service'
 import { AdminStudiosService } from './subscriptions/admin-studios.service'
 import { AdminSubscriptionsController } from './subscriptions/admin-subscriptions.controller'
 import { AdminSubscriptionsService } from './subscriptions/admin-subscriptions.service'
@@ -83,6 +84,7 @@ import { WebhooksController } from './subscriptions/webhooks.controller'
     SubscriptionJobsService,
     AdminSubscriptionsService,
     AdminStudiosService,
+    AdminPlanPaymentsService,
   ],
   exports: [SubscriptionJobsService, SubscriptionLifecycleService],
 })

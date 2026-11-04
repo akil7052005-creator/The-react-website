@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { BILLING_CYCLES } from '../enums'
 import { CANCEL_REASONS, SUBSCRIPTION_STATUSES } from '../subscriptions'
 import { dateSchema, optionalText, requiredText } from '../validators'
+import { verifyPaymentSchema } from './billing'
 import { listQuerySchema, uuidSchema } from './common'
 
 const emptyToUndefined = (v: unknown) => (v === '' || v === null ? undefined : v)
@@ -53,6 +54,17 @@ export const adminChangePlanSchema = z.object({
   note: adminNote,
 })
 export type AdminChangePlanInput = z.input<typeof adminChangePlanSchema>
+
+/** Admin → Studios → Change plan: the admin pays for the studio's plan. The server works out the price. */
+export const adminPlanOrderSchema = z.object({
+  planId: uuidSchema,
+  cycle: z.enum(BILLING_CYCLES, { error: 'Choose how long' }),
+})
+export type AdminPlanOrderInput = z.input<typeof adminPlanOrderSchema>
+
+/** Razorpay Checkout's response for an admin-paid plan order, checked on the server. */
+export const adminPlanVerifySchema = verifyPaymentSchema.extend({ paymentId: uuidSchema })
+export type AdminPlanVerifyInput = z.input<typeof adminPlanVerifySchema>
 
 export const adminCancelSchema = z.object({ note: adminNote })
 

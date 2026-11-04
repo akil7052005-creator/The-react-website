@@ -23,6 +23,12 @@ import { PrismaService, type Tx } from '../prisma/prisma.service'
 import { renewPath } from '../subscriptions/format'
 import { SubscriptionLifecycleService } from '../subscriptions/lifecycle.service'
 
+/**
+ * The studio's own billing history: its payments, plus plans an admin paid for it. An admin's
+ * unfinished or failed attempts are the admin's business and aren't shown to the studio.
+ */
+const studioPayments = (studioId: string): Prisma.PaymentWhereInput => ({ studioId, OR: [{ paidByAdminId: null }, { status: 'SUCCESS' }] })
+
 @Injectable()
 export class SubscriptionsService {
   constructor(
@@ -39,7 +45,7 @@ export class SubscriptionsService {
     const eff = await this.plans.effective(studioId)
     const [usage, payments] = await Promise.all([
       this.usage.usage(studioId),
-      this.prisma.payment.findMany({ where: { studioId }, orderBy: { createdAt: 'desc' }, take: 6 }),
+      this.prisma.payment.findMany({ where: studioPayments(studioId), orderBy: { createdAt: 'desc' }, take: 6 }),
     ])
     return {
       subscription: this.plans.subscriptionDto(eff),
@@ -51,13 +57,18 @@ export class SubscriptionsService {
     }
   }
 
-  /** What the browser needs to open Razorpay Checkout for a pending payment; null when nothing is left to pay. */
+  /**
+   * What the browser needs to open Razorpay Checkout for a pending payment; null when nothing is left
+   * to pay. Checkout is prefilled with the studio owner's details, or the admin's when an admin pays.
+   */
   async checkoutFor(payment: Payment): Promise<GatewayCheckoutDto | null> {
     const keyId = this.payments.checkoutKeyId
     if (payment.status !== 'PENDING' || !keyId || !payment.gatewayOrderId) return null
     const [studio, owner] = await Promise.all([
       this.prisma.studio.findUniqueOrThrow({ where: { id: payment.studioId }, select: { name: true, email: true, phone: true } }),
-      this.prisma.user.findFirst({ where: { studioId: payment.studioId, role: 'OWNER' }, select: { name: true, email: true, phone: true } }),
+      payment.paidByAdminId
+        ? this.prisma.user.findUnique({ where: { id: payment.paidByAdminId }, select: { name: true, email: true, phone: true } })
+        : this.prisma.user.findFirst({ where: { studioId: payment.studioId, role: 'OWNER' }, select: { name: true, email: true, phone: true } }),
     ])
     return {
       provider: 'razorpay',
@@ -111,7 +122,7 @@ export class SubscriptionsService {
   }
 
   async paymentHistory(studioId: string, q: ListQuery) {
-    const where = { studioId }
+    const where = studioPayments(studioId)
     const [rows, total] = await Promise.all([
       this.prisma.payment.findMany({ where, orderBy: { createdAt: 'desc' }, ...skipTake(q) }),
       this.prisma.payment.count({ where }),

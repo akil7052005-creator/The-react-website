@@ -271,13 +271,14 @@ model User {
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
-  studio             Studio?             @relation(fields: [studioId], references: [id])
-  refreshTokens      RefreshToken[]
-  passwordResets     PasswordReset[]
-  faqVotes           FaqFeedback[]
-  ticketMessages     TicketMessage[]
-  adminActions       AdminAuditLog[]
-  subscriptionEvents SubscriptionEvent[]
+  studio              Studio?             @relation(fields: [studioId], references: [id])
+  refreshTokens       RefreshToken[]
+  passwordResets      PasswordReset[]
+  faqVotes            FaqFeedback[]
+  ticketMessages      TicketMessage[]
+  adminActions        AdminAuditLog[]
+  subscriptionEvents  SubscriptionEvent[]
+  plansPaidForStudios Payment[]           @relation("PaymentPaidByAdmin")
 
   @@index([studioId])
   @@map("users")
@@ -825,11 +826,14 @@ model Payment {
   invoiceNumber    String?        @unique @map("invoice_number")
   failureReason    String?        @map("failure_reason")
   paidAt           DateTime?      @map("paid_at")
+  // Set when a platform admin paid for the studio's plan (Admin → Studios → Change plan).
+  paidByAdminId    String?        @map("paid_by_admin_id") @db.Uuid
   createdAt        DateTime       @default(now()) @map("created_at")
 
   studio       Studio        @relation(fields: [studioId], references: [id])
   subscription Subscription? @relation(fields: [subscriptionId], references: [id])
   plan         Plan?         @relation(fields: [planId], references: [id])
+  paidByAdmin  User?         @relation("PaymentPaidByAdmin", fields: [paidByAdminId], references: [id], onDelete: SetNull)
 
   @@index([studioId, purpose])
   @@index([studioId, createdAt])

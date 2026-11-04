@@ -114,6 +114,8 @@ export class AdminStudiosService implements OnApplicationBootstrap, OnModuleDest
       owner: owner ? { name: owner.name, phone: owner.phone ?? r.phone } : null,
       email: owner?.email ?? r.email,
       plan: sub ? (trial ? PLAN_NAMES.STARTER : sub.plan.name) : null,
+      planCode: sub && !trial ? sub.plan.code : null,
+      cycle: sub && !trial ? sub.cycle : null,
       period: sub && !trial ? CYCLE_LABELS[sub.cycle] : null,
       startDate: sub ? sub.currentPeriodStart.toISOString() : null,
       expiryDate: sub ? sub.currentPeriodEnd.toISOString() : null,

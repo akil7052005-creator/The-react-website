@@ -29,5 +29,6 @@ export function platformInvoiceDto(p: Payment & { studio: Studio }): PlatformInv
     totalPaise: p.amount,
     totalInWords: amountInWords(p.amount),
     paymentRef: p.gatewayPaymentId,
+    paidByAdmin: !!p.paidByAdminId,
   }
 }

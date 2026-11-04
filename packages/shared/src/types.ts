@@ -400,6 +400,10 @@ export interface PaymentDto {
   invoiceNumber: string | null
   paidAt: string | null
   createdAt: string
+  /** A platform admin paid for it on the studio's behalf (Admin → Studios → Change plan). */
+  paidByAdmin: boolean
+  /** Admin views only: the admin who paid (null for studios and when the studio paid). */
+  paidByAdminName: string | null
 }
 
 /**
@@ -437,6 +441,21 @@ export interface PlatformInvoiceDto {
   totalPaise: number
   totalInWords: string
   paymentRef: string | null
+  /** Paid by a platform admin on the studio's behalf. */
+  paidByAdmin: boolean
+}
+
+/** Admin → Studios → Change plan: what the admin will pay (GST included, credit for unused days taken off). */
+export interface AdminPlanQuoteDto extends CheckoutQuoteDto {
+  planName: string
+  paymentMode: PaymentMode
+}
+
+/** The admin's plan payment: finished in Razorpay Checkout (`checkout`), or already applied when payments are simulated. */
+export interface AdminPlanOrderDto {
+  payment: PaymentDto
+  checkout: GatewayCheckoutDto | null
+  paymentMode: PaymentMode
 }
 
 /** How payments are taken: mock = simulated (no gateway), test = Razorpay test keys (no real money), live = real money. */
@@ -859,8 +878,11 @@ export interface AdminStudioRowDto {
   name: string
   owner: { name: string; phone: string | null } | null
   email: string | null
-  /** "Trial", "Pro", "VIP" or null (never had a plan). */
+  /** "Free Subscription", "Pro", "VIP" or null (never had a plan). */
   plan: string | null
+  /** The paid plan's code and billing cycle (null on the free subscription or no plan). */
+  planCode: PlanCode | null
+  cycle: BillingCycle | null
   /** "1 month", "1 year", … (null on Trial / no plan). */
   period: string | null
   startDate: string | null

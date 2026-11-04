@@ -109,6 +109,11 @@ function PlanInvoiceView({ path, backTo, onBack, backLabel }: { path: string; ba
                 <strong>Payment ref:</strong> <span className="mono">{inv.paymentRef}</span>
               </p>
             )}
+            {inv.paidByAdmin && (
+              <p>
+                <strong>Paid by:</strong> Admin (Wedmanage), on behalf of the studio
+              </p>
+            )}
           </div>
         </section>
 

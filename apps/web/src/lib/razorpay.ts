@@ -1,4 +1,4 @@
-import type { GatewayCheckoutDto, PaymentDto } from '@weddyzone/shared'
+import type { GatewayCheckoutDto, PaymentDto, VerifyPaymentInput } from '@weddyzone/shared'
 import { api } from './api'
 
 /** Razorpay's Checkout script (loaded once, only when someone pays). */
@@ -42,12 +42,22 @@ function loadCheckout(): Promise<RazorpayCtor> {
 
 export type CheckoutOutcome = { status: 'paid'; payment: PaymentDto } | { status: 'closed' }
 
+/** Sends Checkout's signed response to the server, which confirms it with Razorpay and applies it. */
+export type VerifyCheckout = (response: VerifyPaymentInput) => Promise<{ payment: PaymentDto }>
+
+/** The studio's own payments: POST /subscription/payments/:id/verify. */
+const verifyOwnPayment =
+  (paymentId: string): VerifyCheckout =>
+  (response) =>
+    api.post<{ payment: PaymentDto }>(`/subscription/payments/${paymentId}/verify`, response)
+
 /**
  * Opens Razorpay Checkout for a pending payment. Resolves "paid" once the server has confirmed it
- * with Razorpay (the plan, credits or add-on are then applied), or "closed" if the studio closes the
- * window without paying. A failed attempt stays in the window so the studio can try another way.
+ * with Razorpay (the plan, credits or add-on are then applied), or "closed" if the window is closed
+ * without paying. A failed attempt stays in the window so the payer can try another way. `verify`:
+ * where the response goes (an admin paying for a studio's plan uses the admin endpoint).
  */
-export async function payWithRazorpay(c: GatewayCheckoutDto, onFailedAttempt?: (reason: string) => void): Promise<CheckoutOutcome> {
+export async function payWithRazorpay(c: GatewayCheckoutDto, onFailedAttempt?: (reason: string) => void, verify: VerifyCheckout = verifyOwnPayment(c.paymentId)): Promise<CheckoutOutcome> {
   const Razorpay = await loadCheckout()
   return new Promise<CheckoutOutcome>((resolve, reject) => {
     const rzp = new Razorpay({
@@ -61,13 +71,10 @@ export async function payWithRazorpay(c: GatewayCheckoutDto, onFailedAttempt?: (
       notes: { paymentId: c.paymentId },
       theme: { color: '#e0144a' },
       handler: (r: RazorpaySuccess) => {
-        api
-          .post<{ payment: PaymentDto }>(`/subscription/payments/${c.paymentId}/verify`, {
-            razorpayPaymentId: r.razorpay_payment_id,
-            razorpayOrderId: r.razorpay_order_id,
-            razorpaySignature: r.razorpay_signature,
-          })
-          .then((res) => resolve({ status: 'paid', payment: res.payment }), reject)
+        verify({ razorpayPaymentId: r.razorpay_payment_id, razorpayOrderId: r.razorpay_order_id, razorpaySignature: r.razorpay_signature }).then(
+          (res) => resolve({ status: 'paid', payment: res.payment }),
+          reject,
+        )
       },
       modal: { ondismiss: () => resolve({ status: 'closed' }), confirm_close: true },
     })

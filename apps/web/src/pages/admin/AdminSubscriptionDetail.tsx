@@ -199,7 +199,14 @@ export default function AdminSubscriptionDetail() {
                   {s.payments.map((p) => (
                     <tr key={p.id}>
                       <td>{formatIstDate(p.paidAt ?? p.createdAt)}</td>
-                      <td>{p.description}</td>
+                      <td>
+                        {p.description}
+                        {p.paidByAdmin && (
+                          <small className="muted" style={{ display: 'block' }}>
+                            <i className="bi bi-shield-check" /> Paid by admin{p.paidByAdminName ? ` · ${p.paidByAdminName}` : ''}
+                          </small>
+                        )}
+                      </td>
                       <td className="mono">
                         {p.invoiceNumber && p.status === 'SUCCESS' ? (
                           <Link to={`/admin/invoices/${p.id}`} className="link" title="Open the printable GST invoice">

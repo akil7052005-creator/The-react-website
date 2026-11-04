@@ -21,6 +21,7 @@ import { CYCLE_LABELS, CYCLE_MONTHS, planWithTrial, proratedCredit } from '@wedd
 import { badRequest, conflict, notFound } from '../common/errors'
 import { randomToken } from '../common/util'
 import { config } from '../config'
+import { AuditService } from '../core/audit.service'
 import { LedgerService } from '../core/ledger.service'
 import { NotificationsService } from '../core/notifications.service'
 import { type GatewayWebhook, PaymentService } from '../core/payment.service'
@@ -36,6 +37,14 @@ export interface WebhookResult {
   duplicate: boolean
   handled: string
 }
+
+/** A platform admin paying for a studio's plan (Admin → Studios → Change plan). */
+export interface PaidByAdmin {
+  adminId: string
+}
+
+/** How the studio is told about a plan an admin paid for: "upgraded", "renewed" or "moved". */
+const adminVerb = (type: SubscriptionEventType) => (type === 'RENEWED' ? 'renewed' : type === 'DOWNGRADED' ? 'moved' : 'upgraded')
 
 /** Monthly-equivalent list price, to tell an upgrade from a downgrade. */
 function monthlyEquivalent(plan: Plan, cycle: BillingCycle): number {
@@ -62,6 +71,7 @@ export class SubscriptionLifecycleService implements OnApplicationBootstrap {
     private readonly ledger: LedgerService,
     private readonly alerts: AlertsService,
     private readonly notifications: NotificationsService,
+    private readonly audit: AuditService,
   ) {}
 
   /**
@@ -85,9 +95,10 @@ export class SubscriptionLifecycleService implements OnApplicationBootstrap {
   /**
    * What choosing a plan charges. Prices include 18% GST: the coupon and the credit for the unused
    * days of the current plan come off the price first, then the GST is taken out of what is left
-   * (never added on top). Used by GET /subscription/quote and by checkout, so both always agree.
+   * (never added on top). Used by GET /subscription/quote and by checkout, so both always agree
+   * (also when an admin pays for the studio's plan: the same price, credit and GST).
    */
-  async quote(studioId: string, planCode: PlanCode, cycle: BillingCycle, couponCode?: string) {
+  async quote(studioId: string, planCode: PlanCode, cycle: BillingCycle, couponCode?: string, by?: PaidByAdmin) {
     const plan = await this.plans.byCode(planCode)
     if (!plan.isActive) throw badRequest('This plan is not available', { planCode: 'This plan is not available' })
     const price = listPrice(plan, cycle)
@@ -97,7 +108,7 @@ export class SubscriptionLifecycleService implements OnApplicationBootstrap {
     const eff = await this.plans.effective(studioId)
     const s = eff.subscription
     if (eff.status === 'ACTIVE' && !s.isTrial && !s.cancelAtPeriodEnd && s.planId === plan.id && s.cycle === cycle) {
-      throw conflict(`You're already on the ${plan.name} plan (${CYCLE_LABELS[cycle]})`)
+      throw conflict(`${by ? 'This studio is' : "You're"} already on the ${plan.name} plan (${CYCLE_LABELS[cycle]})`)
     }
     // Changing plan (or period) mid-way: the unused days of what was paid (GST included) count
     // towards the new plan, at most down to ₹1.
@@ -122,9 +133,10 @@ export class SubscriptionLifecycleService implements OnApplicationBootstrap {
    * Opens a gateway order for a plan, for exactly the quoted amount (GST included). Nothing about
    * the subscription changes here: the plan is applied when the gateway confirms the payment by
    * webhook. In test mode the mock gateway confirms straight away through that same webhook handler.
+   * `by`: a platform admin pays on the studio's behalf; it is recorded on the payment.
    */
-  async checkout(studioId: string, planCode: PlanCode, cycle: BillingCycle, couponCode?: string): Promise<Payment> {
-    const q = await this.quote(studioId, planCode, cycle, couponCode)
+  async checkout(studioId: string, planCode: PlanCode, cycle: BillingCycle, couponCode?: string, by?: PaidByAdmin): Promise<Payment> {
+    const q = await this.quote(studioId, planCode, cycle, couponCode, by)
     const { plan, eff, coupon } = q
     const s = eff.subscription
 
@@ -142,6 +154,7 @@ export class SubscriptionLifecycleService implements OnApplicationBootstrap {
         subscriptionId: s.id,
         planId: plan.id,
         cycle,
+        paidByAdminId: by?.adminId ?? null,
         meta: {
           planCode,
           cycle,
@@ -153,6 +166,7 @@ export class SubscriptionLifecycleService implements OnApplicationBootstrap {
           gstPaise: q.gstPaise,
           gstIncluded: true,
           couponId: coupon?.id ?? null,
+          ...(by ? { paidBy: 'admin', adminUserId: by.adminId } : {}),
         },
       },
     })
@@ -359,10 +373,33 @@ export class SubscriptionLifecycleService implements OnApplicationBootstrap {
     if (included > 0) await this.ledger.applyCredits(tx, payment.studioId, included, 'PLAN_GRANT', { type: 'payment', id: payment.id })
     await this.rewardReferral(tx, payment.studioId, queued)
 
-    await this.event(tx, sub.id, type, { fromPlan: planWithTrial(sub.plan, sub.isTrial), toPlan: plan.name, amount: payment.amount, note: `Invoice ${invoiceNumber}` })
+    // Paid by a platform admin on the studio's behalf (Admin → Studios → Change plan).
+    const admin = payment.paidByAdminId ? await tx.user.findUnique({ where: { id: payment.paidByAdminId }, select: { id: true, name: true } }) : null
+    const fromPlan = planWithTrial(sub.plan, sub.isTrial)
+    await this.event(tx, sub.id, type, {
+      fromPlan,
+      toPlan: plan.name,
+      amount: payment.amount,
+      actorId: admin?.id ?? null,
+      note: `Invoice ${invoiceNumber}${admin ? ` · paid by admin ${admin.name}` : ''}`,
+    })
 
     const studio = await tx.studio.findUniqueOrThrow({ where: { id: payment.studioId } })
     const label = `${plan.name} (${cycleLabel(cycle)})`
+    if (admin) {
+      const oldPlan = sub.isTrial ? fromPlan : `${fromPlan} (${cycleLabel(sub.cycle)})`
+      await this.audit.record(
+        admin.id,
+        undefined,
+        {
+          action: 'studio.plan_paid',
+          target: { type: 'studio', id: studio.id },
+          summary: `Paid ${inr(payment.amount)} (incl. ${inr(payment.gst)} GST) for "${studio.name}": ${oldPlan} → ${label} · payment ${gatewayPaymentId} · invoice ${invoiceNumber}`,
+        },
+        tx,
+      )
+    }
+    const verb = adminVerb(type)
     queued.push(
       ...(await this.alerts.queue(
         {
@@ -371,11 +408,13 @@ export class SubscriptionLifecycleService implements OnApplicationBootstrap {
           dedupe: `purchase:${payment.id}`,
           type: 'SUBSCRIPTION_PURCHASED',
           title: `${plan.name} plan`,
-          message: `is now active (${CYCLE_LABELS[cycle]}) until ${istDay(end)}${included ? ` · ${included.toLocaleString('en-IN')} WhatsApp credits added` : ''}`,
+          message: `is now active (${CYCLE_LABELS[cycle]}) until ${istDay(end)}${admin ? ` · ${verb} and paid for by Wedmanage` : ''}${included ? ` · ${included.toLocaleString('en-IN')} WhatsApp credits added` : ''}`,
           link: '/my-subscription',
           icon: 'patch-check',
           subscriptionId: sub.id,
-          email: { subject: `Payment received: ${label} · invoice ${invoiceNumber}`, text: this.invoiceEmail(studio.name, paid, label, start, end) },
+          email: admin
+            ? { subject: `Wedmanage ${verb} your plan: ${label} · invoice ${invoiceNumber}`, text: this.invoiceEmail(studio.name, paid, label, start, end, verb) }
+            : { subject: `Payment received: ${label} · invoice ${invoiceNumber}`, text: this.invoiceEmail(studio.name, paid, label, start, end) },
         },
         tx,
       )),
@@ -385,15 +424,20 @@ export class SubscriptionLifecycleService implements OnApplicationBootstrap {
           channels: ['IN_APP', 'EMAIL'],
           dedupe: `purchase:${payment.id}`,
           type: 'SUBSCRIPTION_PURCHASED',
-          title: `${studio.name} chose ${label}`,
-          message: `${inr(payment.amount)} incl. ${inr(payment.gst)} GST · ${type === 'RENEWED' ? 'renewal' : type.toLowerCase()} · expires ${istDay(end)}`,
+          title: admin ? `${admin.name} paid for ${studio.name}: ${label}` : `${studio.name} chose ${label}`,
+          message: `${inr(payment.amount)} incl. ${inr(payment.gst)} GST · ${admin ? 'paid by admin · ' : ''}${type === 'RENEWED' ? 'renewal' : type.toLowerCase()} · expires ${istDay(end)}`,
           link: `/admin/subscriptions/${sub.id}`,
           icon: 'cash-coin',
           subscriptionId: sub.id,
-          email: {
-            subject: `New subscription: ${studio.name} chose ${label}, ${inr(payment.amount)} incl. GST`,
-            text: `${studio.name} chose ${label}, ${inr(payment.amount)} (incl. ${inr(payment.gst)} GST), expires ${istDay(end)}.\nInvoice ${invoiceNumber}.\n\n${absoluteUrl(`/admin/subscriptions/${sub.id}`)}`,
-          },
+          email: admin
+            ? {
+                subject: `Admin payment: ${admin.name} paid ${inr(payment.amount)} for ${studio.name} (${label})`,
+                text: `${admin.name} paid ${inr(payment.amount)} (incl. ${inr(payment.gst)} GST) to move ${studio.name} from ${fromPlan} to ${label}, expires ${istDay(end)}.\nInvoice ${invoiceNumber} · payment ${gatewayPaymentId}.\n\n${absoluteUrl(`/admin/subscriptions/${sub.id}`)}`,
+              }
+            : {
+                subject: `New subscription: ${studio.name} chose ${label}, ${inr(payment.amount)} incl. GST`,
+                text: `${studio.name} chose ${label}, ${inr(payment.amount)} (incl. ${inr(payment.gst)} GST), expires ${istDay(end)}.\nInvoice ${invoiceNumber}.\n\n${absoluteUrl(`/admin/subscriptions/${sub.id}`)}`,
+              },
         },
         tx,
       )),
@@ -421,18 +465,22 @@ export class SubscriptionLifecycleService implements OnApplicationBootstrap {
     return 'addon_added'
   }
 
-  private invoiceEmail(studioName: string, p: Payment, label: string, start: Date, end: Date): string {
+  /** `adminVerb`: a platform admin paid for it ("Wedmanage upgraded your studio to …"). */
+  private invoiceEmail(studioName: string, p: Payment, label: string, start: Date, end: Date, adminVerb?: string): string {
     const c = config()
+    const what = adminVerb === 'renewed' ? `renewed your ${label} plan` : `${adminVerb} your studio to the ${label} plan`
     return [
       `Hi ${studioName},`,
       '',
-      `Thank you — your payment for the ${label} plan was received. Your plan runs from ${istDay(start)} to ${istDay(end)}.`,
+      adminVerb
+        ? `Good news — Wedmanage ${what} and paid for it on your behalf. Your plan runs from ${istDay(start)} to ${istDay(end)}. There is nothing for you to pay.`
+        : `Thank you — your payment for the ${label} plan was received. Your plan runs from ${istDay(start)} to ${istDay(end)}.`,
       '',
       `Tax invoice ${p.invoiceNumber}`,
       `Seller: ${c.PLATFORM_LEGAL_NAME}`,
       `Taxable value: ${inr(p.amount - p.gst)}`,
       `GST @ 18% (included): ${inr(p.gst)}`,
-      `Total paid (incl. GST): ${inr(p.amount)} (${amountInWords(p.amount)})`,
+      `Total paid${adminVerb ? ' by Wedmanage' : ''} (incl. GST): ${inr(p.amount)} (${amountInWords(p.amount)})`,
       '',
       `View or print the invoice: ${absoluteUrl(`/my-subscription/invoices/${p.id}`)}`,
     ].join('\n')
@@ -527,8 +575,9 @@ export class SubscriptionLifecycleService implements OnApplicationBootstrap {
   ): Promise<string> {
     const payment = orderId ? await tx.payment.findUnique({ where: { gatewayOrderId: orderId }, include: { plan: true } }) : null
     if (payment?.status === 'SUCCESS') return 'already_paid'
-    // A credit pack or add-on: the studio saw it fail in Checkout and can try again.
-    if (payment && payment.purpose !== 'SUBSCRIPTION') {
+    // A credit pack or add-on: the studio saw it fail in Checkout and can try again. An admin paying
+    // for a studio's plan saw it fail too: the studio's plan stays as it is and the studio isn't told.
+    if (payment && (payment.purpose !== 'SUBSCRIPTION' || payment.paidByAdminId)) {
       await tx.payment.update({ where: { id: payment.id }, data: { status: 'FAILED', failureReason: reason.slice(0, 300) } })
       return 'payment_failed'
     }

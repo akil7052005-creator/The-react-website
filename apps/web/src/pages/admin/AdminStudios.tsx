@@ -8,6 +8,7 @@ import { useDebouncedUrlSearch, useUrlState } from '../../hooks/useUrlState'
 import { api, isApiError } from '../../lib/api'
 import { formatIstDate } from '../../lib/admin'
 import { toastError } from '../../lib/query'
+import { ChangeStudioPlanModal } from './ChangeStudioPlanModal'
 
 const PAGE_SIZES = ['10', '25', '50', '100']
 const PLAN_FILTERS = [
@@ -36,12 +37,13 @@ const STATUS: Record<AdminStudioRowDto['status'], { label: string; cls: string }
   NONE: { label: 'No plan', cls: 'off' },
 }
 
-/** Admin → Studios: every registered studio, newest first, with remove (type the name) and restore. */
+/** Admin → Studios: every registered studio, newest first, with Change plan (the admin pays), remove (type the name) and restore. */
 function AdminStudios() {
   const qc = useQueryClient()
   const [url, setUrl] = useUrlState({ search: '', plan: 'all', page: '1', limit: '25' })
   const [search, setSearch] = useDebouncedUrlSearch(url.search, (v) => setUrl({ search: v, page: '1' }))
   const [removing, setRemoving] = useState<AdminStudioRowDto | null>(null)
+  const [changing, setChanging] = useState<AdminStudioRowDto | null>(null)
   const page = Math.max(1, Number(url.page) || 1)
   const limit = PAGE_SIZES.includes(url.limit) ? Number(url.limit) : 25
 
@@ -141,7 +143,14 @@ function AdminStudios() {
                     </td>
                     <td className="as-email">{s.email ?? '—'}</td>
                     <td>
-                      {s.plan ?? '—'}
+                      <span className="as-plan">
+                        {s.plan ?? '—'}
+                        {s.plan && !s.removed && (
+                          <button type="button" className="as-plan-edit" onClick={() => setChanging(s)} title="Change plan (you pay)" aria-label={`Change plan for ${s.name}`}>
+                            <i className="bi bi-pencil-square" />
+                          </button>
+                        )}
+                      </span>
                       {s.period && <span className="pl-event">{s.period}</span>}
                     </td>
                     <td>{s.startDate ? formatIstDate(s.startDate) : '—'}</td>
@@ -201,6 +210,7 @@ function AdminStudios() {
       </section>
 
       {removing && <RemoveStudioModal studio={removing} onClose={() => setRemoving(null)} onDone={() => void qc.invalidateQueries({ queryKey: KEY })} />}
+      {changing && <ChangeStudioPlanModal studio={changing} onClose={() => setChanging(null)} />}
     </div>
   )
 }
