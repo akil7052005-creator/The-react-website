@@ -4,7 +4,7 @@ import type { PrismaClient } from '@prisma/client'
 import { createTestApp, resetDb, signup, type SignedUp } from './helpers'
 
 // The free trial in two allowance periods: November 2026 and December 2026, each with 5 customer
-// events and 50 GB of uploads (unused ones don't carry over), free until 31 Dec 2026 23:59:59 IST.
+// events and 500 GB of uploads (unused ones don't carry over), free until 31 Dec 2026 23:59:59 IST.
 //
 // The clock is moved with a Date that runs `offset` ahead of the real one and keeps ticking, so the
 // server, the login tokens and the test's cookie jar all see the same time. After each move the
@@ -37,7 +37,7 @@ const sha = (s: string) => createHash('sha256').update(s).digest('hex')
 const NOV_FULL = "You've used your 5 trial events for November. 5 more unlock on 1 Dec."
 const DEC_FULL = "You've used your 5 trial events for December. Upgrade to Pro to keep creating events."
 
-describe('Free trial: 5 events + 50 GB in November, and again in December', () => {
+describe('Free trial: 5 events + 500 GB in November, and again in December', () => {
   let app: INestApplication
   let prisma: PrismaClient
 
@@ -112,7 +112,7 @@ describe('Free trial: 5 events + 50 GB in November, and again in December', () =
         lifetime: true,
         period: { name: 'November', next: 'December' },
         events: { used: 0, limit: 5 },
-        uploads: { usedBytes: 0, limitBytes: 50 * GB },
+        uploads: { usedBytes: 0, limitBytes: 500 * GB },
         photosPerEvent: 3500,
         resetsOn: DEC_1,
       })
@@ -149,25 +149,25 @@ describe('Free trial: 5 events + 50 GB in November, and again in December', () =
     await expectBlocked(U, 8, DEC_FULL, 'December')
   })
 
-  it('50 GB of uploads per period: enforced in November, a fresh 50 GB on 1 Dec', async () => {
+  it('500 GB of uploads per period: enforced in November, a fresh 500 GB on 1 Dec', async () => {
     travelTo('2026-11-20T10:00:00')
     const W = await signup(app, { plan: 'trial' })
     const [nov] = await createEvents(W, 1, 1)
-    await fillPhotos(W, nov, 45, GB) // 45 GB uploaded in November
-    await sign(W, nov, 1, 5 * GB).expect(200) // 45 + 5 = 50: still within
-    const over = await sign(W, nov, 2, 6 * GB).expect(402)
-    expect(over.body.error.message).toBe("You've uploaded 45 GB of your 50 GB for November. Upgrade to Pro to upload more now, or wait until 1 Dec for 50 GB more.")
-    expect(over.body.error.details).toMatchObject({ resource: 'uploads', limit: 50, used: 45, period: 'November', resetsOn: DEC_1 })
+    await fillPhotos(W, nov, 450, GB) // 450 GB uploaded in November
+    await sign(W, nov, 1, 50 * GB).expect(200) // 450 + 50 = 500: still within
+    const over = await sign(W, nov, 2, 51 * GB).expect(402)
+    expect(over.body.error.message).toBe("You've uploaded 450 GB of your 500 GB for November. Upgrade to Pro to upload more now, or wait until 1 Dec for 500 GB more.")
+    expect(over.body.error.details).toMatchObject({ resource: 'uploads', limit: 500, used: 450, period: 'November', resetsOn: DEC_1 })
 
     travelTo('2026-12-01T00:00:05')
     await login(W)
-    expect((await meter(W)).uploads).toEqual({ usedBytes: 0, limitBytes: 50 * GB })
+    expect((await meter(W)).uploads).toEqual({ usedBytes: 0, limitBytes: 500 * GB })
     const [dec] = await createEvents(W, 2, 1)
-    await sign(W, dec, 3, 49 * GB).expect(200)
-    await fillPhotos(W, dec, 50, GB) // 50 GB uploaded in December
+    await sign(W, dec, 3, 499 * GB).expect(200)
+    await fillPhotos(W, dec, 500, GB) // 500 GB uploaded in December
     const full = await sign(W, dec, 4).expect(402)
-    expect(full.body.error.message).toBe("You've uploaded 50 GB of your 50 GB for December. Upgrade to Pro to upload more.")
-    expect(full.body.error.details).toMatchObject({ resource: 'uploads', limit: 50, used: 50, period: 'December' })
+    expect(full.body.error.message).toBe("You've uploaded 500 GB of your 500 GB for December. Upgrade to Pro to upload more.")
+    expect(full.body.error.details).toMatchObject({ resource: 'uploads', limit: 500, used: 500, period: 'December' })
   })
 
   it('3,500 photos per event: the 3,500th is fine, the 3,501st is refused', async () => {
@@ -190,7 +190,7 @@ describe('Free trial: 5 events + 50 GB in November, and again in December', () =
 
     it('gets December only: 5 events, then the December message', async () => {
       expect(await banner(D)).toMatchObject({ status: 'TRIAL', endDate: TRIAL_END })
-      expect(await meter(D)).toMatchObject({ period: { name: 'December', next: null }, events: { used: 0, limit: 5 }, uploads: { limitBytes: 50 * GB }, resetsOn: TRIAL_END })
+      expect(await meter(D)).toMatchObject({ period: { name: 'December', next: null }, events: { used: 0, limit: 5 }, uploads: { limitBytes: 500 * GB }, resetsOn: TRIAL_END })
       await createEvents(D, 1, 4)
       // The last second of the trial: still on, one event left.
       travelTo('2026-12-31T23:59:58')
@@ -235,11 +235,11 @@ describe('Free trial: 5 events + 50 GB in November, and again in December', () =
     expect(pro.limits).toMatchObject({ eventsPerMonth: 10, photosPerEvent: 3500, uploadGbPerMonth: 500, addonEvents: 5 })
     expect(vip.limits).toMatchObject({ fairUseEventsPerMonth: 300, photosPerEvent: 7000, uploadGbPerMonth: 1024 })
     expect(pro.features).toContain('500 GB of uploads a month (all events)')
-    expect(trial.limits).toMatchObject({ eventsTotal: 5, photosPerEvent: 3500, uploadGbTotal: 50, galleryDays: 7 })
+    expect(trial.limits).toMatchObject({ eventsTotal: 5, photosPerEvent: 3500, uploadGbTotal: 500, galleryDays: 7 })
     expect(trial.features).toEqual([
       '5 customer events in November + 5 in December',
       'Up to 3,500 photos per event',
-      '50 GB of uploads each month (about 5,000 photos)',
+      '500 GB of uploads each month',
       'Customer gallery open 7 days',
       'No card needed',
       'Customers pick with a heart',

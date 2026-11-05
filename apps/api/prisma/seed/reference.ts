@@ -19,7 +19,7 @@ export const PLANS = [
       eventsTotal: 5,
       photosPerEvent: 3500,
       uploadGbPerMonth: null,
-      uploadGbTotal: 50,
+      uploadGbTotal: 500,
       trialDays: 14,
       galleryDays: 7,
       favourites: false,
@@ -36,7 +36,7 @@ export const PLANS = [
     features: [
       '5 customer events in November + 5 in December',
       'Up to 3,500 photos per event',
-      '50 GB of uploads each month (about 5,000 photos)',
+      '500 GB of uploads each month',
       'Customer gallery open 7 days',
       'No card needed',
       'Customers pick with a heart',

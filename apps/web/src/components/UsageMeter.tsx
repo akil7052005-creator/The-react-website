@@ -3,7 +3,7 @@ import { gbText, limitNote, meterText, usePlanActions, useUsage } from '../lib/b
 
 /**
  * The plan meter: "Events 7/10 · Uploads 320 GB of 500 GB · resets on 8 Nov" (Trial: "Events 2/5
- * (November) · Uploads 12 GB of 50 GB · resets on 1 Dec"). Amber from 80 % (8 of 10 events) with
+ * (November) · Uploads 12 GB of 500 GB · resets on 1 Dec"). Amber from 80 % (8 of 10 events) with
  * "Upgrade" and, on Pro, "Buy +5 events"; red when a limit is reached.
  */
 export function UsageMeter() {

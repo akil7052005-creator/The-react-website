@@ -54,7 +54,7 @@ export const resetDay = (m: Pick<UsageMeterDto, 'resetsOn'>) => new Date(m.reset
 
 /**
  * "Events 7/10 · Uploads 320 GB of 500 GB · resets on 8 Nov". Trial: "Events 2/5 (November) ·
- * Uploads 12 GB of 50 GB · resets on 1 Dec", then "… (December) · … · trial ends 31 Dec".
+ * Uploads 12 GB of 500 GB · resets on 1 Dec", then "… (December) · … · trial ends 31 Dec".
  */
 export function meterText(m: UsageMeterDto) {
   const period = m.period ? ` (${m.period.name})` : ''

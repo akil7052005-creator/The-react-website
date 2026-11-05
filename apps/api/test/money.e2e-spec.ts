@@ -188,7 +188,7 @@ describe('Phase 3 — plans, credits, invoices', () => {
       expect(vip.prices).toEqual({ MONTHLY: 120_000, QUARTERLY: null, HALF_YEARLY: 600_000, YEARLY: 1_000_000 })
       expect(pro.limits).toMatchObject({ eventsPerMonth: 10, photosPerEvent: 3500, uploadGbPerMonth: 500, addonEvents: 5 })
       expect(vip.limits).toMatchObject({ eventsPerMonth: null, photosPerEvent: 7000, uploadGbPerMonth: 1024, favourites: true })
-      expect(res.body[0].limits).toMatchObject({ eventsTotal: 5, photosPerEvent: 3500, uploadGbTotal: 50, trialDays: 14, galleryDays: 7 })
+      expect(res.body[0].limits).toMatchObject({ eventsTotal: 5, photosPerEvent: 3500, uploadGbTotal: 500, trialDays: 14, galleryDays: 7 })
     })
 
     it('buys Pro for 6 months for exactly its price (18% GST included); 3 months and the Trial itself are not for sale', async () => {
@@ -268,7 +268,7 @@ describe('Phase 3 — plans, credits, invoices', () => {
       const keys = res.body.usage.map((u: { key: string }) => u.key)
       expect(keys).toEqual(['events', 'storage', 'albums', 'credits'])
       expect(res.body.usage[0]).toMatchObject({ used: 0, limit: 5 })
-      expect(res.body.usage[1]).toMatchObject({ used: 0, limit: 50, unit: 'GB' })
+      expect(res.body.usage[1]).toMatchObject({ used: 0, limit: 500, unit: 'GB' })
     })
   })
 

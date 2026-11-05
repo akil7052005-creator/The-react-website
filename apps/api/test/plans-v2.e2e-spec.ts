@@ -101,14 +101,14 @@ describe('Plans: Trial, Pro, VIP', () => {
       await T.agent.patch(`/api/v1/selections/${sel.id}/settings`).send({ galleryExpiry: 7 }).expect(200)
     })
 
-    it('50 GB of uploads in the trial period', async () => {
+    it('500 GB of uploads in the trial period (the same as Pro a month)', async () => {
       const [sel] = (await T.agent.get('/api/v1/selections').expect(200)).body.data
-      expect((await meter(T)).uploads.limitBytes).toBe(50 * GB)
-      await sign(T, sel.id, 1, 49 * GB).expect(200)
-      // A 51 GB original is more than the period allows.
-      const big = await sign(T, sel.id, 2, 51 * GB).expect(402)
-      expect(big.body.error.details).toMatchObject({ resource: 'uploads', limit: 50, used: 0 })
-      expect(big.body.error.message).toMatch(/0 GB of your 50 GB for |includes about 50 GB of uploads/)
+      expect((await meter(T)).uploads.limitBytes).toBe(500 * GB)
+      await sign(T, sel.id, 1, 499 * GB).expect(200)
+      // A 501 GB original is more than the period allows.
+      const big = await sign(T, sel.id, 2, 501 * GB).expect(402)
+      expect(big.body.error.details).toMatchObject({ resource: 'uploads', limit: 500, used: 0 })
+      expect(big.body.error.message).toMatch(/0 GB of your 500 GB for |includes about 500 GB of uploads/)
     })
 
     it('3,500 photos per event: the 3,500th is fine, the 3,501st is refused', async () => {

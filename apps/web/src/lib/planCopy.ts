@@ -5,8 +5,6 @@ import { quotaOf, trialPeriodsAhead, type PlanDto } from '@weddyzone/shared'
 
 const n = (v: number) => v.toLocaleString('en-IN')
 const gb = (v: number) => (v >= 1024 ? `${v % 1024 === 0 ? v / 1024 : (v / 1024).toFixed(1)} TB` : `${n(v)} GB`)
-/** Photos that fit in `gbs` of uploads, at about 10 MB an original: 50 GB → "about 5,000 photos". */
-const photosIn = (gbs: number) => `about ${n(Math.round(gbs * 100))} photos`
 
 /**
  * "10 new customer events a month", "Up to 3,500 photos per event", … The Trial's events and uploads
@@ -23,7 +21,7 @@ export function planLimitLines(plan: PlanDto, now = new Date()): string[] {
   if (q.photosPerEvent !== null) lines.push(`Up to ${n(q.photosPerEvent)} photos per event`)
   if (q.uploadGbTotal !== null) {
     const when = ahead.length > 1 ? ' each month' : ahead.length === 1 ? ` in ${ahead[0]}` : ''
-    lines.push(`${gb(q.uploadGbTotal)} of uploads${when} (${photosIn(q.uploadGbTotal)})`)
+    lines.push(`${gb(q.uploadGbTotal)} of uploads${when}`)
   } else if (q.uploadGbPerMonth !== null) {
     // Pro: the monthly uploads are shared by all of the month's events, not per event.
     lines.push(`${gb(q.uploadGbPerMonth)} of uploads a month${q.eventsPerMonth !== null ? ' (all events)' : ''}`)

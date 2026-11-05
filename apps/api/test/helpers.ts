@@ -59,7 +59,7 @@ export interface SignedUp {
 
 /**
  * Signs up a fresh studio and returns a logged-in agent (cookies kept between requests). New studios
- * start on the Trial (5 events and 50 GB a trial period, 3,500 photos per event); tests about
+ * start on the Trial (5 events and 500 GB a trial period, 3,500 photos per event); tests about
  * something else run on VIP so the plan never gets in the way. Pass `plan: 'trial'` (or a plan code) to choose.
  */
 export async function signup(app: INestApplication, overrides: Record<string, unknown> & { plan?: 'trial' | PlanCode } = {}): Promise<SignedUp> {
